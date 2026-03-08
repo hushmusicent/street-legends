@@ -56,13 +56,18 @@ export default function MapScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [heading, setHeading] = useState<number>(0);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const headingSubscription = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
     initializeLocation();
     return () => {
       if (locationSubscription.current) {
         locationSubscription.current.remove();
+      }
+      if (headingSubscription.current) {
+        headingSubscription.current.remove();
       }
     };
   }, []);
@@ -124,11 +129,12 @@ export default function MapScreen() {
 
       setIsTracking(true);
       
+      // Watch position with maximum accuracy for smooth movement
       locationSubscription.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 2000,
-          distanceInterval: 5,
+          timeInterval: 1000, // Update every 1 second for smoother tracking
+          distanceInterval: 1, // Update every 1 meter for responsive movement
         },
         (loc) => {
           const newPos = {
@@ -137,11 +143,31 @@ export default function MapScreen() {
           };
           setCurrentPosition(newPos);
           setLastUpdate(new Date());
+          
+          // Get heading from GPS if available
+          if (loc.coords.heading !== null && loc.coords.heading >= 0) {
+            setHeading(loc.coords.heading);
+          }
+          
           if (playerId) {
             updatePlayerPosition(playerId, newPos).catch(console.error);
           }
         }
       );
+      
+      // Also start heading/compass tracking for direction
+      try {
+        headingSubscription.current = await Location.watchHeadingAsync((headingData) => {
+          if (headingData.trueHeading >= 0) {
+            setHeading(headingData.trueHeading);
+          } else if (headingData.magHeading >= 0) {
+            setHeading(headingData.magHeading);
+          }
+        });
+      } catch (headingError) {
+        console.log('Heading not available:', headingError);
+      }
+      
     } catch (error) {
       console.error('Location tracking error:', error);
       setIsTracking(false);
@@ -265,6 +291,7 @@ export default function MapScreen() {
         <GameMap
           center={currentPosition}
           markers={mapMarkers}
+          heading={heading}
           onMarkerPress={handleMarkerPress}
         />
       )}
@@ -293,6 +320,8 @@ export default function MapScreen() {
           <Text style={styles.coordsText}>
             {currentPosition.latitude.toFixed(5)}, {currentPosition.longitude.toFixed(5)}
           </Text>
+          <Ionicons name="compass" size={12} color="#f39c12" style={{ marginLeft: 8 }} />
+          <Text style={styles.headingText}>{heading.toFixed(0)}°</Text>
           {lastUpdate && <Text style={styles.updateText}>{lastUpdate.toLocaleTimeString()}</Text>}
         </View>
       )}
@@ -439,6 +468,7 @@ const styles = StyleSheet.create({
   rotating: { opacity: 0.5 },
   coordsDisplay: { position: 'absolute', top: 100, alignSelf: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
   coordsText: { color: '#888', fontSize: 11, marginLeft: 6 },
+  headingText: { color: '#f39c12', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
   updateText: { color: '#555', fontSize: 10, marginLeft: 8 },
   entityList: { position: 'absolute', bottom: 100, left: 0, right: 0, paddingHorizontal: 12 },
   entityCard: { backgroundColor: 'rgba(0, 0, 0, 0.9)', borderRadius: 12, padding: 12, marginHorizontal: 4, alignItems: 'center', minWidth: 100, borderWidth: 1 },
