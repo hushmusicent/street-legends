@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
-  Platform,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -55,9 +54,17 @@ export default function MapScreen() {
     data: any;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [isTracking, setIsTracking] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
     initializeLocation();
+    return () => {
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -70,24 +77,20 @@ export default function MapScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        // Use a default location for demo/web
-        const defaultPosition = {
-          latitude: 40.7128,
-          longitude: -74.0060,
-        };
-        setCurrentPosition(defaultPosition);
-        
-        if (playerId) {
-          await updatePlayerPosition(playerId, defaultPosition);
-          const playerData = await getPlayer(playerId);
-          setPlayer(playerData);
-        }
+        setLocationError('Location permission required. Enable GPS to play.');
+        setLoading(false);
+        return;
+      }
+
+      const enabled = await Location.hasServicesEnabledAsync();
+      if (!enabled) {
+        setLocationError('Enable Location Services to play.');
         setLoading(false);
         return;
       }
 
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.BestForNavigation,
       });
 
       const position = {
@@ -96,6 +99,7 @@ export default function MapScreen() {
       };
 
       setCurrentPosition(position);
+      setLastUpdate(new Date());
 
       if (playerId) {
         await updatePlayerPosition(playerId, position);
@@ -103,11 +107,28 @@ export default function MapScreen() {
         setPlayer(playerData);
       }
 
-      // Start watching position
-      Location.watchPositionAsync(
+      startLocationTracking();
+      setLoading(false);
+    } catch (error: any) {
+      setLocationError('Failed to get location: ' + (error.message || 'Unknown'));
+      setLoading(false);
+    }
+  };
+
+  const startLocationTracking = async () => {
+    try {
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+        locationSubscription.current = null;
+      }
+
+      setIsTracking(true);
+      
+      locationSubscription.current = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          distanceInterval: 10,
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 2000,
+          distanceInterval: 5,
         },
         (loc) => {
           const newPos = {
@@ -115,33 +136,26 @@ export default function MapScreen() {
             longitude: loc.coords.longitude,
           };
           setCurrentPosition(newPos);
+          setLastUpdate(new Date());
           if (playerId) {
             updatePlayerPosition(playerId, newPos).catch(console.error);
           }
         }
       );
     } catch (error) {
-      // Use default location on error
-      const defaultPosition = {
-        latitude: 40.7128,
-        longitude: -74.0060,
-      };
-      setCurrentPosition(defaultPosition);
-    } finally {
-      setLoading(false);
+      console.error('Location tracking error:', error);
+      setIsTracking(false);
     }
   };
 
   const loadNearbyEntities = async () => {
     if (!currentPosition || !player || !playerId) return;
-
     try {
       const [monsters, missions, players] = await Promise.all([
         spawnMonsters(currentPosition.latitude, currentPosition.longitude, player.level),
         generateMissions(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyPlayers(playerId, 500),
       ]);
-
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
       setNearbyPlayers(players);
@@ -158,7 +172,6 @@ export default function MapScreen() {
 
   const handleStartBattle = async (monster: Monster) => {
     if (!playerId) return;
-
     try {
       const battle = await startBattle(playerId, 'monster', monster.id);
       setCurrentBattle(battle);
@@ -176,7 +189,6 @@ export default function MapScreen() {
 
   const handlePvPChallenge = async (targetPlayer: NearbyPlayer) => {
     if (!playerId) return;
-
     try {
       const battle = await startBattle(playerId, 'player', targetPlayer.id);
       setCurrentBattle(battle);
@@ -187,7 +199,6 @@ export default function MapScreen() {
     }
   };
 
-  // Convert entities to map markers
   const mapMarkers = [
     ...nearbyMonsters.map((m) => ({
       id: m.id,
@@ -228,7 +239,8 @@ export default function MapScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#e74c3c" />
-        <Text style={styles.loadingText}>Getting your location...</Text>
+        <Text style={styles.loadingText}>Getting your GPS location...</Text>
+        <Text style={styles.loadingSubtext}>Make sure location is enabled</Text>
       </View>
     );
   }
@@ -237,9 +249,11 @@ export default function MapScreen() {
     return (
       <View style={styles.errorContainer}>
         <Ionicons name="location-outline" size={64} color="#e74c3c" />
+        <Text style={styles.errorTitle}>Location Required</Text>
         <Text style={styles.errorText}>{locationError}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={initializeLocation}>
-          <Text style={styles.retryText}>Retry</Text>
+          <Ionicons name="refresh" size={20} color="#fff" />
+          <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
       </View>
     );
@@ -255,27 +269,34 @@ export default function MapScreen() {
         />
       )}
 
-      {/* HUD */}
       <SafeAreaView style={styles.hud}>
         <View style={styles.playerHud}>
           <Text style={styles.playerName}>{player?.name}</Text>
           <Text style={styles.playerLevel}>Lv.{player?.level}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={handleRefresh}
-          disabled={refreshing}
-        >
-          <Ionicons
-            name="refresh"
-            size={24}
-            color="#fff"
-            style={refreshing ? styles.rotating : undefined}
-          />
-        </TouchableOpacity>
+        <View style={styles.hudRight}>
+          <View style={[styles.gpsIndicator, isTracking && styles.gpsActive]}>
+            <Ionicons name="navigate" size={16} color={isTracking ? '#27ae60' : '#888'} />
+            <Text style={[styles.gpsText, isTracking && styles.gpsActiveText]}>
+              {isTracking ? 'GPS' : 'OFF'}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh} disabled={refreshing}>
+            <Ionicons name="refresh" size={24} color="#fff" style={refreshing ? styles.rotating : undefined} />
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
 
-      {/* Entity List */}
+      {currentPosition && (
+        <View style={styles.coordsDisplay}>
+          <Ionicons name="location" size={12} color="#e74c3c" />
+          <Text style={styles.coordsText}>
+            {currentPosition.latitude.toFixed(5)}, {currentPosition.longitude.toFixed(5)}
+          </Text>
+          {lastUpdate && <Text style={styles.updateText}>{lastUpdate.toLocaleTimeString()}</Text>}
+        </View>
+      )}
+
       <View style={styles.entityList}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {nearbyMonsters.slice(0, 3).map((monster) => (
@@ -303,24 +324,16 @@ export default function MapScreen() {
         </ScrollView>
       </View>
 
-      {/* Selected marker popup */}
       {selectedMarker && (
         <View style={styles.popup}>
-          <TouchableOpacity
-            style={styles.popupClose}
-            onPress={() => setSelectedMarker(null)}
-          >
+          <TouchableOpacity style={styles.popupClose} onPress={() => setSelectedMarker(null)}>
             <Ionicons name="close" size={24} color="#888" />
           </TouchableOpacity>
 
           {selectedMarker.type === 'monster' && (
             <View style={styles.popupContent}>
               <View style={styles.popupHeader}>
-                <Ionicons
-                  name="skull"
-                  size={32}
-                  color={MONSTER_COLORS[selectedMarker.data.monster_type]}
-                />
+                <Ionicons name="skull" size={32} color={MONSTER_COLORS[selectedMarker.data.monster_type]} />
                 <View style={styles.popupHeaderText}>
                   <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
                   <Text style={styles.popupSubtitle}>Level {selectedMarker.data.level}</Text>
@@ -337,10 +350,7 @@ export default function MapScreen() {
                   <Text style={styles.rewardText}>{selectedMarker.data.loot_xp} XP</Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleStartBattle(selectedMarker.data)}
-              >
+              <TouchableOpacity style={styles.actionButton} onPress={() => handleStartBattle(selectedMarker.data)}>
                 <Ionicons name="flash" size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>FIGHT</Text>
               </TouchableOpacity>
@@ -390,9 +400,7 @@ export default function MapScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.popupDescription}>
-                Distance: {selectedMarker.data.distance}m away
-              </Text>
+              <Text style={styles.popupDescription}>Distance: {selectedMarker.data.distance}m away</Text>
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: '#9b59b6' }]}
                 onPress={() => handlePvPChallenge(selectedMarker.data)}
@@ -409,185 +417,46 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-  },
-  loadingText: {
-    color: '#888',
-    marginTop: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-    padding: 24,
-  },
-  errorText: {
-    color: '#888',
-    marginTop: 16,
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  retryButton: {
-    marginTop: 24,
-    backgroundColor: '#e74c3c',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  hud: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  playerHud: {
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  playerName: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  playerLevel: {
-    color: '#e74c3c',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  refreshButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rotating: {
-    opacity: 0.5,
-  },
-  entityList: {
-    position: 'absolute',
-    bottom: 100,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 12,
-  },
-  entityCard: {
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 4,
-    alignItems: 'center',
-    minWidth: 100,
-    borderWidth: 1,
-  },
-  monsterCard: {
-    borderColor: '#e74c3c',
-  },
-  missionCard: {
-    borderColor: '#f39c12',
-  },
-  entityName: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-    maxWidth: 80,
-  },
-  entityLevel: {
-    color: '#888',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  popup: {
-    position: 'absolute',
-    bottom: 180,
-    left: 16,
-    right: 16,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  popupClose: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    zIndex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' },
+  loadingText: { color: '#fff', marginTop: 16, fontSize: 16, fontWeight: '600' },
+  loadingSubtext: { color: '#888', marginTop: 8, fontSize: 13 },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a', padding: 24 },
+  errorTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 16 },
+  errorText: { color: '#888', marginTop: 8, textAlign: 'center', fontSize: 14 },
+  retryButton: { marginTop: 24, backgroundColor: '#e74c3c', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
+  retryText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
+  hud: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8 },
+  playerHud: { backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+  playerName: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  playerLevel: { color: '#e74c3c', fontWeight: 'bold', marginLeft: 8 },
+  hudRight: { flexDirection: 'row', alignItems: 'center' },
+  gpsIndicator: { backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginRight: 8 },
+  gpsActive: { borderWidth: 1, borderColor: '#27ae60' },
+  gpsText: { color: '#888', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
+  gpsActiveText: { color: '#27ae60' },
+  refreshButton: { backgroundColor: 'rgba(0, 0, 0, 0.8)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  rotating: { opacity: 0.5 },
+  coordsDisplay: { position: 'absolute', top: 100, alignSelf: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
+  coordsText: { color: '#888', fontSize: 11, marginLeft: 6 },
+  updateText: { color: '#555', fontSize: 10, marginLeft: 8 },
+  entityList: { position: 'absolute', bottom: 100, left: 0, right: 0, paddingHorizontal: 12 },
+  entityCard: { backgroundColor: 'rgba(0, 0, 0, 0.9)', borderRadius: 12, padding: 12, marginHorizontal: 4, alignItems: 'center', minWidth: 100, borderWidth: 1 },
+  monsterCard: { borderColor: '#e74c3c' },
+  missionCard: { borderColor: '#f39c12' },
+  entityName: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 4, maxWidth: 80 },
+  entityLevel: { color: '#888', fontSize: 10, marginTop: 2 },
+  popup: { position: 'absolute', bottom: 180, left: 16, right: 16, backgroundColor: '#1a1a1a', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#333' },
+  popupClose: { position: 'absolute', top: 12, right: 12, zIndex: 1 },
   popupContent: {},
-  popupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  popupHeaderText: {
-    marginLeft: 12,
-  },
-  popupTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  popupSubtitle: {
-    color: '#888',
-    fontSize: 14,
-  },
-  popupDescription: {
-    color: '#aaa',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  rewardsRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  rewardItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 20,
-  },
-  rewardText: {
-    color: '#fff',
-    marginLeft: 6,
-    fontWeight: 'bold',
-  },
-  actionButton: {
-    backgroundColor: '#e74c3c',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 8,
-  },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  popupHeaderText: { marginLeft: 12 },
+  popupTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  popupSubtitle: { color: '#888', fontSize: 14 },
+  popupDescription: { color: '#aaa', fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  rewardsRow: { flexDirection: 'row', marginBottom: 16 },
+  rewardItem: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
+  rewardText: { color: '#fff', marginLeft: 6, fontWeight: 'bold' },
+  actionButton: { backgroundColor: '#e74c3c', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 8 },
+  actionButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16, marginLeft: 8 },
 });
