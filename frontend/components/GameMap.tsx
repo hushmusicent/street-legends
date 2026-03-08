@@ -26,14 +26,12 @@ interface GameMapProps {
 // Animated player marker component
 const AnimatedPlayerMarker: React.FC<{ heading?: number }> = ({ heading = 0 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Pulse animation for the player marker
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.2,
+          toValue: 1.15,
           duration: 1000,
           easing: Easing.ease,
           useNativeDriver: true,
@@ -48,34 +46,12 @@ const AnimatedPlayerMarker: React.FC<{ heading?: number }> = ({ heading = 0 }) =
     ).start();
   }, []);
 
-  useEffect(() => {
-    // Smooth rotation based on heading
-    Animated.timing(rotateAnim, {
-      toValue: heading,
-      duration: 300,
-      easing: Easing.ease,
-      useNativeDriver: true,
-    }).start();
-  }, [heading]);
-
-  const rotateStyle = {
-    transform: [
-      { scale: pulseAnim },
-      { rotate: rotateAnim.interpolate({
-        inputRange: [0, 360],
-        outputRange: ['0deg', '360deg'],
-      })},
-    ],
-  };
-
   return (
     <View style={markerStyles.playerContainer}>
-      <Animated.View style={[markerStyles.playerOuter, rotateStyle]}>
-        <View style={markerStyles.playerInner}>
-          <Ionicons name="navigate" size={20} color="#fff" />
-        </View>
-      </Animated.View>
-      <View style={markerStyles.playerPulse} />
+      <Animated.View style={[markerStyles.playerPulse, { transform: [{ scale: pulseAnim }] }]} />
+      <View style={markerStyles.playerOuter}>
+        <View style={markerStyles.playerInner} />
+      </View>
     </View>
   );
 };
@@ -84,153 +60,140 @@ const markerStyles = StyleSheet.create({
   playerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  playerOuter: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#e74c3c',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#e74c3c',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  playerInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 50,
+    height: 50,
   },
   playerPulse: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(231, 76, 60, 0.2)',
-    zIndex: -1,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(66, 133, 244, 0.3)',
+  },
+  playerOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  playerInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4285F4', // Google blue
   },
 });
 
-// For native: Use react-native-maps with Google Maps
+// For native: Use react-native-maps with Google Maps (standard style)
 const NativeMap: React.FC<GameMapProps> = ({ center, markers, heading, onMarkerPress }) => {
-  // Dynamic import to avoid web issues
   const MapViewModule = require('react-native-maps');
   const MapView = MapViewModule.default;
   const { Marker, Circle, PROVIDER_GOOGLE } = MapViewModule;
   
   const mapRef = useRef<any>(null);
-  const animatedPosition = useRef(new Animated.ValueXY({ x: center.latitude, y: center.longitude })).current;
+  const [region, setRegion] = useState({
+    ...center,
+    latitudeDelta: 0.005,
+    longitudeDelta: 0.005,
+  });
 
-  // Animate to new position smoothly
+  // Smoothly animate to new position when center changes
   useEffect(() => {
-    Animated.timing(animatedPosition, {
-      toValue: { x: center.latitude, y: center.longitude },
-      duration: 500,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
-
-    // Also animate the map camera
     if (mapRef.current) {
-      mapRef.current.animateCamera({
-        center: center,
-        zoom: 17,
-        heading: heading || 0,
-      }, { duration: 500 });
+      mapRef.current.animateToRegion({
+        ...center,
+        latitudeDelta: region.latitudeDelta,
+        longitudeDelta: region.longitudeDelta,
+      }, 500);
     }
-  }, [center.latitude, center.longitude, heading]);
-
-  const DARK_MAP_STYLE = [
-    { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
-    { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#333333' }] },
-    { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#666666' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a2e1a' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
-    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#666666' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e74c3c' }] },
-    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
-  ];
-
-  const MONSTER_COLORS: Record<string, string> = {
-    humanoid: '#e74c3c',
-    boss: '#9b59b6',
-    tech: '#3498db',
-    stealth: '#1abc9c',
-  };
+  }, [center.latitude, center.longitude]);
 
   return (
     <MapView
       ref={mapRef}
       style={styles.map}
       provider={PROVIDER_GOOGLE}
-      customMapStyle={DARK_MAP_STYLE}
-      initialRegion={{
-        ...center,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }}
+      initialRegion={region}
+      onRegionChangeComplete={setRegion}
       showsUserLocation={false}
       showsMyLocationButton={false}
-      showsCompass={false}
+      showsCompass={true}
+      showsScale={true}
+      showsBuildings={true}
+      showsTraffic={false}
+      showsIndoors={true}
+      zoomEnabled={true}
+      zoomControlEnabled={true}
       rotateEnabled={true}
       pitchEnabled={true}
+      scrollEnabled={true}
+      minZoomLevel={10}
+      maxZoomLevel={20}
     >
-      {/* Player accuracy circle */}
+      {/* Player accuracy circle - Google Maps blue style */}
       <Circle
         center={center}
-        radius={50}
-        strokeColor="rgba(231, 76, 60, 0.5)"
-        fillColor="rgba(231, 76, 60, 0.1)"
+        radius={30}
+        strokeColor="rgba(66, 133, 244, 0.5)"
+        fillColor="rgba(66, 133, 244, 0.15)"
+        strokeWidth={2}
       />
 
-      {/* Player marker */}
-      <Marker coordinate={center} anchor={{ x: 0.5, y: 0.5 }}>
+      {/* Player marker - Google Maps style blue dot */}
+      <Marker 
+        coordinate={center} 
+        anchor={{ x: 0.5, y: 0.5 }}
+        tracksViewChanges={false}
+      >
         <AnimatedPlayerMarker heading={heading} />
       </Marker>
 
-      {/* Monster markers */}
+      {/* Monster markers - Red */}
       {markers.filter(m => m.type === 'monster').map((marker) => (
         <Marker
           key={marker.id}
           coordinate={marker.coordinate}
           onPress={() => onMarkerPress?.(marker)}
+          tracksViewChanges={false}
         >
-          <View style={[styles.monsterMarker, { backgroundColor: '#e74c3c' }]}>
-            <Ionicons name="skull" size={18} color="#fff" />
+          <View style={styles.monsterMarker}>
+            <Ionicons name="skull" size={16} color="#fff" />
             {marker.level && <Text style={styles.markerLevel}>{marker.level}</Text>}
           </View>
         </Marker>
       ))}
 
-      {/* Mission markers */}
+      {/* Mission markers - Orange */}
       {markers.filter(m => m.type === 'mission').map((marker) => (
         <Marker
           key={marker.id}
           coordinate={marker.coordinate}
           onPress={() => onMarkerPress?.(marker)}
+          tracksViewChanges={false}
         >
           <View style={styles.missionMarker}>
-            <Ionicons name="briefcase" size={18} color="#fff" />
+            <Ionicons name="briefcase" size={16} color="#fff" />
           </View>
         </Marker>
       ))}
 
-      {/* Other player markers */}
+      {/* Other player markers - Blue */}
       {markers.filter(m => m.type === 'player').map((marker) => (
         <Marker
           key={marker.id}
           coordinate={marker.coordinate}
           onPress={() => onMarkerPress?.(marker)}
+          tracksViewChanges={false}
         >
           <View style={styles.otherPlayerMarker}>
-            <Ionicons name="person" size={16} color="#fff" />
+            <Ionicons name="person" size={14} color="#fff" />
           </View>
         </Marker>
       ))}
@@ -238,23 +201,33 @@ const NativeMap: React.FC<GameMapProps> = ({ center, markers, heading, onMarkerP
   );
 };
 
-// Web fallback - radar style map
+// Web fallback - cleaner Google Maps style radar
 const WebMapFallback: React.FC<GameMapProps> = ({ center, markers, heading = 0, onMarkerPress }) => {
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const [zoom, setZoom] = useState(1);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.timing(rotateAnim, {
-      toValue: heading,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, [heading]);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.3,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   const getMarkerColor = (type: string) => {
     switch (type) {
-      case 'monster': return '#e74c3c';
-      case 'mission': return '#f39c12';
-      case 'player': return '#3498db';
+      case 'monster': return '#EA4335'; // Google red
+      case 'mission': return '#FBBC04'; // Google yellow
+      case 'player': return '#4285F4'; // Google blue
       default: return '#888';
     }
   };
@@ -268,9 +241,9 @@ const WebMapFallback: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
     }
   };
 
-  // Calculate relative position on radar
-  const getRadarPosition = (markerPos: Position) => {
-    const scale = 5000; // meters to percentage scale
+  // Calculate relative position on map
+  const getMapPosition = (markerPos: Position) => {
+    const scale = 3000 / zoom;
     const dx = (markerPos.longitude - center.longitude) * 111000 * Math.cos(center.latitude * Math.PI / 180);
     const dy = (markerPos.latitude - center.latitude) * 111000;
     
@@ -278,55 +251,36 @@ const WebMapFallback: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
     const y = 50 - (dy / scale) * 40;
     
     return {
-      left: `${Math.min(90, Math.max(10, x))}%`,
-      top: `${Math.min(90, Math.max(10, y))}%`,
+      left: `${Math.min(95, Math.max(5, x))}%`,
+      top: `${Math.min(95, Math.max(5, y))}%`,
     };
   };
 
   return (
     <View style={webStyles.container}>
+      {/* Map area with Google Maps-like appearance */}
       <View style={webStyles.mapArea}>
-        {/* Radar rings */}
-        <View style={[webStyles.radarRing, { width: 100, height: 100 }]} />
-        <View style={[webStyles.radarRing, { width: 200, height: 200 }]} />
-        <View style={[webStyles.radarRing, { width: 300, height: 300 }]} />
+        {/* Grid pattern to simulate map */}
+        <View style={webStyles.gridContainer}>
+          {[...Array(8)].map((_, i) => (
+            <View key={`h-${i}`} style={[webStyles.gridLine, webStyles.horizontalLine, { top: `${(i + 1) * 12.5}%` }]} />
+          ))}
+          {[...Array(8)].map((_, i) => (
+            <View key={`v-${i}`} style={[webStyles.gridLine, webStyles.verticalLine, { left: `${(i + 1) * 12.5}%` }]} />
+          ))}
+        </View>
 
-        {/* Radar sweep line */}
-        <Animated.View 
-          style={[
-            webStyles.radarSweep,
-            {
-              transform: [{
-                rotate: rotateAnim.interpolate({
-                  inputRange: [0, 360],
-                  outputRange: ['0deg', '360deg'],
-                })
-              }]
-            }
-          ]} 
-        />
-
-        {/* Grid lines */}
-        <View style={[webStyles.gridLine, { left: '50%', top: 0, bottom: 0, width: 1 }]} />
-        <View style={[webStyles.gridLine, { top: '50%', left: 0, right: 0, height: 1 }]} />
-
-        {/* Player marker in center */}
-        <View style={webStyles.selfMarker}>
-          <Animated.View style={{
-            transform: [{
-              rotate: rotateAnim.interpolate({
-                inputRange: [0, 360],
-                outputRange: ['0deg', '360deg'],
-              })
-            }]
-          }}>
-            <Ionicons name="navigate" size={24} color="#fff" />
-          </Animated.View>
+        {/* Player location - Google Maps blue dot style */}
+        <View style={webStyles.playerContainer}>
+          <Animated.View style={[webStyles.playerPulse, { transform: [{ scale: pulseAnim }] }]} />
+          <View style={webStyles.playerDot}>
+            <View style={webStyles.playerDotInner} />
+          </View>
         </View>
 
         {/* Other markers */}
         {markers.map((marker) => {
-          const pos = getRadarPosition(marker.coordinate);
+          const pos = getMapPosition(marker.coordinate);
           return (
             <View
               key={marker.id}
@@ -344,36 +298,40 @@ const WebMapFallback: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
             </View>
           );
         })}
+
+        {/* Zoom controls */}
+        <View style={webStyles.zoomControls}>
+          <View style={webStyles.zoomButton} onTouchEnd={() => setZoom(z => Math.min(3, z + 0.5))}>
+            <Ionicons name="add" size={24} color="#666" />
+          </View>
+          <View style={webStyles.zoomDivider} />
+          <View style={webStyles.zoomButton} onTouchEnd={() => setZoom(z => Math.max(0.5, z - 0.5))}>
+            <Ionicons name="remove" size={24} color="#666" />
+          </View>
+        </View>
       </View>
 
-      <View style={webStyles.coordsBar}>
-        <Ionicons name="compass" size={14} color="#e74c3c" />
-        <Text style={webStyles.coordsText}>
-          {center.latitude.toFixed(5)}, {center.longitude.toFixed(5)}
-        </Text>
-        <Text style={webStyles.headingText}>
-          {heading.toFixed(0)}°
-        </Text>
-      </View>
-
-      <View style={webStyles.legendBar}>
-        <View style={webStyles.legendItem}>
-          <View style={[webStyles.legendDot, { backgroundColor: '#e74c3c' }]} />
-          <Text style={webStyles.legendText}>
-            Enemies ({markers.filter(m => m.type === 'monster').length})
+      {/* Bottom info bar */}
+      <View style={webStyles.infoBar}>
+        <View style={webStyles.coordsContainer}>
+          <Ionicons name="location" size={14} color="#4285F4" />
+          <Text style={webStyles.coordsText}>
+            {center.latitude.toFixed(5)}, {center.longitude.toFixed(5)}
           </Text>
         </View>
-        <View style={webStyles.legendItem}>
-          <View style={[webStyles.legendDot, { backgroundColor: '#f39c12' }]} />
-          <Text style={webStyles.legendText}>
-            Missions ({markers.filter(m => m.type === 'mission').length})
-          </Text>
-        </View>
-        <View style={webStyles.legendItem}>
-          <View style={[webStyles.legendDot, { backgroundColor: '#3498db' }]} />
-          <Text style={webStyles.legendText}>
-            Players ({markers.filter(m => m.type === 'player').length})
-          </Text>
+        <View style={webStyles.legendContainer}>
+          <View style={webStyles.legendItem}>
+            <View style={[webStyles.legendDot, { backgroundColor: '#EA4335' }]} />
+            <Text style={webStyles.legendText}>{markers.filter(m => m.type === 'monster').length}</Text>
+          </View>
+          <View style={webStyles.legendItem}>
+            <View style={[webStyles.legendDot, { backgroundColor: '#FBBC04' }]} />
+            <Text style={webStyles.legendText}>{markers.filter(m => m.type === 'mission').length}</Text>
+          </View>
+          <View style={webStyles.legendItem}>
+            <View style={[webStyles.legendDot, { backgroundColor: '#4285F4' }]} />
+            <Text style={webStyles.legendText}>{markers.filter(m => m.type === 'player').length}</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -383,99 +341,148 @@ const WebMapFallback: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
 const webStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0d1117',
+    backgroundColor: '#E8E4E0', // Google Maps land color
   },
   mapArea: {
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#F5F5F3',
   },
-  radarRing: {
+  gridContainer: {
     position: 'absolute',
-    borderRadius: 1000,
-    borderWidth: 1,
-    borderColor: 'rgba(231, 76, 60, 0.2)',
-  },
-  radarSweep: {
-    position: 'absolute',
-    width: 2,
-    height: '50%',
-    bottom: '50%',
-    backgroundColor: 'rgba(231, 76, 60, 0.5)',
-    transformOrigin: 'bottom center',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   gridLine: {
     position: 'absolute',
-    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    backgroundColor: '#E0E0E0',
   },
-  selfMarker: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#e74c3c',
+  horizontalLine: {
+    left: 0,
+    right: 0,
+    height: 1,
+  },
+  verticalLine: {
+    top: 0,
+    bottom: 0,
+    width: 1,
+  },
+  playerContainer: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    marginLeft: -25,
+    marginTop: -25,
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playerPulse: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(66, 133, 244, 0.25)',
+  },
+  playerDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#e74c3c',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  playerDotInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4285F4',
   },
   marker: {
     position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
-    transform: [{ translateX: -16 }, { translateY: -16 }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
+    transform: [{ translateX: -15 }, { translateY: -15 }],
   },
-  coordsBar: {
+  zoomControls: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  zoomButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomDivider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  infoBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  coordsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
   },
   coordsText: {
-    color: '#888',
+    color: '#5F6368',
     fontSize: 12,
-    marginLeft: 8,
+    marginLeft: 6,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  headingText: {
-    color: '#e74c3c',
-    fontSize: 12,
-    marginLeft: 12,
-    fontWeight: 'bold',
-  },
-  legendBar: {
+  legendContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    borderTopWidth: 1,
-    borderTopColor: '#222',
+    alignItems: 'center',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginLeft: 12,
   },
   legendDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginRight: 6,
+    marginRight: 4,
   },
   legendText: {
-    color: '#888',
-    fontSize: 11,
+    color: '#5F6368',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 
@@ -484,53 +491,69 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   monsterMarker: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EA4335',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
   },
   markerLevel: {
     position: 'absolute',
-    bottom: -8,
-    backgroundColor: '#000',
+    bottom: -6,
+    backgroundColor: '#fff',
     paddingHorizontal: 4,
+    paddingVertical: 1,
     borderRadius: 4,
-    color: '#fff',
-    fontSize: 10,
+    color: '#EA4335',
+    fontSize: 9,
     fontWeight: 'bold',
   },
   missionMarker: {
-    backgroundColor: '#f39c12',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    backgroundColor: '#FBBC04',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
   },
   otherPlayerMarker: {
-    backgroundColor: '#3498db',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    backgroundColor: '#4285F4',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
   },
 });
 
-// Main export - choose based on platform
+// Main export
 export const GameMap: React.FC<GameMapProps> = (props) => {
   if (Platform.OS === 'web') {
     return <WebMapFallback {...props} />;
   }
   
-  // Use try-catch for native to handle cases where maps might not be available
   try {
     return <NativeMap {...props} />;
   } catch (error) {
