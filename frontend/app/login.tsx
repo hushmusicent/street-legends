@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -58,8 +58,11 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.inner}>
+        <ScrollView
+          contentContainerStyle={styles.inner}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
             {/* Header */}
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -142,8 +145,7 @@ export default function LoginScreen() {
                 <Text style={[styles.signupText, { color: '#e74c3c', fontWeight: '700' }]}>Sign Up</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -152,7 +154,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   keyboardView: { flex: 1 },
-  inner: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
+  inner: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 40 },
 
   backButton: {
     position: 'absolute',
