@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useGameStore } from '../../stores/gameStore';
 import {
   getPlayer,
@@ -187,14 +188,14 @@ export default function CharacterScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.5,
-        base64: true,
+        quality: 0.7,
       });
-      if (!result.canceled && result.assets[0].base64) {
-        await saveProfilePic(result.assets[0].base64);
+      if (!result.canceled && result.assets[0]) {
+        await processAndUpload(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to open camera. Please try again.');
     }
   };
 
@@ -205,26 +206,39 @@ export default function CharacterScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.5,
-        base64: true,
+        quality: 0.7,
       });
-      if (!result.canceled && result.assets[0].base64) {
-        await saveProfilePic(result.assets[0].base64);
+      if (!result.canceled && result.assets[0]) {
+        await processAndUpload(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Gallery error:', error);
+      Alert.alert('Error', 'Failed to open gallery. Please try again.');
     }
   };
 
-  const saveProfilePic = async (base64: string) => {
+  const processAndUpload = async (uri: string) => {
     if (!playerId) return;
     try {
       setUploadingPic(true);
-      const imageData = `data:image/jpeg;base64,${base64}`;
-      await uploadProfilePic(playerId, imageData);
-      setProfilePic(imageData);
+      // Resize to 200x200 and compress heavily for fast upload
+      const manipulated = await manipulateAsync(
+        uri,
+        [{ resize: { width: 200, height: 200 } }],
+        { compress: 0.5, format: SaveFormat.JPEG, base64: true }
+      );
+      if (manipulated.base64) {
+        const imageData = `data:image/jpeg;base64,${manipulated.base64}`;
+        await uploadProfilePic(playerId, imageData);
+        setProfilePic(imageData);
+        Alert.alert('Success', 'Profile picture updated!');
+      } else {
+        Alert.alert('Error', 'Could not process the image. Please try again.');
+      }
     } catch (error: any) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to upload picture');
+      console.error('Upload error:', error);
+      const detail = error?.response?.data?.detail || 'Failed to upload picture. Please try a smaller image.';
+      Alert.alert('Upload Failed', detail);
     } finally {
       setUploadingPic(false);
     }
