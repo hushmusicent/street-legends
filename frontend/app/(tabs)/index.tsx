@@ -148,12 +148,12 @@ export default function MapScreen() {
 
       setIsTracking(true);
       
-      // Track position - update locally every 2s, server every 5s
+      // Track position - frequent local updates for smooth movement, server every 5s
       locationSubscription.current = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 2000,
-          distanceInterval: 3,
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 1000,
+          distanceInterval: 1,
         },
         (loc) => {
           const newPos = {
@@ -175,7 +175,7 @@ export default function MapScreen() {
         }
       );
       
-      // Heading updates
+      // Heading updates for compass direction
       try {
         headingSubscription.current = await Location.watchHeadingAsync((h) => {
           if (h.trueHeading >= 0) setHeading(h.trueHeading);
