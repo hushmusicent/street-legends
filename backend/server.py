@@ -259,6 +259,105 @@ GUN_SHOP_ITEMS = {
 
 ALL_ITEMS.update(GUN_SHOP_ITEMS)
 
+# ============== CONSUMABLE SHOP ITEMS ==============
+CONSUMABLE_ITEMS = {
+    # --- Health Recharges ---
+    "health_syringe": {
+        "id": "health_syringe", "name": "Health Syringe", "category": "health_recharge",
+        "description": "Quick street med. Restores 30 HP.",
+        "icon": "medkit", "rarity": "common",
+        "effect": {"restore_health": 30}, "price": 15, "level_requirement": 1,
+    },
+    "med_kit": {
+        "id": "med_kit", "name": "Med Kit", "category": "health_recharge",
+        "description": "Military first aid. Restores 75 HP.",
+        "icon": "medkit", "rarity": "uncommon",
+        "effect": {"restore_health": 75}, "price": 35, "level_requirement": 3,
+    },
+    "full_heal_pack": {
+        "id": "full_heal_pack", "name": "Full Heal Pack", "category": "health_recharge",
+        "description": "Top-shelf trauma kit. Restores ALL health.",
+        "icon": "medkit", "rarity": "rare",
+        "effect": {"restore_health_full": True}, "price": 80, "level_requirement": 5,
+    },
+    # --- Energy Recharges ---
+    "energy_drink": {
+        "id": "energy_drink", "name": "Energy Drink", "category": "energy_recharge",
+        "description": "Cheap caffeine hit. Restores 25 Energy.",
+        "icon": "battery-charging", "rarity": "common",
+        "effect": {"restore_energy": 25}, "price": 12, "level_requirement": 1,
+    },
+    "adrenaline_shot": {
+        "id": "adrenaline_shot", "name": "Adrenaline Shot", "category": "energy_recharge",
+        "description": "Pure adrenaline rush. Restores 60 Energy.",
+        "icon": "battery-charging", "rarity": "uncommon",
+        "effect": {"restore_energy": 60}, "price": 30, "level_requirement": 3,
+    },
+    "full_energy_cell": {
+        "id": "full_energy_cell", "name": "Full Energy Cell", "category": "energy_recharge",
+        "description": "Military-grade stimulant. Restores ALL energy.",
+        "icon": "battery-charging", "rarity": "rare",
+        "effect": {"restore_energy_full": True}, "price": 70, "level_requirement": 5,
+    },
+    # --- Combo Packs ---
+    "street_rations": {
+        "id": "street_rations", "name": "Street Rations", "category": "combo",
+        "description": "Food & drink combo. Restores 20 HP and 20 Energy.",
+        "icon": "fast-food", "rarity": "common",
+        "effect": {"restore_health": 20, "restore_energy": 20}, "price": 20, "level_requirement": 1,
+    },
+    "combat_stim": {
+        "id": "combat_stim", "name": "Combat Stimulant", "category": "combo",
+        "description": "Black market stim. Restores 50 HP and 50 Energy.",
+        "icon": "fast-food", "rarity": "rare",
+        "effect": {"restore_health": 50, "restore_energy": 50}, "price": 65, "level_requirement": 5,
+    },
+    "full_recovery_kit": {
+        "id": "full_recovery_kit", "name": "Full Recovery Kit", "category": "combo",
+        "description": "The ultimate package. Fully restores HP and Energy.",
+        "icon": "fast-food", "rarity": "epic",
+        "effect": {"restore_health_full": True, "restore_energy_full": True}, "price": 150, "level_requirement": 8,
+    },
+    # --- Special: Extra Max Health ---
+    "heart_implant_mk1": {
+        "id": "heart_implant_mk1", "name": "Heart Implant Mk1", "category": "extra_health",
+        "description": "Cybernetic heart upgrade. Permanently +10 Max HP.",
+        "icon": "heart", "rarity": "rare",
+        "effect": {"bonus_max_health": 10}, "price": 120, "level_requirement": 5,
+    },
+    "heart_implant_mk2": {
+        "id": "heart_implant_mk2", "name": "Heart Implant Mk2", "category": "extra_health",
+        "description": "Advanced cyber-heart. Permanently +25 Max HP.",
+        "icon": "heart", "rarity": "epic",
+        "effect": {"bonus_max_health": 25}, "price": 250, "level_requirement": 8,
+    },
+    "heart_implant_mk3": {
+        "id": "heart_implant_mk3", "name": "Heart Implant Mk3", "category": "extra_health",
+        "description": "Legendary bio-mod. Permanently +50 Max HP.",
+        "icon": "heart", "rarity": "legendary",
+        "effect": {"bonus_max_health": 50}, "price": 500, "level_requirement": 12,
+    },
+    # --- Special: Extra Max Energy ---
+    "neural_booster_mk1": {
+        "id": "neural_booster_mk1", "name": "Neural Booster Mk1", "category": "extra_energy",
+        "description": "Brain chip upgrade. Permanently +10 Max Energy.",
+        "icon": "flash", "rarity": "rare",
+        "effect": {"bonus_max_energy": 10}, "price": 110, "level_requirement": 5,
+    },
+    "neural_booster_mk2": {
+        "id": "neural_booster_mk2", "name": "Neural Booster Mk2", "category": "extra_energy",
+        "description": "Advanced neural link. Permanently +25 Max Energy.",
+        "icon": "flash", "rarity": "epic",
+        "effect": {"bonus_max_energy": 25}, "price": 230, "level_requirement": 8,
+    },
+    "neural_booster_mk3": {
+        "id": "neural_booster_mk3", "name": "Neural Booster Mk3", "category": "extra_energy",
+        "description": "Legendary neuro-mod. Permanently +50 Max Energy.",
+        "icon": "flash", "rarity": "legendary",
+        "effect": {"bonus_max_energy": 50}, "price": 480, "level_requirement": 12,
+    },
+}
+
 # Shop name templates
 SHOP_NAMES = [
     "Underground Arms", "Vinnie's Gun Shop", "The Arsenal", "Black Market Armory",
@@ -1437,6 +1536,99 @@ async def get_player_skills(player_id: str):
             unlocked.append({"id": skill_id, **skill, "unlocked": skill_id in player.get("skills", [])})
     
     return unlocked
+
+# ============== CONSUMABLE SHOP ENDPOINTS ==============
+
+@api_router.get("/shop/consumables")
+async def get_consumable_shop():
+    """Get all consumable items available in the shop"""
+    return list(CONSUMABLE_ITEMS.values())
+
+@api_router.post("/shop/buy-consumable")
+async def buy_consumable(player_id: str, item_id: str):
+    """Buy a consumable item and apply its effects immediately"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    item = CONSUMABLE_ITEMS.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Consumable item not found")
+    
+    if player.get("cash", 0) < item["price"]:
+        raise HTTPException(status_code=400, detail="Not enough cash")
+    
+    if player.get("level", 1) < item["level_requirement"]:
+        raise HTTPException(status_code=400, detail=f"Requires level {item['level_requirement']}")
+    
+    # Build the update operations
+    update_ops = {"$inc": {"cash": -item["price"]}}
+    effect = item["effect"]
+    messages = []
+    
+    stats = player.get("stats", {})
+    
+    # Health restore
+    if "restore_health" in effect:
+        amount = effect["restore_health"]
+        current_hp = stats.get("health", 0)
+        max_hp = stats.get("max_health", 100)
+        new_hp = min(current_hp + amount, max_hp)
+        restored = new_hp - current_hp
+        update_ops.setdefault("$set", {})["stats.health"] = new_hp
+        messages.append(f"Restored {restored} HP")
+    
+    if effect.get("restore_health_full"):
+        max_hp = stats.get("max_health", 100)
+        update_ops.setdefault("$set", {})["stats.health"] = max_hp
+        messages.append("Fully restored HP")
+    
+    # Energy restore
+    if "restore_energy" in effect:
+        amount = effect["restore_energy"]
+        current_en = stats.get("energy", 0)
+        max_en = stats.get("max_energy", 100)
+        new_en = min(current_en + amount, max_en)
+        restored = new_en - current_en
+        update_ops.setdefault("$set", {})["stats.energy"] = new_en
+        messages.append(f"Restored {restored} Energy")
+    
+    if effect.get("restore_energy_full"):
+        max_en = stats.get("max_energy", 100)
+        update_ops.setdefault("$set", {})["stats.energy"] = max_en
+        messages.append("Fully restored Energy")
+    
+    # Permanent max health boost
+    if "bonus_max_health" in effect:
+        amount = effect["bonus_max_health"]
+        new_max_hp = stats.get("max_health", 100) + amount
+        new_hp = stats.get("health", 100) + amount  # Also increase current HP
+        update_ops.setdefault("$set", {})["stats.max_health"] = new_max_hp
+        update_ops.setdefault("$set", {})["stats.health"] = new_hp
+        messages.append(f"Max HP permanently increased by +{amount}")
+    
+    # Permanent max energy boost
+    if "bonus_max_energy" in effect:
+        amount = effect["bonus_max_energy"]
+        new_max_en = stats.get("max_energy", 100) + amount
+        new_en = stats.get("energy", 100) + amount  # Also increase current energy
+        update_ops.setdefault("$set", {})["stats.max_energy"] = new_max_en
+        update_ops.setdefault("$set", {})["stats.energy"] = new_en
+        messages.append(f"Max Energy permanently increased by +{amount}")
+    
+    await db.players.update_one({"id": player_id}, update_ops)
+    
+    # Fetch updated player
+    updated_player = await db.players.find_one({"id": player_id})
+    safe_player = serialize_doc(updated_player)
+    safe_player.pop("password_hash", None)
+    safe_player.pop("profile_pic", None)
+    
+    return {
+        "message": f"Used {item['name']}!",
+        "effects": messages,
+        "player": safe_player,
+    }
 
 # Include the router in the main app
 app.include_router(api_router)

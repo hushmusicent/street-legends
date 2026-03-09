@@ -185,6 +185,17 @@ export const getProfilePic = async (playerId: string): Promise<{ profile_pic: st
   return response.data;
 };
 
+// Consumable Shop APIs
+export const getConsumableShop = async (): Promise<any[]> => {
+  const response = await api.get('/shop/consumables');
+  return response.data;
+};
+
+export const buyConsumable = async (playerId: string, itemId: string): Promise<any> => {
+  const response = await api.post(`/shop/buy-consumable?player_id=${playerId}&item_id=${itemId}`);
+  return response.data;
+};
+
 // Chat APIs
 export const sendChatMessage = async (channel: string, playerId: string, message: string): Promise<ChatMessage> => {
   const response = await api.post(`/chat?channel=${channel}&player_id=${playerId}&message=${encodeURIComponent(message)}`);
