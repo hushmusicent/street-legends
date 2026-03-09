@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
 import { getConsumableShop, buyConsumable, getPlayer } from '../../services/api';
+import api from '../../services/api';
 
 type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'extra_health' | 'extra_energy';
 
@@ -54,9 +55,20 @@ interface ConsumableItem {
   level_requirement: number;
 }
 
+interface Buff {
+  id: string;
+  item_id: string;
+  name: string;
+  type: string;
+  amount: number;
+  battles_remaining: number;
+  icon: string;
+}
+
 export default function ShopTabScreen() {
   const { player, playerId, setPlayer } = useGameStore();
   const [items, setItems] = useState<ConsumableItem[]>([]);
+  const [activeBuffs, setActiveBuffs] = useState<Buff[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [buying, setBuying] = useState<string | null>(null);
@@ -71,8 +83,12 @@ export default function ShopTabScreen() {
 
   const loadShop = async () => {
     try {
-      const data = await getConsumableShop();
+      const [data, buffs] = await Promise.all([
+        getConsumableShop(),
+        playerId ? api.get(`/players/${playerId}/buffs`).then(r => r.data) : Promise.resolve([]),
+      ]);
       setItems(data);
+      setActiveBuffs(buffs);
     } catch (error) {
       console.error('Failed to load shop:', error);
     } finally {
@@ -87,6 +103,8 @@ export default function ShopTabScreen() {
       try {
         const p = await getPlayer(playerId);
         setPlayer(p);
+        const buffs = await api.get(`/players/${playerId}/buffs`).then(r => r.data);
+        setActiveBuffs(buffs);
       } catch (_) {}
     }
     setRefreshing(false);
@@ -115,6 +133,11 @@ export default function ShopTabScreen() {
         setPlayer(p);
       }
       setSuccessModal({ visible: true, message: result.message, effects: result.effects || [] });
+      // Reload buffs after purchase
+      try {
+        const buffs = await api.get(`/players/${playerId}/buffs`).then(r => r.data);
+        setActiveBuffs(buffs);
+      } catch (_) {}
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
     } finally {
@@ -139,8 +162,8 @@ export default function ShopTabScreen() {
     if (effect.restore_health_full) lines.push('Full HP Restore');
     if (effect.restore_energy) lines.push(`+${effect.restore_energy} Energy`);
     if (effect.restore_energy_full) lines.push('Full Energy Restore');
-    if (effect.bonus_max_health) lines.push(`+${effect.bonus_max_health} Max HP (Permanent)`);
-    if (effect.bonus_max_energy) lines.push(`+${effect.bonus_max_energy} Max Energy (Permanent)`);
+    if (effect.temp_max_health) lines.push(`+${effect.temp_max_health} Max HP (${effect.duration_battles} battles)`);
+    if (effect.temp_max_energy) lines.push(`+${effect.temp_max_energy} Max EN (${effect.duration_battles} battles)`);
     return lines;
   };
 
@@ -194,6 +217,28 @@ export default function ShopTabScreen() {
         </View>
       </View>
 
+      {/* Active Buffs */}
+      {activeBuffs.length > 0 && (
+        <View style={styles.buffsBar}>
+          <Text style={styles.buffsTitle}>ACTIVE BOOSTS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.buffsContent}>
+            {activeBuffs.map((buff, idx) => (
+              <View key={buff.id || idx} style={styles.buffChip}>
+                <Ionicons
+                  name={buff.type === 'max_health' ? 'heart' : 'flash'}
+                  size={12}
+                  color={buff.type === 'max_health' ? '#e91e63' : '#9c27b0'}
+                />
+                <Text style={styles.buffChipText}>+{buff.amount} {buff.type === 'max_health' ? 'HP' : 'EN'}</Text>
+                <View style={styles.buffCountBadge}>
+                  <Text style={styles.buffCountText}>{buff.battles_remaining}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Filter Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
         {filters.map(f => (
@@ -228,7 +273,8 @@ export default function ShopTabScreen() {
             const canBuy = (player?.cash || 0) >= item.price && (player?.level || 0) >= item.level_requirement;
             const isBuying = buying === item.id;
             const effectLines = getEffectText(item.effect);
-            const isPermanent = item.category === 'extra_health' || item.category === 'extra_energy';
+            const isPermanent = false; // All boosts are now temporary
+            const isBoost = item.category === 'extra_health' || item.category === 'extra_energy';
 
             return (
               <View key={item.id} style={[styles.itemCard, { borderLeftColor: catConfig?.color || rarityColor, borderLeftWidth: 3 }]}>
@@ -250,8 +296,8 @@ export default function ShopTabScreen() {
                   <Text style={styles.itemDesc} numberOfLines={1}>{item.description}</Text>
                   <View style={styles.effectsRow}>
                     {effectLines.map((eff, idx) => (
-                      <View key={idx} style={[styles.effectChip, isPermanent && styles.effectChipSpecial]}>
-                        <Text style={[styles.effectText, isPermanent && styles.effectTextSpecial]}>{eff}</Text>
+                      <View key={idx} style={[styles.effectChip, isBoost && styles.effectChipSpecial]}>
+                        <Text style={[styles.effectText, isBoost && styles.effectTextSpecial]}>{eff}</Text>
                       </View>
                     ))}
                   </View>
@@ -353,6 +399,25 @@ const styles = StyleSheet.create({
   miniBar: { flex: 1, height: 6, backgroundColor: '#222', borderRadius: 3, overflow: 'hidden' },
   miniBarFill: { height: '100%', borderRadius: 3 },
   statBarValue: { color: '#666', fontSize: 10, fontWeight: '600', minWidth: 50, textAlign: 'right' },
+
+  // Active Buffs
+  buffsBar: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: '#1a1a1a',
+  },
+  buffsTitle: { color: '#ce93d8', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
+  buffsContent: { gap: 6 },
+  buffChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(156,39,176,0.12)', paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(156,39,176,0.25)',
+  },
+  buffChipText: { color: '#ce93d8', fontSize: 11, fontWeight: '700' },
+  buffCountBadge: {
+    backgroundColor: 'rgba(156,39,176,0.3)', borderRadius: 8,
+    paddingHorizontal: 5, paddingVertical: 1, marginLeft: 2,
+  },
+  buffCountText: { color: '#e1bee7', fontSize: 9, fontWeight: '800' },
 
   // Filter
   filterScroll: { maxHeight: 46, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },

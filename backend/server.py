@@ -318,43 +318,43 @@ CONSUMABLE_ITEMS = {
         "icon": "fast-food", "rarity": "epic",
         "effect": {"restore_health_full": True, "restore_energy_full": True}, "price": 150, "level_requirement": 8,
     },
-    # --- Special: Extra Max Health ---
+    # --- Special: Extra Max Health (TEMPORARY) ---
     "heart_implant_mk1": {
         "id": "heart_implant_mk1", "name": "Heart Implant Mk1", "category": "extra_health",
-        "description": "Cybernetic heart upgrade. Permanently +10 Max HP.",
+        "description": "Cybernetic heart boost. +10 Max HP for 5 battles.",
         "icon": "heart", "rarity": "rare",
-        "effect": {"bonus_max_health": 10}, "price": 120, "level_requirement": 5,
+        "effect": {"temp_max_health": 10, "duration_battles": 5}, "price": 80, "level_requirement": 5,
     },
     "heart_implant_mk2": {
         "id": "heart_implant_mk2", "name": "Heart Implant Mk2", "category": "extra_health",
-        "description": "Advanced cyber-heart. Permanently +25 Max HP.",
+        "description": "Advanced cyber-heart. +25 Max HP for 5 battles.",
         "icon": "heart", "rarity": "epic",
-        "effect": {"bonus_max_health": 25}, "price": 250, "level_requirement": 8,
+        "effect": {"temp_max_health": 25, "duration_battles": 5}, "price": 160, "level_requirement": 8,
     },
     "heart_implant_mk3": {
         "id": "heart_implant_mk3", "name": "Heart Implant Mk3", "category": "extra_health",
-        "description": "Legendary bio-mod. Permanently +50 Max HP.",
+        "description": "Legendary bio-mod. +50 Max HP for 5 battles.",
         "icon": "heart", "rarity": "legendary",
-        "effect": {"bonus_max_health": 50}, "price": 500, "level_requirement": 12,
+        "effect": {"temp_max_health": 50, "duration_battles": 5}, "price": 320, "level_requirement": 12,
     },
-    # --- Special: Extra Max Energy ---
+    # --- Special: Extra Max Energy (TEMPORARY) ---
     "neural_booster_mk1": {
         "id": "neural_booster_mk1", "name": "Neural Booster Mk1", "category": "extra_energy",
-        "description": "Brain chip upgrade. Permanently +10 Max Energy.",
+        "description": "Brain chip boost. +10 Max Energy for 5 battles.",
         "icon": "flash", "rarity": "rare",
-        "effect": {"bonus_max_energy": 10}, "price": 110, "level_requirement": 5,
+        "effect": {"temp_max_energy": 10, "duration_battles": 5}, "price": 75, "level_requirement": 5,
     },
     "neural_booster_mk2": {
         "id": "neural_booster_mk2", "name": "Neural Booster Mk2", "category": "extra_energy",
-        "description": "Advanced neural link. Permanently +25 Max Energy.",
+        "description": "Advanced neural link. +25 Max Energy for 5 battles.",
         "icon": "flash", "rarity": "epic",
-        "effect": {"bonus_max_energy": 25}, "price": 230, "level_requirement": 8,
+        "effect": {"temp_max_energy": 25, "duration_battles": 5}, "price": 150, "level_requirement": 8,
     },
     "neural_booster_mk3": {
         "id": "neural_booster_mk3", "name": "Neural Booster Mk3", "category": "extra_energy",
-        "description": "Legendary neuro-mod. Permanently +50 Max Energy.",
+        "description": "Legendary neuro-mod. +50 Max Energy for 5 battles.",
         "icon": "flash", "rarity": "legendary",
-        "effect": {"bonus_max_energy": 50}, "price": 480, "level_requirement": 12,
+        "effect": {"temp_max_energy": 50, "duration_battles": 5}, "price": 300, "level_requirement": 12,
     },
 }
 
@@ -868,6 +868,23 @@ async def get_monster(monster_id: str):
     return serialize_doc(monster)
 
 # ============== BATTLE ENDPOINTS ==============
+# Helper: decrement active buffs after a battle ends
+async def decrement_player_buffs(player_id: str):
+    """Decrement battles_remaining on all active buffs; remove expired ones"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        return
+    active_buffs = player.get("active_buffs", [])
+    if not active_buffs:
+        return
+    updated_buffs = []
+    for buff in active_buffs:
+        remaining = buff.get("battles_remaining", 0) - 1
+        if remaining > 0:
+            buff["battles_remaining"] = remaining
+            updated_buffs.append(buff)
+    await db.players.update_one({"id": player_id}, {"$set": {"active_buffs": updated_buffs}})
+
 @api_router.post("/battles/start")
 async def start_battle(player_id: str, enemy_type: str, enemy_id: str):
     """Start a battle with monster or player"""
@@ -890,16 +907,27 @@ async def start_battle(player_id: str, enemy_type: str, enemy_id: str):
     else:
         raise HTTPException(status_code=400, detail="Invalid enemy type")
     
+    # Calculate buffed max_health and max_energy from active_buffs
+    base_max_health = player["stats"]["max_health"]
+    base_max_energy = player["stats"]["max_energy"]
+    buff_hp = sum(b["amount"] for b in player.get("active_buffs", []) if b["type"] == "max_health")
+    buff_en = sum(b["amount"] for b in player.get("active_buffs", []) if b["type"] == "max_energy")
+    buffed_max_health = base_max_health + buff_hp
+    buffed_max_energy = base_max_energy + buff_en
+    # Current health/energy capped to buffed max
+    current_health = min(player["stats"]["health"], buffed_max_health)
+    current_energy = min(player["stats"]["energy"], buffed_max_energy)
+    
     battle = Battle(
         player_id=player_id,
         enemy_type=enemy_type,
         enemy_id=enemy_id,
         enemy_name=enemy_name,
-        player_health=player["stats"]["health"],
+        player_health=current_health,
         enemy_health=enemy_health,
-        player_max_health=player["stats"]["max_health"],
+        player_max_health=buffed_max_health,
         enemy_max_health=enemy_health,
-        player_energy=player["stats"]["energy"],
+        player_energy=current_energy,
         combat_log=[f"Battle started against {enemy_name}!"]
     )
     
@@ -968,6 +996,7 @@ async def battle_action(battle_id: str, action: BattleAction):
         
     elif action.action == "flee":
         if random.random() < 0.5:
+            await decrement_player_buffs(battle["player_id"])
             await db.battles.update_one(
                 {"id": battle_id},
                 {"$set": {"status": "fled", "combat_log": combat_log + ["You fled from battle!"]}}
@@ -1031,6 +1060,8 @@ async def battle_action(battle_id: str, action: BattleAction):
             
         combat_log.append(f"Victory! {battle['enemy_name']} defeated!")
         
+        await decrement_player_buffs(battle["player_id"])
+        
         await db.battles.update_one(
             {"id": battle_id},
             {"$set": {
@@ -1059,6 +1090,7 @@ async def battle_action(battle_id: str, action: BattleAction):
             {"id": player["id"]},
             {"$set": {"losses": player["losses"] + 1}}
         )
+        await decrement_player_buffs(battle["player_id"])
         combat_log.append("You have been defeated!")
         
         await db.battles.update_one(
@@ -1598,23 +1630,37 @@ async def buy_consumable(player_id: str, item_id: str):
         update_ops.setdefault("$set", {})["stats.energy"] = max_en
         messages.append("Fully restored Energy")
     
-    # Permanent max health boost
-    if "bonus_max_health" in effect:
-        amount = effect["bonus_max_health"]
-        new_max_hp = stats.get("max_health", 100) + amount
-        new_hp = stats.get("health", 100) + amount  # Also increase current HP
-        update_ops.setdefault("$set", {})["stats.max_health"] = new_max_hp
-        update_ops.setdefault("$set", {})["stats.health"] = new_hp
-        messages.append(f"Max HP permanently increased by +{amount}")
+    # Temporary max health boost
+    if "temp_max_health" in effect:
+        amount = effect["temp_max_health"]
+        duration = effect.get("duration_battles", 5)
+        buff = {
+            "id": f"{item_id}_{str(uuid.uuid4())[:8]}",
+            "item_id": item_id,
+            "name": item["name"],
+            "type": "max_health",
+            "amount": amount,
+            "battles_remaining": duration,
+            "icon": "heart",
+        }
+        update_ops.setdefault("$push", {})["active_buffs"] = buff
+        messages.append(f"+{amount} Max HP for {duration} battles")
     
-    # Permanent max energy boost
-    if "bonus_max_energy" in effect:
-        amount = effect["bonus_max_energy"]
-        new_max_en = stats.get("max_energy", 100) + amount
-        new_en = stats.get("energy", 100) + amount  # Also increase current energy
-        update_ops.setdefault("$set", {})["stats.max_energy"] = new_max_en
-        update_ops.setdefault("$set", {})["stats.energy"] = new_en
-        messages.append(f"Max Energy permanently increased by +{amount}")
+    # Temporary max energy boost
+    if "temp_max_energy" in effect:
+        amount = effect["temp_max_energy"]
+        duration = effect.get("duration_battles", 5)
+        buff = {
+            "id": f"{item_id}_{str(uuid.uuid4())[:8]}",
+            "item_id": item_id,
+            "name": item["name"],
+            "type": "max_energy",
+            "amount": amount,
+            "battles_remaining": duration,
+            "icon": "flash",
+        }
+        update_ops.setdefault("$push", {})["active_buffs"] = buff
+        messages.append(f"+{amount} Max Energy for {duration} battles")
     
     await db.players.update_one({"id": player_id}, update_ops)
     
@@ -1629,6 +1675,14 @@ async def buy_consumable(player_id: str, item_id: str):
         "effects": messages,
         "player": safe_player,
     }
+
+@api_router.get("/players/{player_id}/buffs")
+async def get_player_buffs(player_id: str):
+    """Get all active buffs for a player"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return player.get("active_buffs", [])
 
 # Include the router in the main app
 app.include_router(api_router)
