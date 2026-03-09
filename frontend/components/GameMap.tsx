@@ -27,6 +27,7 @@ interface GameMapProps {
   center: Position;
   markers: MapMarker[];
   heading?: number;
+  playerAvatar?: string | null;
   onMarkerPress?: (marker: MapMarker) => void;
 }
 
@@ -42,20 +43,24 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; overflow: hidden; }
     .custom-marker { background: transparent !important; border: none !important; }
-    .player-dot { position: relative; width: 22px; height: 22px; }
+    .player-dot { position: relative; width: 36px; height: 36px; }
     .player-dot-inner {
-      width: 22px; height: 22px; background: #4285F4; border-radius: 50%;
+      width: 36px; height: 36px; background: #4285F4; border-radius: 50%;
       border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       position: relative; z-index: 2;
+      overflow: hidden; display: flex; align-items: center; justify-content: center;
+    }
+    .player-dot-inner img {
+      width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
     }
     .player-pulse {
       position: absolute; top: 50%; left: 50%;
-      width: 40px; height: 40px; margin-left: -20px; margin-top: -20px;
+      width: 50px; height: 50px; margin-left: -25px; margin-top: -25px;
       background: rgba(66,133,244,0.2); border-radius: 50%;
       animation: pulse 2s ease-out infinite; z-index: 1;
     }
     .player-heading {
-      position: absolute; top: -12px; left: 50%; margin-left: -6px;
+      position: absolute; top: -14px; left: 50%; margin-left: -6px;
       width: 0; height: 0;
       border-left: 6px solid transparent; border-right: 6px solid transparent;
       border-bottom: 14px solid #4285F4;
@@ -88,9 +93,9 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
     var currentHeading = 0;
     var playerIcon = L.divIcon({
       className: 'custom-marker',
-      html: '<div class="player-dot"><div class="player-pulse"></div><div class="player-dot-inner"></div><div class="player-heading" id="heading-arrow"></div></div>',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
+      html: '<div class="player-dot"><div class="player-pulse"></div><div class="player-dot-inner" id="player-avatar"></div><div class="player-heading" id="heading-arrow"></div></div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
     });
 
     var playerMarker = L.marker([${initialLat}, ${initialLng}], {
@@ -146,6 +151,14 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
       currentHeading = deg;
       var arrow = document.getElementById('heading-arrow');
       if (arrow) arrow.style.transform = 'rotate(' + deg + 'deg)';
+    };
+
+    // API: Update player avatar
+    window.updatePlayerAvatar = function(avatarUrl) {
+      var el = document.getElementById('player-avatar');
+      if (el && avatarUrl) {
+        el.innerHTML = '<img src="' + avatarUrl + '" alt="avatar" />';
+      }
     };
 
     // API: Center on player
@@ -207,6 +220,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
         else if (data.type === 'updateHeading') window.updateHeading(data.heading);
         else if (data.type === 'centerOnPlayer') window.centerOnPlayer();
         else if (data.type === 'updateMarkers') window.updateMarkers(data.markers);
+        else if (data.type === 'updatePlayerAvatar') window.updatePlayerAvatar(data.avatarUrl);
       } catch(e) {}
     });
 
@@ -218,7 +232,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
   `;
 };
 
-export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, onMarkerPress }) => {
+export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, playerAvatar, onMarkerPress }) => {
   const webViewRef = useRef<any>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -260,6 +274,20 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
       );
     }
   }, [heading, mapReady]);
+
+  // --- Update player avatar ---
+  useEffect(() => {
+    if (!mapReady || !playerAvatar) return;
+    // Escape any quotes in the base64 data URL
+    const safeUrl = playerAvatar.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    if (Platform.OS !== 'web' && webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.updatePlayerAvatar('${safeUrl}'); true;`);
+    } else if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ type: 'updatePlayerAvatar', avatarUrl: playerAvatar }), '*'
+      );
+    }
+  }, [playerAvatar, mapReady]);
 
   // --- Update markers via JS injection (not HTML regen!) ---
   useEffect(() => {

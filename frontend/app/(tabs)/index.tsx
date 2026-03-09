@@ -21,6 +21,7 @@ import {
   getNearbyPlayers,
   startBattle,
   spawnShops,
+  getProfilePic,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -61,6 +62,7 @@ export default function MapScreen() {
   const [isTracking, setIsTracking] = useState(false);
   const [heading, setHeading] = useState<number>(0);
   const [nearbyShops, setNearbyShops] = useState<any[]>([]);
+  const [playerAvatar, setPlayerAvatar] = useState<string | null>(null);
   
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const headingSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -75,6 +77,17 @@ export default function MapScreen() {
       if (headingSubscription.current) headingSubscription.current.remove();
     };
   }, []);
+
+  // Fetch profile pic for map avatar when playerId is available
+  useEffect(() => {
+    if (playerId) {
+      getProfilePic(playerId).then((res) => {
+        if (res.profile_pic) {
+          setPlayerAvatar(res.profile_pic);
+        }
+      }).catch(() => {});
+    }
+  }, [playerId]);
 
   // Only load entities when position changes significantly (50m+)
   useEffect(() => {
@@ -327,6 +340,7 @@ export default function MapScreen() {
           center={currentPosition}
           markers={mapMarkers}
           heading={heading}
+          playerAvatar={playerAvatar}
           onMarkerPress={handleMarkerPress}
         />
       )}
