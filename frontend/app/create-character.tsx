@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../stores/gameStore';
-import { getCharacterClasses, createPlayer } from '../services/api';
+import { getCharacterClasses, registerAccount } from '../services/api';
 import { GameButton } from '../components/GameButton';
 import { CharacterClass } from '../types/game';
 
@@ -34,6 +34,8 @@ const CLASS_COLORS: Record<string, string> = {
 
 export default function CreateCharacter() {
   const { setPlayer, savePlayerId } = useGameStore();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [classes, setClasses] = useState<Record<string, CharacterClass>>({});
@@ -57,6 +59,14 @@ export default function CreateCharacter() {
   };
 
   const handleCreate = async () => {
+    if (!username.trim()) {
+      setError('Please enter a username');
+      return;
+    }
+    if (!password || password.length < 4) {
+      setError('Password must be at least 4 characters');
+      return;
+    }
     if (!name.trim() || !selectedClass) {
       setError('Please enter a name and select a class');
       return;
@@ -65,12 +75,12 @@ export default function CreateCharacter() {
     try {
       setCreating(true);
       setError(null);
-      const player = await createPlayer(name.trim(), selectedClass);
+      const player = await registerAccount(username.trim(), password, name.trim(), selectedClass);
       await savePlayerId(player.id);
       setPlayer(player);
       router.replace('/(tabs)');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create character');
+      setError(err.response?.data?.detail || 'Failed to create account');
     } finally {
       setCreating(false);
     }
@@ -98,6 +108,35 @@ export default function CreateCharacter() {
           <Text style={styles.title}>CREATE YOUR</Text>
           <Text style={styles.subtitle}>CHARACTER</Text>
 
+          {/* Account Fields */}
+          <Text style={styles.sectionLabel}>ACCOUNT</Text>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>USERNAME</Text>
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={(t) => { setUsername(t); setError(null); }}
+              placeholder="Choose a username"
+              placeholderTextColor="#444"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>PASSWORD</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={(t) => { setPassword(t); setError(null); }}
+              placeholder="Choose a password"
+              placeholderTextColor="#444"
+              secureTextEntry
+              autoCapitalize="none"
+            />
+          </View>
+
+          <Text style={[styles.sectionLabel, { marginTop: 24 }]}>CHARACTER</Text>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>STREET NAME</Text>
             <TextInput
@@ -168,11 +207,16 @@ export default function CreateCharacter() {
             onPress={handleCreate}
             variant="primary"
             icon="person-add"
-            disabled={!name.trim() || !selectedClass}
+            disabled={!username.trim() || !password || !name.trim() || !selectedClass}
             loading={creating}
             size="large"
             style={styles.createButton}
           />
+
+          <TouchableOpacity onPress={() => router.replace('/login')} style={styles.loginLink}>
+            <Text style={styles.loginLinkText}>Already have an account? </Text>
+            <Text style={[styles.loginLinkText, { color: '#e74c3c', fontWeight: '700' }]}>Login</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -303,5 +347,30 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: 24,
+  },
+  sectionLabel: {
+    color: '#e74c3c',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 3,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  inputLabel: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    marginBottom: 6,
+  },
+  loginLink: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+    paddingBottom: 20,
+  },
+  loginLinkText: {
+    color: '#888',
+    fontSize: 14,
   },
 });

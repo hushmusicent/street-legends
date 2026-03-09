@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { getPlayer } from '../services/api';
@@ -7,7 +7,7 @@ import { GameButton } from '../components/GameButton';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function Index() {
-  const { playerId, player, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
+  const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export default function Index() {
     try {
       setLoading(true);
       const storedId = await loadStoredPlayerId();
-      
+
       if (storedId) {
         try {
           const playerData = await getPlayer(storedId);
@@ -26,7 +26,6 @@ export default function Index() {
           setPlayerId(storedId);
           router.replace('/(tabs)');
         } catch (err) {
-          // Player not found, clear stored ID
           setPlayerId('');
         }
       }
@@ -35,10 +34,6 @@ export default function Index() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleNewGame = () => {
-    router.push('/create-character');
   };
 
   if (isLoading) {
@@ -84,12 +79,20 @@ export default function Index() {
 
       <View style={styles.footer}>
         <GameButton
-          title="START NEW GAME"
-          onPress={handleNewGame}
+          title="LOGIN"
+          onPress={() => router.push('/login')}
           variant="primary"
-          icon="game-controller"
+          icon="log-in"
           size="large"
-          style={styles.startButton}
+          style={styles.loginButton}
+        />
+        <GameButton
+          title="SIGN UP"
+          onPress={() => router.push('/create-character')}
+          variant="secondary"
+          icon="person-add"
+          size="large"
+          style={styles.signupButton}
         />
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
@@ -175,8 +178,12 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
+    gap: 12,
   },
-  startButton: {
+  loginButton: {
+    width: '100%',
+  },
+  signupButton: {
     width: '100%',
   },
   errorText: {

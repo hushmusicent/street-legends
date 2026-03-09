@@ -11,7 +11,10 @@ import uuid
 from datetime import datetime
 import random
 import math
+from passlib.context import CryptContext
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -204,6 +207,16 @@ class PlayerCreate(BaseModel):
     name: str
     character_class: str
 
+class AuthRegister(BaseModel):
+    username: str
+    password: str
+    name: str
+    character_class: str
+
+class AuthLogin(BaseModel):
+    username: str
+    password: str
+
 class PlayerUpdate(BaseModel):
     position: Optional[Position] = None
     last_active: datetime = Field(default_factory=datetime.utcnow)
@@ -358,6 +371,71 @@ async def generate_ai_content(content_type: str, context: Dict[str, Any]) -> str
         if content_type == "mission":
             return '{"title": "Street Business", "description": "Handle some business in the neighborhood.", "dialogue": "Yo, I got a job for you.", "objectives": ["Complete the task", "Return for reward"]}'
         return "A dangerous figure from the streets."
+
+# ============== AUTH ENDPOINTS ==============
+@api_router.post("/auth/register")
+async def register(data: AuthRegister):
+    """Register a new account and create character"""
+    # Validate
+    if len(data.username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if len(data.password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    if data.character_class not in CHARACTER_CLASSES:
+        raise HTTPException(status_code=400, detail="Invalid character class")
+    
+    # Check username taken
+    existing = await db.players.find_one({"username": data.username.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    # Check name taken
+    existing_name = await db.players.find_one({"name": data.name})
+    if existing_name:
+        raise HTTPException(status_code=400, detail="Character name already taken")
+    
+    class_info = CHARACTER_CLASSES[data.character_class]
+    base_stats = class_info["base_stats"]
+    
+    player = Player(
+        name=data.name,
+        character_class=data.character_class,
+        stats=PlayerStats(
+            health=base_stats["health"],
+            max_health=base_stats["health"],
+            attack=base_stats["attack"],
+            defense=base_stats["defense"],
+            speed=base_stats["speed"],
+            luck=base_stats["luck"]
+        ),
+        inventory=["rusty_pipe", "worn_jacket", "chain_necklace", "beat_up_bike"],
+        equipment={"weapon": None, "armor": None, "accessory": None, "vehicle": None}
+    )
+    
+    player_dict = player.dict()
+    player_dict["username"] = data.username.lower()
+    player_dict["password_hash"] = pwd_context.hash(data.password)
+    
+    await db.players.insert_one(player_dict)
+    return player
+
+@api_router.post("/auth/login")
+async def login(data: AuthLogin):
+    """Login with username and password"""
+    player = await db.players.find_one({"username": data.username.lower()})
+    if not player:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    if not pwd_context.verify(data.password, player.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    # Update last active
+    await db.players.update_one(
+        {"id": player["id"]},
+        {"$set": {"last_active": datetime.utcnow()}}
+    )
+    
+    return Player(**player)
 
 # ============== PLAYER ENDPOINTS ==============
 @api_router.get("/")

@@ -142,6 +142,27 @@ export const getAllItems = async (): Promise<Record<string, any>> => {
   return response.data;
 };
 
+// Auth APIs
+export const registerAccount = async (
+  username: string,
+  password: string,
+  name: string,
+  characterClass: string
+): Promise<any> => {
+  const response = await api.post('/auth/register', {
+    username,
+    password,
+    name,
+    character_class: characterClass,
+  });
+  return response.data;
+};
+
+export const loginAccount = async (username: string, password: string): Promise<any> => {
+  const response = await api.post('/auth/login', { username, password });
+  return response.data;
+};
+
 // Chat APIs
 export const sendChatMessage = async (channel: string, playerId: string, message: string): Promise<ChatMessage> => {
   const response = await api.post(`/chat?channel=${channel}&player_id=${playerId}&message=${encodeURIComponent(message)}`);
