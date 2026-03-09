@@ -625,6 +625,34 @@ async def update_player_position(player_id: str, position: Position):
         raise HTTPException(status_code=404, detail="Player not found")
     return {"status": "position updated"}
 
+class ProfilePicUpload(BaseModel):
+    image: str  # base64 encoded image
+
+@api_router.post("/players/{player_id}/profile-pic")
+async def upload_profile_pic(player_id: str, data: ProfilePicUpload):
+    """Upload a profile picture (base64)"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Validate base64 size (max ~2MB)
+    if len(data.image) > 2_800_000:
+        raise HTTPException(status_code=400, detail="Image too large. Max 2MB.")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"profile_pic": data.image}}
+    )
+    return {"message": "Profile picture updated"}
+
+@api_router.get("/players/{player_id}/profile-pic")
+async def get_profile_pic(player_id: str):
+    """Get player's profile picture"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return {"profile_pic": player.get("profile_pic", None)}
+
 @api_router.get("/players/nearby/{player_id}")
 async def get_nearby_players(player_id: str, radius: float = 500):
     """Get players within radius (meters)"""

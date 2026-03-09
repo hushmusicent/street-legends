@@ -8,10 +8,13 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  Image,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useGameStore } from '../../stores/gameStore';
 import {
   getPlayer,
@@ -20,6 +23,8 @@ import {
   getPlayerEquipmentDetails,
   equipItem,
   unequipItem,
+  uploadProfilePic,
+  getProfilePic,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -83,6 +88,8 @@ export default function CharacterScreen() {
   const [inventory, setInventory] = useState<EquipmentItem[]>([]);
   const [equipped, setEquipped] = useState<Record<string, EquipmentItem | null>>({});
   const [loading, setLoading] = useState(false);
+  const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [uploadingPic, setUploadingPic] = useState(false);
 
   useEffect(() => {
     if (playerId) loadAllData();
@@ -104,11 +111,15 @@ export default function CharacterScreen() {
         getPlayerSkills(playerId),
         getPlayerInventoryDetails(playerId),
         getPlayerEquipmentDetails(playerId),
+        getProfilePic(playerId),
       ]);
       if (results[0].status === 'fulfilled') setPlayer(results[0].value);
       if (results[1].status === 'fulfilled') setSkills(results[1].value);
       if (results[2].status === 'fulfilled') setInventory(results[2].value);
       if (results[3].status === 'fulfilled') setEquipped(results[3].value);
+      if (results[4].status === 'fulfilled' && results[4].value.profile_pic) {
+        setProfilePic(results[4].value.profile_pic);
+      }
     } catch (error) {
       console.error('Failed to load character data:', error);
     }
@@ -156,6 +167,73 @@ export default function CharacterScreen() {
     ]);
   };
 
+  const pickImage = async () => {
+    if (!playerId) return;
+    
+    try {
+      // Ask user to choose camera or gallery
+      Alert.alert('Profile Picture', 'Choose a source', [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission needed', 'Camera access is required to take photos.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.5,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0].base64) {
+              await saveProfilePic(result.assets[0].base64);
+            }
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission needed', 'Photo library access is required.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.5,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0].base64) {
+              await saveProfilePic(result.assets[0].base64);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    } catch (error) {
+      console.error('Image picker error:', error);
+    }
+  };
+
+  const saveProfilePic = async (base64: string) => {
+    if (!playerId) return;
+    try {
+      setUploadingPic(true);
+      const imageData = `data:image/jpeg;base64,${base64}`;
+      await uploadProfilePic(playerId, imageData);
+      setProfilePic(imageData);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to upload picture');
+    } finally {
+      setUploadingPic(false);
+    }
+  };
+
   if (!player) {
     return (
       <View style={styles.loadingContainer}>
@@ -180,9 +258,23 @@ export default function CharacterScreen() {
     <SafeAreaView style={styles.container}>
       {/* Character Header - always visible */}
       <View style={styles.header}>
-        <View style={[styles.avatarContainer, { borderColor: classColor }]}>
-          <Ionicons name={CLASS_ICONS[player.character_class]} size={32} color={classColor} />
-        </View>
+        <TouchableOpacity onPress={pickImage} activeOpacity={0.7}>
+          <View style={[styles.avatarContainer, { borderColor: classColor }]}>
+            {profilePic ? (
+              <Image source={{ uri: profilePic }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name={CLASS_ICONS[player.character_class]} size={32} color={classColor} />
+            )}
+            {uploadingPic && (
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            )}
+            <View style={styles.cameraButton}>
+              <Ionicons name="camera" size={12} color="#fff" />
+            </View>
+          </View>
+        </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.playerName}>{player.name}</Text>
           <Text style={[styles.playerClass, { color: classColor }]}>
@@ -608,6 +700,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 28,
+  },
+  cameraButton: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#e74c3c',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#0a0a0a',
   },
   headerInfo: { flex: 1, marginLeft: 12 },
   playerName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },

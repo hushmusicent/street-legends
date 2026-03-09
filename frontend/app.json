@@ -12,7 +12,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Track your location to discover monsters and missions nearby",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Track your location to discover monsters and missions nearby"
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Track your location to discover monsters and missions nearby",
+        "NSCameraUsageDescription": "Take photos for your character profile",
+        "NSPhotoLibraryUsageDescription": "Choose a profile picture from your gallery"
       }
     },
     "android": {
@@ -23,7 +25,9 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
       ]
     },
     "web": {

@@ -174,6 +174,17 @@ export const loginAccount = async (username: string, password: string): Promise<
   return response.data;
 };
 
+// Profile pic APIs
+export const uploadProfilePic = async (playerId: string, imageBase64: string): Promise<any> => {
+  const response = await api.post(`/players/${playerId}/profile-pic`, { image: imageBase64 });
+  return response.data;
+};
+
+export const getProfilePic = async (playerId: string): Promise<{ profile_pic: string | null }> => {
+  const response = await api.get(`/players/${playerId}/profile-pic`);
+  return response.data;
+};
+
 // Chat APIs
 export const sendChatMessage = async (channel: string, playerId: string, message: string): Promise<ChatMessage> => {
   const response = await api.post(`/chat?channel=${channel}&player_id=${playerId}&message=${encodeURIComponent(message)}`);
