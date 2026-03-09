@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -90,6 +92,7 @@ export default function CharacterScreen() {
   const [loading, setLoading] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [uploadingPic, setUploadingPic] = useState(false);
+  const [showPicMenu, setShowPicMenu] = useState(false);
 
   useEffect(() => {
     if (playerId) loadAllData();
@@ -169,54 +172,47 @@ export default function CharacterScreen() {
 
   const pickImage = async () => {
     if (!playerId) return;
-    
+    setShowPicMenu(true);
+  };
+
+  const launchCamera = async () => {
+    setShowPicMenu(false);
     try {
-      // Ask user to choose camera or gallery
-      Alert.alert('Profile Picture', 'Choose a source', [
-        {
-          text: 'Camera',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') {
-              Alert.alert('Permission needed', 'Camera access is required to take photos.');
-              return;
-            }
-            const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ['images'],
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.5,
-              base64: true,
-            });
-            if (!result.canceled && result.assets[0].base64) {
-              await saveProfilePic(result.assets[0].base64);
-            }
-          },
-        },
-        {
-          text: 'Gallery',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-              Alert.alert('Permission needed', 'Photo library access is required.');
-              return;
-            }
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images'],
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.5,
-              base64: true,
-            });
-            if (!result.canceled && result.assets[0].base64) {
-              await saveProfilePic(result.assets[0].base64);
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera access is required to take photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+      if (!result.canceled && result.assets[0].base64) {
+        await saveProfilePic(result.assets[0].base64);
+      }
     } catch (error) {
-      console.error('Image picker error:', error);
+      console.error('Camera error:', error);
+    }
+  };
+
+  const launchGallery = async () => {
+    setShowPicMenu(false);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+      if (!result.canceled && result.assets[0].base64) {
+        await saveProfilePic(result.assets[0].base64);
+      }
+    } catch (error) {
+      console.error('Gallery error:', error);
     }
   };
 
@@ -345,6 +341,51 @@ export default function CharacterScreen() {
           <SkillsTab skills={skills} classColor={classColor} playerLevel={player.level} />
         )}
       </ScrollView>
+
+      {/* Profile Picture Menu Modal */}
+      <Modal
+        visible={showPicMenu}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPicMenu(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowPicMenu(false)}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Profile Picture</Text>
+            <Text style={styles.modalSubtitle}>Choose how to set your character image</Text>
+
+            <TouchableOpacity style={styles.modalOption} onPress={launchCamera}>
+              <View style={[styles.modalOptionIcon, { backgroundColor: 'rgba(231,76,60,0.1)' }]}>
+                <Ionicons name="camera" size={24} color="#e74c3c" />
+              </View>
+              <View style={styles.modalOptionText}>
+                <Text style={styles.modalOptionTitle}>Take Photo</Text>
+                <Text style={styles.modalOptionDesc}>Use your camera to take a selfie</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#444" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalOption} onPress={launchGallery}>
+              <View style={[styles.modalOptionIcon, { backgroundColor: 'rgba(52,152,219,0.1)' }]}>
+                <Ionicons name="images" size={24} color="#3498db" />
+              </View>
+              <View style={styles.modalOptionText}>
+                <Text style={styles.modalOptionTitle}>Choose from Gallery</Text>
+                <Text style={styles.modalOptionDesc}>Pick a photo from your library</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#444" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.modalCancel} 
+              onPress={() => setShowPicMenu(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -911,4 +952,78 @@ const styles = StyleSheet.create({
   },
   emptyStateTitle: { color: '#555', fontSize: 18, fontWeight: '700', marginTop: 16 },
   emptyStateText: { color: '#444', fontSize: 13, textAlign: 'center', marginTop: 8, paddingHorizontal: 32 },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#444',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: '#666',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 20,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 10,
+  },
+  modalOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalOptionText: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  modalOptionTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalOptionDesc: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalCancel: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 6,
+  },
+  modalCancelText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
