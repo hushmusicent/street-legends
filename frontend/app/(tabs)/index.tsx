@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,11 +24,15 @@ import {
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 
-const MONSTER_COLORS: Record<string, string> = {
-  humanoid: '#e74c3c',
-  boss: '#9b59b6',
-  tech: '#3498db',
-  stealth: '#1abc9c',
+// Calculate distance between two points in meters
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 };
 
 export default function MapScreen() {
@@ -55,47 +59,55 @@ export default function MapScreen() {
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [heading, setHeading] = useState<number>(0);
+  
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const headingSubscription = useRef<Location.LocationSubscription | null>(null);
+  const lastEntityLoadPos = useRef<{ lat: number; lon: number } | null>(null);
+  const lastServerUpdateTime = useRef<number>(0);
+  const entitiesCache = useRef<{ time: number; data: any } | null>(null);
 
   useEffect(() => {
     initializeLocation();
     return () => {
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-      }
-      if (headingSubscription.current) {
-        headingSubscription.current.remove();
-      }
+      if (locationSubscription.current) locationSubscription.current.remove();
+      if (headingSubscription.current) headingSubscription.current.remove();
     };
   }, []);
 
+  // Only load entities when position changes significantly (50m+)
   useEffect(() => {
     if (currentPosition && player) {
-      loadNearbyEntities();
+      const shouldLoad = !lastEntityLoadPos.current || 
+        getDistance(
+          lastEntityLoadPos.current.lat,
+          lastEntityLoadPos.current.lon,
+          currentPosition.latitude,
+          currentPosition.longitude
+        ) > 50;
+      
+      if (shouldLoad) {
+        loadNearbyEntities();
+        lastEntityLoadPos.current = {
+          lat: currentPosition.latitude,
+          lon: currentPosition.longitude
+        };
+      }
     }
-  }, [currentPosition]);
+  }, [currentPosition?.latitude, currentPosition?.longitude]);
 
   const initializeLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLocationError('Location permission required. Enable GPS to play.');
+        setLocationError('Location permission required.');
         setLoading(false);
         return;
       }
 
-      const enabled = await Location.hasServicesEnabledAsync();
-      if (!enabled) {
-        setLocationError('Enable Location Services to play.');
-        setLoading(false);
-        return;
-      }
-
+      // Get initial position quickly with balanced accuracy
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
+        accuracy: Location.Accuracy.Balanced, // Faster than BestForNavigation
       });
 
       const position = {
@@ -104,18 +116,19 @@ export default function MapScreen() {
       };
 
       setCurrentPosition(position);
-      setLastUpdate(new Date());
-
+      
+      // Load player data in parallel
       if (playerId) {
-        await updatePlayerPosition(playerId, position);
-        const playerData = await getPlayer(playerId);
-        setPlayer(playerData);
+        getPlayer(playerId).then(setPlayer).catch(console.error);
       }
 
-      startLocationTracking();
       setLoading(false);
+      
+      // Start tracking after initial load
+      startLocationTracking();
+      
     } catch (error: any) {
-      setLocationError('Failed to get location: ' + (error.message || 'Unknown'));
+      setLocationError('Failed to get location');
       setLoading(false);
     }
   };
@@ -124,17 +137,16 @@ export default function MapScreen() {
     try {
       if (locationSubscription.current) {
         locationSubscription.current.remove();
-        locationSubscription.current = null;
       }
 
       setIsTracking(true);
       
-      // Watch position with maximum accuracy for smooth movement
+      // Track position - update locally every 2s, server every 5s
       locationSubscription.current = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000, // Update every 1 second for smoother tracking
-          distanceInterval: 1, // Update every 1 meter for responsive movement
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 3,
         },
         (loc) => {
           const newPos = {
@@ -142,61 +154,69 @@ export default function MapScreen() {
             longitude: loc.coords.longitude,
           };
           setCurrentPosition(newPos);
-          setLastUpdate(new Date());
           
-          // Get heading from GPS if available
           if (loc.coords.heading !== null && loc.coords.heading >= 0) {
             setHeading(loc.coords.heading);
           }
           
-          if (playerId) {
+          // Throttle server updates to every 5 seconds
+          const now = Date.now();
+          if (playerId && now - lastServerUpdateTime.current > 5000) {
+            lastServerUpdateTime.current = now;
             updatePlayerPosition(playerId, newPos).catch(console.error);
           }
         }
       );
       
-      // Also start heading/compass tracking for direction
+      // Heading updates
       try {
-        headingSubscription.current = await Location.watchHeadingAsync((headingData) => {
-          if (headingData.trueHeading >= 0) {
-            setHeading(headingData.trueHeading);
-          } else if (headingData.magHeading >= 0) {
-            setHeading(headingData.magHeading);
-          }
+        headingSubscription.current = await Location.watchHeadingAsync((h) => {
+          if (h.trueHeading >= 0) setHeading(h.trueHeading);
+          else if (h.magHeading >= 0) setHeading(h.magHeading);
         });
-      } catch (headingError) {
-        console.log('Heading not available:', headingError);
-      }
+      } catch {}
       
     } catch (error) {
-      console.error('Location tracking error:', error);
       setIsTracking(false);
     }
   };
 
-  const loadNearbyEntities = async () => {
+  const loadNearbyEntities = useCallback(async () => {
     if (!currentPosition || !player || !playerId) return;
+
+    // Check cache (30 second TTL)
+    const now = Date.now();
+    if (entitiesCache.current && now - entitiesCache.current.time < 30000) {
+      return;
+    }
+
     try {
+      // Load all in parallel
       const [monsters, missions, players] = await Promise.all([
         spawnMonsters(currentPosition.latitude, currentPosition.longitude, player.level),
         generateMissions(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyPlayers(playerId, 500),
       ]);
+
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
       setNearbyPlayers(players);
+      
+      entitiesCache.current = { time: now, data: { monsters, missions, players } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
-  };
+  }, [currentPosition, player, playerId]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    entitiesCache.current = null; // Clear cache
+    lastEntityLoadPos.current = null; // Force reload
     await loadNearbyEntities();
     setRefreshing(false);
-  };
+  }, [loadNearbyEntities]);
 
-  const handleStartBattle = async (monster: Monster) => {
+  const handleStartBattle = useCallback(async (monster: Monster) => {
     if (!playerId) return;
     try {
       const battle = await startBattle(playerId, 'monster', monster.id);
@@ -206,14 +226,14 @@ export default function MapScreen() {
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to start battle');
     }
-  };
+  }, [playerId]);
 
-  const handleStartMission = (mission: Mission) => {
+  const handleStartMission = useCallback((mission: Mission) => {
     setSelectedMarker(null);
     router.push(`/mission/${mission.id}`);
-  };
+  }, []);
 
-  const handlePvPChallenge = async (targetPlayer: NearbyPlayer) => {
+  const handlePvPChallenge = useCallback(async (targetPlayer: NearbyPlayer) => {
     if (!playerId) return;
     try {
       const battle = await startBattle(playerId, 'player', targetPlayer.id);
@@ -223,9 +243,10 @@ export default function MapScreen() {
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to start PvP');
     }
-  };
+  }, [playerId]);
 
-  const mapMarkers = [
+  // Memoize markers to prevent re-renders
+  const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
       id: m.id,
       coordinate: m.position,
@@ -246,9 +267,9 @@ export default function MapScreen() {
       level: p.level,
       name: p.name,
     })),
-  ];
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers]);
 
-  const handleMarkerPress = (marker: any) => {
+  const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
       const monster = nearbyMonsters.find((m) => m.id === marker.id);
       if (monster) setSelectedMarker({ type: 'monster', data: monster });
@@ -259,14 +280,13 @@ export default function MapScreen() {
       const targetPlayer = nearbyPlayers.find((p) => p.id === marker.id);
       if (targetPlayer) setSelectedMarker({ type: 'player', data: targetPlayer });
     }
-  };
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers]);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
-        <Text style={styles.loadingText}>Getting your GPS location...</Text>
-        <Text style={styles.loadingSubtext}>Make sure location is enabled</Text>
+        <ActivityIndicator size="large" color="#4285F4" />
+        <Text style={styles.loadingText}>Finding your location...</Text>
       </View>
     );
   }
@@ -274,11 +294,10 @@ export default function MapScreen() {
   if (locationError) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="location-outline" size={64} color="#e74c3c" />
+        <Ionicons name="location-outline" size={64} color="#EA4335" />
         <Text style={styles.errorTitle}>Location Required</Text>
         <Text style={styles.errorText}>{locationError}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={initializeLocation}>
-          <Ionicons name="refresh" size={20} color="#fff" />
           <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
       </View>
@@ -303,29 +322,15 @@ export default function MapScreen() {
         </View>
         <View style={styles.hudRight}>
           <View style={[styles.gpsIndicator, isTracking && styles.gpsActive]}>
-            <Ionicons name="navigate" size={16} color={isTracking ? '#27ae60' : '#888'} />
-            <Text style={[styles.gpsText, isTracking && styles.gpsActiveText]}>
-              {isTracking ? 'GPS' : 'OFF'}
-            </Text>
+            <Ionicons name="navigate" size={14} color={isTracking ? '#34A853' : '#888'} />
           </View>
           <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh} disabled={refreshing}>
-            <Ionicons name="refresh" size={24} color="#fff" style={refreshing ? styles.rotating : undefined} />
+            <Ionicons name="refresh" size={22} color="#5F6368" style={refreshing ? styles.rotating : undefined} />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
-      {currentPosition && (
-        <View style={styles.coordsDisplay}>
-          <Ionicons name="location" size={12} color="#e74c3c" />
-          <Text style={styles.coordsText}>
-            {currentPosition.latitude.toFixed(5)}, {currentPosition.longitude.toFixed(5)}
-          </Text>
-          <Ionicons name="compass" size={12} color="#f39c12" style={{ marginLeft: 8 }} />
-          <Text style={styles.headingText}>{heading.toFixed(0)}°</Text>
-          {lastUpdate && <Text style={styles.updateText}>{lastUpdate.toLocaleTimeString()}</Text>}
-        </View>
-      )}
-
+      {/* Quick action cards */}
       <View style={styles.entityList}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {nearbyMonsters.slice(0, 3).map((monster) => (
@@ -334,107 +339,91 @@ export default function MapScreen() {
               style={[styles.entityCard, styles.monsterCard]}
               onPress={() => setSelectedMarker({ type: 'monster', data: monster })}
             >
-              <Ionicons name="skull" size={20} color="#e74c3c" />
+              <Ionicons name="skull" size={18} color="#EA4335" />
               <Text style={styles.entityName}>{monster.name}</Text>
               <Text style={styles.entityLevel}>Lv.{monster.level}</Text>
             </TouchableOpacity>
           ))}
-          {nearbyMissions.slice(0, 3).map((mission) => (
+          {nearbyMissions.slice(0, 2).map((mission) => (
             <TouchableOpacity
               key={mission.id}
               style={[styles.entityCard, styles.missionCard]}
               onPress={() => setSelectedMarker({ type: 'mission', data: mission })}
             >
-              <Ionicons name="briefcase" size={20} color="#f39c12" />
+              <Ionicons name="briefcase" size={18} color="#FBBC04" />
               <Text style={styles.entityName} numberOfLines={1}>{mission.title}</Text>
-              <Text style={styles.entityLevel}>{mission.difficulty}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
+      {/* Popup */}
       {selectedMarker && (
         <View style={styles.popup}>
           <TouchableOpacity style={styles.popupClose} onPress={() => setSelectedMarker(null)}>
-            <Ionicons name="close" size={24} color="#888" />
+            <Ionicons name="close" size={24} color="#5F6368" />
           </TouchableOpacity>
 
           {selectedMarker.type === 'monster' && (
-            <View style={styles.popupContent}>
+            <View>
               <View style={styles.popupHeader}>
-                <Ionicons name="skull" size={32} color={MONSTER_COLORS[selectedMarker.data.monster_type]} />
+                <Ionicons name="skull" size={28} color="#EA4335" />
                 <View style={styles.popupHeaderText}>
                   <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
                   <Text style={styles.popupSubtitle}>Level {selectedMarker.data.level}</Text>
                 </View>
               </View>
-              <Text style={styles.popupDescription}>{selectedMarker.data.description}</Text>
               <View style={styles.rewardsRow}>
                 <View style={styles.rewardItem}>
-                  <Ionicons name="cash" size={16} color="#f39c12" />
+                  <Ionicons name="cash" size={14} color="#34A853" />
                   <Text style={styles.rewardText}>${selectedMarker.data.loot_cash}</Text>
                 </View>
                 <View style={styles.rewardItem}>
-                  <Ionicons name="star" size={16} color="#3498db" />
+                  <Ionicons name="star" size={14} color="#4285F4" />
                   <Text style={styles.rewardText}>{selectedMarker.data.loot_xp} XP</Text>
                 </View>
               </View>
               <TouchableOpacity style={styles.actionButton} onPress={() => handleStartBattle(selectedMarker.data)}>
-                <Ionicons name="flash" size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>FIGHT</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {selectedMarker.type === 'mission' && (
-            <View style={styles.popupContent}>
+            <View>
               <View style={styles.popupHeader}>
-                <Ionicons name="briefcase" size={32} color="#f39c12" />
+                <Ionicons name="briefcase" size={28} color="#FBBC04" />
                 <View style={styles.popupHeaderText}>
                   <Text style={styles.popupTitle}>{selectedMarker.data.title}</Text>
-                  <Text style={styles.popupSubtitle}>
-                    {selectedMarker.data.difficulty.toUpperCase()} - Lv.{selectedMarker.data.level_requirement}+
-                  </Text>
+                  <Text style={styles.popupSubtitle}>{selectedMarker.data.difficulty.toUpperCase()}</Text>
                 </View>
               </View>
-              <Text style={styles.popupDescription}>{selectedMarker.data.description}</Text>
               <View style={styles.rewardsRow}>
                 <View style={styles.rewardItem}>
-                  <Ionicons name="cash" size={16} color="#f39c12" />
+                  <Ionicons name="cash" size={14} color="#34A853" />
                   <Text style={styles.rewardText}>${selectedMarker.data.rewards.cash}</Text>
                 </View>
                 <View style={styles.rewardItem}>
-                  <Ionicons name="star" size={16} color="#3498db" />
+                  <Ionicons name="star" size={14} color="#4285F4" />
                   <Text style={styles.rewardText}>{selectedMarker.data.rewards.xp} XP</Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#f39c12' }]}
-                onPress={() => handleStartMission(selectedMarker.data)}
-              >
-                <Ionicons name="navigate" size={20} color="#fff" />
-                <Text style={styles.actionButtonText}>START MISSION</Text>
+              <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#FBBC04'}]} onPress={() => handleStartMission(selectedMarker.data)}>
+                <Text style={styles.actionButtonText}>START</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {selectedMarker.type === 'player' && (
-            <View style={styles.popupContent}>
+            <View>
               <View style={styles.popupHeader}>
-                <Ionicons name="person" size={32} color="#3498db" />
+                <Ionicons name="person" size={28} color="#4285F4" />
                 <View style={styles.popupHeaderText}>
                   <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
-                  <Text style={styles.popupSubtitle}>
-                    Level {selectedMarker.data.level} {selectedMarker.data.character_class.replace('_', ' ')}
-                  </Text>
+                  <Text style={styles.popupSubtitle}>Lv.{selectedMarker.data.level} • {selectedMarker.data.distance}m</Text>
                 </View>
               </View>
-              <Text style={styles.popupDescription}>Distance: {selectedMarker.data.distance}m away</Text>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#9b59b6' }]}
-                onPress={() => handlePvPChallenge(selectedMarker.data)}
-              >
-                <Ionicons name="flash" size={20} color="#fff" />
+              <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#4285F4'}]} onPress={() => handlePvPChallenge(selectedMarker.data)}>
                 <Text style={styles.actionButtonText}>CHALLENGE</Text>
               </TouchableOpacity>
             </View>
@@ -446,47 +435,38 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' },
-  loadingText: { color: '#fff', marginTop: 16, fontSize: 16, fontWeight: '600' },
-  loadingSubtext: { color: '#888', marginTop: 8, fontSize: 13 },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a', padding: 24 },
-  errorTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 16 },
-  errorText: { color: '#888', marginTop: 8, textAlign: 'center', fontSize: 14 },
-  retryButton: { marginTop: 24, backgroundColor: '#e74c3c', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
-  retryText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
-  hud: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8 },
-  playerHud: { backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
-  playerName: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  playerLevel: { color: '#e74c3c', fontWeight: 'bold', marginLeft: 8 },
+  container: { flex: 1, backgroundColor: '#fff' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  loadingText: { color: '#5F6368', marginTop: 12, fontSize: 14 },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 24 },
+  errorTitle: { color: '#202124', fontSize: 18, fontWeight: '600', marginTop: 16 },
+  errorText: { color: '#5F6368', marginTop: 8, textAlign: 'center' },
+  retryButton: { marginTop: 20, backgroundColor: '#4285F4', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
+  retryText: { color: '#fff', fontWeight: '600' },
+  hud: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4 },
+  playerHud: { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  playerName: { color: '#202124', fontWeight: '600', fontSize: 14 },
+  playerLevel: { color: '#4285F4', fontWeight: '600', marginLeft: 6, fontSize: 14 },
   hudRight: { flexDirection: 'row', alignItems: 'center' },
-  gpsIndicator: { backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginRight: 8 },
-  gpsActive: { borderWidth: 1, borderColor: '#27ae60' },
-  gpsText: { color: '#888', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  gpsActiveText: { color: '#27ae60' },
-  refreshButton: { backgroundColor: 'rgba(0, 0, 0, 0.8)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  gpsIndicator: { backgroundColor: '#fff', padding: 8, borderRadius: 20, marginRight: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  gpsActive: { backgroundColor: '#E8F5E9' },
+  refreshButton: { backgroundColor: '#fff', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
   rotating: { opacity: 0.5 },
-  coordsDisplay: { position: 'absolute', top: 100, alignSelf: 'center', backgroundColor: 'rgba(0, 0, 0, 0.8)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
-  coordsText: { color: '#888', fontSize: 11, marginLeft: 6 },
-  headingText: { color: '#f39c12', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  updateText: { color: '#555', fontSize: 10, marginLeft: 8 },
-  entityList: { position: 'absolute', bottom: 100, left: 0, right: 0, paddingHorizontal: 12 },
-  entityCard: { backgroundColor: 'rgba(0, 0, 0, 0.9)', borderRadius: 12, padding: 12, marginHorizontal: 4, alignItems: 'center', minWidth: 100, borderWidth: 1 },
-  monsterCard: { borderColor: '#e74c3c' },
-  missionCard: { borderColor: '#f39c12' },
-  entityName: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 4, maxWidth: 80 },
-  entityLevel: { color: '#888', fontSize: 10, marginTop: 2 },
-  popup: { position: 'absolute', bottom: 180, left: 16, right: 16, backgroundColor: '#1a1a1a', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#333' },
-  popupClose: { position: 'absolute', top: 12, right: 12, zIndex: 1 },
-  popupContent: {},
-  popupHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  popupHeaderText: { marginLeft: 12 },
-  popupTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  popupSubtitle: { color: '#888', fontSize: 14 },
-  popupDescription: { color: '#aaa', fontSize: 14, lineHeight: 20, marginBottom: 12 },
-  rewardsRow: { flexDirection: 'row', marginBottom: 16 },
-  rewardItem: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
-  rewardText: { color: '#fff', marginLeft: 6, fontWeight: 'bold' },
-  actionButton: { backgroundColor: '#e74c3c', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 8 },
-  actionButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16, marginLeft: 8 },
+  entityList: { position: 'absolute', bottom: 90, left: 0, right: 0, paddingHorizontal: 8 },
+  entityCard: { backgroundColor: '#fff', borderRadius: 12, padding: 10, marginHorizontal: 4, alignItems: 'center', minWidth: 85, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  monsterCard: { borderLeftWidth: 3, borderLeftColor: '#EA4335' },
+  missionCard: { borderLeftWidth: 3, borderLeftColor: '#FBBC04' },
+  entityName: { color: '#202124', fontSize: 11, fontWeight: '600', marginTop: 4, maxWidth: 70 },
+  entityLevel: { color: '#5F6368', fontSize: 10, marginTop: 2 },
+  popup: { position: 'absolute', bottom: 170, left: 12, right: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
+  popupClose: { position: 'absolute', top: 10, right: 10, zIndex: 1 },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  popupHeaderText: { marginLeft: 10 },
+  popupTitle: { color: '#202124', fontSize: 16, fontWeight: '600' },
+  popupSubtitle: { color: '#5F6368', fontSize: 12 },
+  rewardsRow: { flexDirection: 'row', marginBottom: 12 },
+  rewardItem: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },
+  rewardText: { color: '#202124', marginLeft: 4, fontWeight: '600', fontSize: 13 },
+  actionButton: { backgroundColor: '#EA4335', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8 },
+  actionButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
