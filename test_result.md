@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: Test the GTA GPS RPG backend APIs
+user_problem_statement: GTA GPS RPG - Fix entity loading and map functionality
 
 backend:
   - task: "Root Endpoint API"

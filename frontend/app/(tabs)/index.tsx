@@ -52,7 +52,6 @@ export default function MapScreen() {
   } = useGameStore();
 
   const [loading, setLoading] = useState(true);
-  const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<{
     type: 'monster' | 'mission' | 'player';
     data: any;
@@ -100,14 +99,21 @@ export default function MapScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLocationError('Location permission required.');
+        // Use default location (New York) for demo when permission denied
+        const defaultPos = { latitude: 40.7580, longitude: -73.9855 };
+        setCurrentPosition(defaultPos);
+        if (playerId) {
+          updatePlayerPosition(playerId, defaultPos).catch(console.error);
+          getPlayer(playerId).then(setPlayer).catch(console.error);
+        }
         setLoading(false);
+        startLocationTracking();
         return;
       }
 
       // Get initial position quickly with balanced accuracy
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced, // Faster than BestForNavigation
+        accuracy: Location.Accuracy.Balanced,
       });
 
       const position = {
@@ -117,18 +123,19 @@ export default function MapScreen() {
 
       setCurrentPosition(position);
       
-      // Load player data in parallel
       if (playerId) {
+        // Update position on server and fetch player data
+        updatePlayerPosition(playerId, position).catch(console.error);
         getPlayer(playerId).then(setPlayer).catch(console.error);
       }
 
       setLoading(false);
-      
-      // Start tracking after initial load
       startLocationTracking();
       
     } catch (error: any) {
-      setLocationError('Failed to get location');
+      // Fallback to default location on error
+      const defaultPos = { latitude: 40.7580, longitude: -73.9855 };
+      setCurrentPosition(defaultPos);
       setLoading(false);
     }
   };
@@ -191,12 +198,19 @@ export default function MapScreen() {
     }
 
     try {
-      // Load all in parallel
-      const [monsters, missions, players] = await Promise.all([
+      // Ensure server knows our position before fetching entities
+      await updatePlayerPosition(playerId, currentPosition).catch(() => {});
+
+      // Use allSettled so one failure doesn't block others
+      const results = await Promise.allSettled([
         spawnMonsters(currentPosition.latitude, currentPosition.longitude, player.level),
         generateMissions(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyPlayers(playerId, 500),
       ]);
+
+      const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
+      const missions = results[1].status === 'fulfilled' ? results[1].value : [];
+      const players = results[2].status === 'fulfilled' ? results[2].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
@@ -287,19 +301,6 @@ export default function MapScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4285F4" />
         <Text style={styles.loadingText}>Finding your location...</Text>
-      </View>
-    );
-  }
-
-  if (locationError) {
-    return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="location-outline" size={64} color="#EA4335" />
-        <Text style={styles.errorTitle}>Location Required</Text>
-        <Text style={styles.errorText}>{locationError}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={initializeLocation}>
-          <Text style={styles.retryText}>Try Again</Text>
-        </TouchableOpacity>
       </View>
     );
   }

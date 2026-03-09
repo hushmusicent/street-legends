@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # API Configuration
-API_BASE_URL = "https://orna-quest-map.preview.emergentagent.com/api"
+API_BASE_URL = "https://location-battle-rpg.preview.emergentagent.com/api"
 
 class RPGAPITester:
     def __init__(self, base_url: str):
