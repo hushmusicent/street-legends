@@ -34,6 +34,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Track your location to discover monsters and missions nearby",
+          "locationWhenInUsePermission": "Track your location to discover monsters and missions nearby",
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

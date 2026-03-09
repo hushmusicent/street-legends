@@ -1,7 +1,14 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+
+// Conditionally import WebView - only available on native
+let WebView: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    WebView = require('react-native-webview').default;
+  } catch {}
+}
 
 interface Position {
   latitude: number;
@@ -23,39 +30,7 @@ interface GameMapProps {
   onMarkerPress?: (marker: MapMarker) => void;
 }
 
-// Generate the Leaflet map HTML
-const generateMapHTML = (center: Position, markers: MapMarker[], heading: number = 0) => {
-  const markerColors: Record<string, string> = {
-    monster: '#EA4335',
-    mission: '#FBBC04',
-    player: '#4285F4',
-  };
-
-  const markerIcons: Record<string, string> = {
-    monster: '💀',
-    mission: '📋',
-    player: '👤',
-  };
-
-  const markersJS = markers.map(m => `
-    L.marker([${m.coordinate.latitude}, ${m.coordinate.longitude}], {
-      icon: L.divIcon({
-        className: 'custom-marker',
-        html: '<div style="background:${markerColors[m.type]};width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;">${markerIcons[m.type]}${m.level ? `<span style="position:absolute;bottom:-8px;background:white;padding:0 4px;border-radius:4px;font-size:10px;font-weight:bold;">${m.level}</span>` : ''}</div>',
-        iconSize: [32, 32],
-        iconAnchor: [16, 16]
-      })
-    }).addTo(map).on('click', function() {
-      try {
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({type: 'marker', id: '${m.id}', markerType: '${m.type}'}));
-        } else if (window.parent) {
-          window.parent.postMessage(JSON.stringify({type: 'marker', id: '${m.id}', markerType: '${m.type}'}), '*');
-        }
-      } catch(e) {}
-    });
-  `).join('\n');
-
+const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
   return `
 <!DOCTYPE html>
 <html>
@@ -65,36 +40,26 @@ const generateMapHTML = (center: Position, markers: MapMarker[], heading: number
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #map { width: 100%; height: 100%; }
+    html, body, #map { width: 100%; height: 100%; overflow: hidden; }
     .custom-marker { background: transparent !important; border: none !important; }
-    .player-dot {
-      position: relative;
-      width: 22px; height: 22px;
-    }
+    .player-dot { position: relative; width: 22px; height: 22px; }
     .player-dot-inner {
       width: 22px; height: 22px; background: #4285F4; border-radius: 50%;
-      border: 3px solid white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       position: relative; z-index: 2;
     }
     .player-pulse {
       position: absolute; top: 50%; left: 50%;
-      width: 40px; height: 40px;
-      margin-left: -20px; margin-top: -20px;
-      background: rgba(66,133,244,0.2);
-      border-radius: 50%;
-      animation: pulse 2s ease-out infinite;
-      z-index: 1;
+      width: 40px; height: 40px; margin-left: -20px; margin-top: -20px;
+      background: rgba(66,133,244,0.2); border-radius: 50%;
+      animation: pulse 2s ease-out infinite; z-index: 1;
     }
     .player-heading {
-      position: absolute; top: -12px; left: 50%;
-      margin-left: -6px;
+      position: absolute; top: -12px; left: 50%; margin-left: -6px;
       width: 0; height: 0;
-      border-left: 6px solid transparent;
-      border-right: 6px solid transparent;
+      border-left: 6px solid transparent; border-right: 6px solid transparent;
       border-bottom: 14px solid #4285F4;
-      transform-origin: center bottom;
-      z-index: 3;
+      transform-origin: center bottom; z-index: 3;
       filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
     }
     @keyframes pulse {
@@ -109,7 +74,7 @@ const generateMapHTML = (center: Position, markers: MapMarker[], heading: number
   <div id="map"></div>
   <script>
     var map = L.map('map', {
-      center: [${center.latitude}, ${center.longitude}],
+      center: [${initialLat}, ${initialLng}],
       zoom: 17,
       zoomControl: true,
       attributionControl: false
@@ -119,187 +84,248 @@ const generateMapHTML = (center: Position, markers: MapMarker[], heading: number
       maxZoom: 19,
     }).addTo(map);
 
-    // Player marker with heading arrow
-    var currentHeading = ${heading};
+    // Player marker
+    var currentHeading = 0;
     var playerIcon = L.divIcon({
       className: 'custom-marker',
-      html: '<div class="player-dot"><div class="player-pulse"></div><div class="player-dot-inner"></div><div class="player-heading" id="heading-arrow" style="transform: rotate(' + currentHeading + 'deg)"></div></div>',
+      html: '<div class="player-dot"><div class="player-pulse"></div><div class="player-dot-inner"></div><div class="player-heading" id="heading-arrow"></div></div>',
       iconSize: [22, 22],
       iconAnchor: [11, 11]
     });
 
-    var playerMarker = L.marker([${center.latitude}, ${center.longitude}], {
+    var playerMarker = L.marker([${initialLat}, ${initialLng}], {
       icon: playerIcon,
       zIndexOffset: 1000
     }).addTo(map);
 
     var isFollowing = true;
-    var animFrame = null;
-    var currentLat = ${center.latitude};
-    var currentLng = ${center.longitude};
-    var targetLat = ${center.latitude};
-    var targetLng = ${center.longitude};
+    var currentLat = ${initialLat};
+    var currentLng = ${initialLng};
+    var targetLat = ${initialLat};
+    var targetLng = ${initialLng};
 
-    // Smooth animation using requestAnimationFrame
+    // Smooth animation loop
     function animatePosition() {
       var dx = targetLat - currentLat;
       var dy = targetLng - currentLng;
-      
       if (Math.abs(dx) > 0.0000001 || Math.abs(dy) > 0.0000001) {
-        // Lerp toward target (smooth interpolation)
-        currentLat += dx * 0.15;
-        currentLng += dy * 0.15;
+        currentLat += dx * 0.12;
+        currentLng += dy * 0.12;
         playerMarker.setLatLng([currentLat, currentLng]);
-        
         if (isFollowing) {
           map.setView([currentLat, currentLng], map.getZoom(), { animate: false });
         }
       }
-      
-      animFrame = requestAnimationFrame(animatePosition);
+      requestAnimationFrame(animatePosition);
     }
-    animFrame = requestAnimationFrame(animatePosition);
+    requestAnimationFrame(animatePosition);
 
-    // Called from React to update position
+    // Existing entity markers stored by ID
+    var entityMarkers = {};
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', player: '#4285F4' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{1F4CB}', player: '\\u{1F464}' };
+
+    function sendMessage(data) {
+      try {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(data));
+        } else if (window.parent !== window) {
+          window.parent.postMessage(JSON.stringify(data), '*');
+        }
+      } catch(e) {}
+    }
+
+    // API: Update player position
     window.updatePosition = function(lat, lng) {
       targetLat = lat;
       targetLng = lng;
     };
 
-    // Called to update heading
+    // API: Update heading
     window.updateHeading = function(deg) {
       currentHeading = deg;
       var arrow = document.getElementById('heading-arrow');
-      if (arrow) {
-        arrow.style.transform = 'rotate(' + deg + 'deg)';
-      }
+      if (arrow) arrow.style.transform = 'rotate(' + deg + 'deg)';
     };
 
-    // Center on player
+    // API: Center on player
     window.centerOnPlayer = function() {
       isFollowing = true;
       map.setView([currentLat, currentLng], 17, { animate: true });
     };
 
-    // Stop following when user drags map
-    map.on('dragstart', function() {
-      isFollowing = false;
-    });
+    // API: Update markers (add/remove/update)
+    window.updateMarkers = function(markersJSON) {
+      try {
+        var newMarkers = JSON.parse(markersJSON);
+        var newIds = {};
 
-    ${markersJS}
+        newMarkers.forEach(function(m) {
+          newIds[m.id] = true;
+          if (entityMarkers[m.id]) {
+            // Update existing marker position
+            entityMarkers[m.id].setLatLng([m.lat, m.lng]);
+          } else {
+            // Create new marker
+            var color = markerColors[m.type] || '#999';
+            var icon = markerIcons[m.type] || '?';
+            var levelHTML = m.level ? '<span style="position:absolute;bottom:-8px;background:white;padding:0 3px;border-radius:4px;font-size:9px;font-weight:bold;">' + m.level + '</span>' : '';
+            var divIcon = L.divIcon({
+              className: 'custom-marker',
+              html: '<div style="background:' + color + ';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;position:relative;">' + icon + levelHTML + '</div>',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            });
+            var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);
+            marker.on('click', (function(id, type) {
+              return function() { sendMessage({ type: 'marker', id: id, markerType: type }); };
+            })(m.id, m.type));
+            entityMarkers[m.id] = marker;
+          }
+        });
 
-    // Listen for messages from parent (for web iframe communication)
+        // Remove markers no longer present
+        Object.keys(entityMarkers).forEach(function(id) {
+          if (!newIds[id]) {
+            map.removeLayer(entityMarkers[id]);
+            delete entityMarkers[id];
+          }
+        });
+      } catch(e) {
+        console.error('updateMarkers error:', e);
+      }
+    };
+
+    // Stop follow on manual drag
+    map.on('dragstart', function() { isFollowing = false; });
+
+    // Listen for postMessage from parent (web iframe)
     window.addEventListener('message', function(event) {
       try {
         var data = JSON.parse(event.data);
-        if (data.type === 'updatePosition') {
-          window.updatePosition(data.lat, data.lng);
-        } else if (data.type === 'updateHeading') {
-          window.updateHeading(data.heading);
-        } else if (data.type === 'centerOnPlayer') {
-          window.centerOnPlayer();
-        }
+        if (data.type === 'updatePosition') window.updatePosition(data.lat, data.lng);
+        else if (data.type === 'updateHeading') window.updateHeading(data.heading);
+        else if (data.type === 'centerOnPlayer') window.centerOnPlayer();
+        else if (data.type === 'updateMarkers') window.updateMarkers(data.markers);
       } catch(e) {}
     });
 
-    // Handle zoom changes
-    map.on('zoomend', function() {
-      try {
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({type: 'zoom', level: map.getZoom()}));
-        }
-      } catch(e) {}
-    });
+    // Signal ready
+    sendMessage({ type: 'ready' });
   </script>
 </body>
 </html>
   `;
 };
 
-// Main Map Component
 export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, onMarkerPress }) => {
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<any>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(true);
+  const markersRef = useRef<MapMarker[]>([]);
+  const onMarkerPressRef = useRef(onMarkerPress);
+  onMarkerPressRef.current = onMarkerPress;
+  markersRef.current = markers;
 
-  // Update position on native (WebView)
+  // Generate HTML only ONCE with initial position - never regenerate
+  const initialCenter = useRef(center);
+  const mapHTML = useMemo(() => {
+    return generateBaseMapHTML(initialCenter.current.latitude, initialCenter.current.longitude);
+  }, []); // Empty deps = only once
+
+  // --- NATIVE: inject JS for position updates ---
   useEffect(() => {
-    if (Platform.OS !== 'web' && mapReady && webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        window.updatePosition(${center.latitude}, ${center.longitude});
-        true;
-      `);
-    }
+    if (Platform.OS === 'web' || !mapReady || !webViewRef.current) return;
+    webViewRef.current.injectJavaScript(
+      `window.updatePosition(${center.latitude}, ${center.longitude}); true;`
+    );
   }, [center.latitude, center.longitude, mapReady]);
 
-  // Update position on web (iframe postMessage)
+  // --- WEB: postMessage for position updates ---
   useEffect(() => {
-    if (Platform.OS === 'web' && iframeRef.current && iframeRef.current.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ type: 'updatePosition', lat: center.latitude, lng: center.longitude }),
-        '*'
-      );
-    }
+    if (Platform.OS !== 'web' || !iframeRef.current?.contentWindow) return;
+    iframeRef.current.contentWindow.postMessage(
+      JSON.stringify({ type: 'updatePosition', lat: center.latitude, lng: center.longitude }),
+      '*'
+    );
   }, [center.latitude, center.longitude]);
 
-  // Update heading
+  // --- Update heading ---
   useEffect(() => {
     if (Platform.OS !== 'web' && mapReady && webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        window.updateHeading(${heading});
-        true;
-      `);
-    } else if (Platform.OS === 'web' && iframeRef.current && iframeRef.current.contentWindow) {
+      webViewRef.current.injectJavaScript(`window.updateHeading(${heading}); true;`);
+    } else if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ type: 'updateHeading', heading }),
-        '*'
+        JSON.stringify({ type: 'updateHeading', heading }), '*'
       );
     }
   }, [heading, mapReady]);
 
-  // Listen for messages from iframe on web
+  // --- Update markers via JS injection (not HTML regen!) ---
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      const handleMessage = (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'marker' && onMarkerPress) {
-            const marker = markers.find(m => m.id === data.id);
-            if (marker) onMarkerPress(marker);
-          }
-        } catch {}
-      };
-      window.addEventListener('message', handleMessage);
-      return () => window.removeEventListener('message', handleMessage);
-    }
-  }, [markers, onMarkerPress]);
+    const markersPayload = JSON.stringify(
+      markers.map(m => ({
+        id: m.id,
+        lat: m.coordinate.latitude,
+        lng: m.coordinate.longitude,
+        type: m.type,
+        level: m.level || 0,
+        name: m.name || '',
+      }))
+    );
+    // Double-escape for injectJavaScript string
+    const escaped = markersPayload.replace(/'/g, "\\'");
 
-  const handleNativeMessage = useCallback((event: any) => {
+    if (Platform.OS !== 'web' && mapReady && webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.updateMarkers('${escaped}'); true;`);
+    } else if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ type: 'updateMarkers', markers: markersPayload }), '*'
+      );
+    }
+  }, [markers, mapReady]);
+
+  // --- Handle messages from map ---
+  const handleMapMessage = useCallback((msgData: string) => {
     try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'marker' && onMarkerPress) {
-        const marker = markers.find(m => m.id === data.id);
-        if (marker) onMarkerPress(marker);
+      const data = JSON.parse(msgData);
+      if (data.type === 'ready') {
+        setMapReady(true);
+      } else if (data.type === 'marker' && onMarkerPressRef.current) {
+        const marker = markersRef.current.find(m => m.id === data.id);
+        if (marker) onMarkerPressRef.current(marker);
       }
     } catch {}
-  }, [markers, onMarkerPress]);
+  }, []);
+
+  // Web: listen for iframe messages
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handler = (event: MessageEvent) => {
+      if (typeof event.data === 'string') handleMapMessage(event.data);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [handleMapMessage]);
+
+  const handleNativeMessage = useCallback((event: any) => {
+    handleMapMessage(event.nativeEvent.data);
+  }, [handleMapMessage]);
 
   const handleCenterPress = useCallback(() => {
-    setIsFollowing(true);
     if (Platform.OS !== 'web' && webViewRef.current) {
       webViewRef.current.injectJavaScript(`window.centerOnPlayer(); true;`);
-    } else if (Platform.OS === 'web' && iframeRef.current && iframeRef.current.contentWindow) {
+    } else if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ type: 'centerOnPlayer' }),
-        '*'
+        JSON.stringify({ type: 'centerOnPlayer' }), '*'
       );
     }
   }, []);
 
-  const mapHTML = generateMapHTML(center, markers, heading);
+  const monsterCount = markers.filter(m => m.type === 'monster').length;
+  const missionCount = markers.filter(m => m.type === 'mission').length;
 
-  // Web platform: iframe with ref for postMessage communication
+  // --- Web: iframe ---
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
@@ -308,8 +334,8 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
           srcDoc={mapHTML}
           style={{ flex: 1, border: 'none', width: '100%', height: '100%' } as any}
           title="Game Map"
+          onLoad={() => setMapReady(true)}
         />
-        {/* Center on Me button */}
         <TouchableOpacity style={styles.centerButton} onPress={handleCenterPress} activeOpacity={0.7}>
           <Ionicons name="locate" size={22} color="#4285F4" />
         </TouchableOpacity>
@@ -319,14 +345,22 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
             {center.latitude.toFixed(5)}, {center.longitude.toFixed(5)}
           </Text>
           <Text style={styles.countText}>
-            {markers.filter(m => m.type === 'monster').length} enemies • {markers.filter(m => m.type === 'mission').length} missions
+            {monsterCount} enemies • {missionCount} missions
           </Text>
         </View>
       </View>
     );
   }
 
-  // Native: WebView with injectJavaScript
+  // --- Native: WebView ---
+  if (!WebView) {
+    return (
+      <View style={[styles.container, styles.loading]}>
+        <Text style={styles.loadingText}>Map requires native device</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <WebView
@@ -334,11 +368,14 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
         source={{ html: mapHTML }}
         style={styles.map}
         onLoad={() => setMapReady(true)}
+        onLoadEnd={() => setMapReady(true)}
         onMessage={handleNativeMessage}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         startInLoadingState={true}
-        scalesPageToFit={true}
+        originWhitelist={['*']}
+        mixedContentMode="always"
+        allowsInlineMediaPlayback={true}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
         bounces={false}
@@ -349,7 +386,6 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
           </View>
         )}
       />
-      {/* Center on Me button */}
       <TouchableOpacity style={styles.centerButton} onPress={handleCenterPress} activeOpacity={0.7}>
         <Ionicons name="locate" size={22} color="#4285F4" />
       </TouchableOpacity>
@@ -359,7 +395,7 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
           {center.latitude.toFixed(5)}, {center.longitude.toFixed(5)}
         </Text>
         <Text style={styles.countText}>
-          {markers.filter(m => m.type === 'monster').length} enemies • {markers.filter(m => m.type === 'mission').length} missions
+          {monsterCount} enemies • {missionCount} missions
         </Text>
       </View>
     </View>
@@ -375,11 +411,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loading: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#E5E3DF',
