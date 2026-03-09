@@ -85,6 +85,7 @@ interface EquipmentItem {
 
 export default function CharacterScreen() {
   const { player, playerId, setPlayer, clearPlayer } = useGameStore();
+  const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   const [activeTab, setActiveTab] = useState<TabType>('status');
   const [refreshing, setRefreshing] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -123,6 +124,7 @@ export default function CharacterScreen() {
       if (results[3].status === 'fulfilled') setEquipped(results[3].value);
       if (results[4].status === 'fulfilled' && results[4].value.profile_pic) {
         setProfilePic(results[4].value.profile_pic);
+        setGlobalProfilePic(results[4].value.profile_pic);
       }
     } catch (error) {
       console.error('Failed to load character data:', error);
@@ -231,6 +233,7 @@ export default function CharacterScreen() {
         const imageData = `data:image/jpeg;base64,${manipulated.base64}`;
         await uploadProfilePic(playerId, imageData);
         setProfilePic(imageData);
+        setGlobalProfilePic(imageData);
         Alert.alert('Success', 'Profile picture updated!');
       } else {
         Alert.alert('Error', 'Could not process the image. Please try again.');

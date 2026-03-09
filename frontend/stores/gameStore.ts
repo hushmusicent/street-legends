@@ -23,6 +23,9 @@ interface GameState {
   // Guild
   playerGuild: Guild | null;
   
+  // Profile pic (shared between character & map)
+  profilePic: string | null;
+  
   // Actions
   setPlayer: (player: Player) => void;
   setPlayerId: (id: string) => void;
@@ -34,6 +37,7 @@ interface GameState {
   setCurrentBattle: (battle: Battle | null) => void;
   setCurrentMission: (mission: Mission | null) => void;
   setPlayerGuild: (guild: Guild | null) => void;
+  setProfilePic: (pic: string | null) => void;
   clearPlayer: () => void;
   
   // Persistence
@@ -53,6 +57,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentBattle: null,
   currentMission: null,
   playerGuild: null,
+  profilePic: null,
   
   // Actions
   setPlayer: (player) => set({ player }),
@@ -65,6 +70,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setCurrentBattle: (battle) => set({ currentBattle: battle }),
   setCurrentMission: (mission) => set({ currentMission: mission }),
   setPlayerGuild: (guild) => set({ playerGuild: guild }),
+  setProfilePic: (pic) => set({ profilePic: pic }),
   
   clearPlayer: () => set({
     player: null,
@@ -75,6 +81,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     currentBattle: null,
     currentMission: null,
     playerGuild: null,
+    profilePic: null,
   }),
   
   // Persistence

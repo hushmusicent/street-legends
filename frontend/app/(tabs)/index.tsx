@@ -62,7 +62,8 @@ export default function MapScreen() {
   const [isTracking, setIsTracking] = useState(false);
   const [heading, setHeading] = useState<number>(0);
   const [nearbyShops, setNearbyShops] = useState<any[]>([]);
-  const [playerAvatar, setPlayerAvatar] = useState<string | null>(null);
+  const globalProfilePic = useGameStore(s => s.profilePic);
+  const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const headingSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -80,10 +81,10 @@ export default function MapScreen() {
 
   // Fetch profile pic for map avatar when playerId is available
   useEffect(() => {
-    if (playerId) {
+    if (playerId && !globalProfilePic) {
       getProfilePic(playerId).then((res) => {
         if (res.profile_pic) {
-          setPlayerAvatar(res.profile_pic);
+          setGlobalProfilePic(res.profile_pic);
         }
       }).catch(() => {});
     }
@@ -340,7 +341,7 @@ export default function MapScreen() {
           center={currentPosition}
           markers={mapMarkers}
           heading={heading}
-          playerAvatar={playerAvatar}
+          playerAvatar={globalProfilePic}
           onMarkerPress={handleMarkerPress}
         />
       )}
