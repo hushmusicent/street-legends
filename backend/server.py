@@ -146,6 +146,133 @@ STARTER_ITEMS = {
 
 ALL_ITEMS = {**STARTER_ITEMS}
 
+# Additional gun shop items
+GUN_SHOP_ITEMS = {
+    # Pistols
+    "glock_9mm": {
+        "id": "glock_9mm", "name": "Glock 9mm", "description": "Standard-issue sidearm. Reliable and deadly.",
+        "equipment_type": "weapon", "rarity": "uncommon",
+        "stats_bonus": {"attack": 6, "speed": 1}, "level_requirement": 2, "value": 55
+    },
+    "desert_eagle": {
+        "id": "desert_eagle", "name": "Desert Eagle .50", "description": "Massive hand cannon. One shot, one kill.",
+        "equipment_type": "weapon", "rarity": "rare",
+        "stats_bonus": {"attack": 10, "speed": -2}, "level_requirement": 5, "value": 120
+    },
+    "gold_plated_pistol": {
+        "id": "gold_plated_pistol", "name": "Gold-Plated Pistol", "description": "A kingpin's weapon. Style meets firepower.",
+        "equipment_type": "weapon", "rarity": "epic",
+        "stats_bonus": {"attack": 12, "luck": 3}, "level_requirement": 8, "value": 200
+    },
+    # SMGs
+    "uzi": {
+        "id": "uzi", "name": "Micro Uzi", "description": "Compact and fast. Spray and pray.",
+        "equipment_type": "weapon", "rarity": "uncommon",
+        "stats_bonus": {"attack": 5, "speed": 3}, "level_requirement": 3, "value": 65
+    },
+    "mp5": {
+        "id": "mp5", "name": "MP5 Submachine Gun", "description": "Precision SMG used by tactical teams worldwide.",
+        "equipment_type": "weapon", "rarity": "rare",
+        "stats_bonus": {"attack": 8, "speed": 2}, "level_requirement": 6, "value": 110
+    },
+    # Shotguns
+    "sawed_off": {
+        "id": "sawed_off", "name": "Sawed-Off Shotgun", "description": "Close range devastation. Not subtle.",
+        "equipment_type": "weapon", "rarity": "uncommon",
+        "stats_bonus": {"attack": 7, "speed": -1}, "level_requirement": 4, "value": 70
+    },
+    "combat_shotgun": {
+        "id": "combat_shotgun", "name": "Combat Shotgun", "description": "Military-grade room clearer.",
+        "equipment_type": "weapon", "rarity": "rare",
+        "stats_bonus": {"attack": 11, "defense": 1}, "level_requirement": 7, "value": 140
+    },
+    # Rifles
+    "ak47": {
+        "id": "ak47", "name": "AK-47", "description": "The most iconic assault rifle. Never jams.",
+        "equipment_type": "weapon", "rarity": "rare",
+        "stats_bonus": {"attack": 12, "speed": -1}, "level_requirement": 8, "value": 160
+    },
+    "sniper_rifle": {
+        "id": "sniper_rifle", "name": "Sniper Rifle", "description": "Long range precision. One shot from downtown.",
+        "equipment_type": "weapon", "rarity": "epic",
+        "stats_bonus": {"attack": 15, "speed": -3, "luck": 2}, "level_requirement": 10, "value": 250
+    },
+    # Body Armor
+    "tactical_vest": {
+        "id": "tactical_vest", "name": "Tactical Vest", "description": "Military-grade protection with ammo pouches.",
+        "equipment_type": "armor", "rarity": "uncommon",
+        "stats_bonus": {"defense": 4, "attack": 1}, "level_requirement": 3, "value": 50
+    },
+    "riot_gear": {
+        "id": "riot_gear", "name": "Riot Gear", "description": "Full body protection. Slow but tough.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 8, "speed": -3}, "level_requirement": 6, "value": 100
+    },
+    "dragon_skin_armor": {
+        "id": "dragon_skin_armor", "name": "Dragon Skin Armor", "description": "Next-gen flexible armor. The best money can buy.",
+        "equipment_type": "armor", "rarity": "epic",
+        "stats_bonus": {"defense": 10, "speed": 1}, "level_requirement": 10, "value": 280
+    },
+    "steel_toe_boots": {
+        "id": "steel_toe_boots", "name": "Steel-Toe Boots", "description": "Kick harder, walk tougher.",
+        "equipment_type": "armor", "rarity": "common",
+        "stats_bonus": {"defense": 2, "attack": 1}, "level_requirement": 1, "value": 18
+    },
+    # Accessories
+    "night_vision_goggles": {
+        "id": "night_vision_goggles", "name": "Night Vision Goggles", "description": "See everything in the dark.",
+        "equipment_type": "accessory", "rarity": "rare",
+        "stats_bonus": {"luck": 4, "attack": 2}, "level_requirement": 5, "value": 90
+    },
+    "bulletproof_watch": {
+        "id": "bulletproof_watch", "name": "Bulletproof Watch", "description": "Fancy watch that can stop a bullet. Sometimes.",
+        "equipment_type": "accessory", "rarity": "uncommon",
+        "stats_bonus": {"defense": 2, "luck": 2}, "level_requirement": 2, "value": 35
+    },
+    "laser_sight": {
+        "id": "laser_sight", "name": "Laser Sight", "description": "Pin-point accuracy attachment.",
+        "equipment_type": "accessory", "rarity": "uncommon",
+        "stats_bonus": {"attack": 3, "luck": 1}, "level_requirement": 3, "value": 40
+    },
+    "skull_ring": {
+        "id": "skull_ring", "name": "Skull Ring", "description": "Intimidating ring. Enemies think twice.",
+        "equipment_type": "accessory", "rarity": "epic",
+        "stats_bonus": {"attack": 4, "luck": 4, "defense": 2}, "level_requirement": 8, "value": 180
+    },
+    # Vehicles
+    "stolen_motorcycle": {
+        "id": "stolen_motorcycle", "name": "Stolen Motorcycle", "description": "Hot ride. Fast getaway guaranteed.",
+        "equipment_type": "vehicle", "rarity": "uncommon",
+        "stats_bonus": {"speed": 6}, "level_requirement": 3, "value": 55
+    },
+    "armored_suv": {
+        "id": "armored_suv", "name": "Armored SUV", "description": "Bulletproof ride with all the extras.",
+        "equipment_type": "vehicle", "rarity": "rare",
+        "stats_bonus": {"speed": 4, "defense": 4}, "level_requirement": 6, "value": 130
+    },
+    "sports_car": {
+        "id": "sports_car", "name": "Stolen Lambo", "description": "0 to 60 in 2.9 seconds. Don't ask where it came from.",
+        "equipment_type": "vehicle", "rarity": "epic",
+        "stats_bonus": {"speed": 10, "luck": 2}, "level_requirement": 10, "value": 300
+    },
+}
+
+ALL_ITEMS.update(GUN_SHOP_ITEMS)
+
+# Shop name templates
+SHOP_NAMES = [
+    "Underground Arms", "Vinnie's Gun Shop", "The Arsenal", "Black Market Armory",
+    "Shadow Dealer", "Bullet Brothers", "Iron Fist Supplies", "Street Surplus",
+    "Midnight Arms", "The Pawn & Gun", "Tactical Outfitters", "Back Alley Deals",
+    "Don's Weapons Cache", "Neon Arms", "Eastside Arms Dealer", "The Gun Runner",
+]
+
+SHOP_TYPES = {
+    "gun_shop": {"name_suffix": "", "focus": ["weapon"], "icon": "pistol"},
+    "armor_shop": {"name_suffix": "", "focus": ["armor", "accessory"], "icon": "shield"},
+    "general_shop": {"name_suffix": "", "focus": ["weapon", "armor", "accessory", "vehicle"], "icon": "storefront"},
+}
+
 MONSTER_TEMPLATES = [
     {"name": "Street Thug", "type": "humanoid", "base_level": 1, "threat": "low"},
     {"name": "Gang Member", "type": "humanoid", "base_level": 3, "threat": "low"},
@@ -1030,6 +1157,82 @@ async def list_guilds(limit: int = 20):
     """List top guilds"""
     guilds = await db.guilds.find().sort("level", -1).limit(limit).to_list(limit)
     return [serialize_doc(g) for g in guilds]
+
+# ============== SHOP ENDPOINTS ==============
+
+@api_router.get("/shops/spawn")
+async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn random shops near a location"""
+    shops = []
+    num_shops = random.randint(3, 6)
+    
+    for i in range(num_shops):
+        # Random offset within ~500m
+        lat_offset = random.uniform(-0.004, 0.004)
+        lng_offset = random.uniform(-0.004, 0.004)
+        
+        shop_type = random.choice(list(SHOP_TYPES.keys()))
+        shop_config = SHOP_TYPES[shop_type]
+        shop_name = random.choice(SHOP_NAMES)
+        
+        # Pick random items focused on the shop type
+        focus_items = [item for item in ALL_ITEMS.values() if item["equipment_type"] in shop_config["focus"]]
+        other_items = [item for item in ALL_ITEMS.values() if item["equipment_type"] not in shop_config["focus"]]
+        
+        # Main stock: 4-8 items from focus + 1-2 random others
+        stock_count = random.randint(4, 8)
+        stock = random.sample(focus_items, min(stock_count, len(focus_items)))
+        extra_count = random.randint(1, 2)
+        if other_items:
+            stock += random.sample(other_items, min(extra_count, len(other_items)))
+        random.shuffle(stock)
+        
+        # Price multiplier (0.8x to 1.5x) - some shops have deals, some overcharge
+        price_mult = round(random.uniform(0.8, 1.5), 2)
+        
+        # Apply price multiplier to stock
+        priced_stock = []
+        for item in stock:
+            priced_item = {**item}
+            priced_item["shop_price"] = max(5, int(item["value"] * price_mult))
+            priced_stock.append(priced_item)
+        
+        shop = {
+            "id": str(uuid.uuid4()),
+            "name": shop_name,
+            "shop_type": shop_type,
+            "latitude": latitude + lat_offset,
+            "longitude": longitude + lng_offset,
+            "price_multiplier": price_mult,
+            "stock": priced_stock,
+            "level": max(1, player_level + random.randint(-2, 3)),
+        }
+        shops.append(shop)
+    
+    return shops
+
+@api_router.post("/shops/buy")
+async def buy_from_shop(player_id: str, item_id: str, shop_price: int):
+    """Buy an item from a specific shop"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    item = ALL_ITEMS.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    if player.get("cash", 0) < shop_price:
+        raise HTTPException(status_code=400, detail="Not enough cash")
+    
+    if player.get("level", 1) < item["level_requirement"]:
+        raise HTTPException(status_code=400, detail=f"Requires level {item['level_requirement']}")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$inc": {"cash": -shop_price}, "$push": {"inventory": item_id}}
+    )
+    return {"message": f"Purchased {item['name']}!", "item": item}
 
 # ============== EQUIPMENT ENDPOINTS ==============
 

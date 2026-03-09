@@ -142,6 +142,17 @@ export const getAllItems = async (): Promise<Record<string, any>> => {
   return response.data;
 };
 
+// Shop APIs
+export const spawnShops = async (latitude: number, longitude: number, playerLevel: number): Promise<any[]> => {
+  const response = await api.get(`/shops/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const buyFromShop = async (playerId: string, itemId: string, shopPrice: number): Promise<any> => {
+  const response = await api.post(`/shops/buy?player_id=${playerId}&item_id=${itemId}&shop_price=${shopPrice}`);
+  return response.data;
+};
+
 // Auth APIs
 export const registerAccount = async (
   username: string,

@@ -122,8 +122,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', player: '#4285F4' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{1F4CB}', player: '\\u{1F464}' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', player: '#4285F4', shop: '#FF6F00' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{1F4CB}', player: '\\u{1F464}', shop: '\\u{1F3EA}' };
 
     function sendMessage(data) {
       try {

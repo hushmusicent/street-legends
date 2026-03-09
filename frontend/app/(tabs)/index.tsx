@@ -20,6 +20,7 @@ import {
   generateMissions,
   getNearbyPlayers,
   startBattle,
+  spawnShops,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -53,12 +54,13 @@ export default function MapScreen() {
 
   const [loading, setLoading] = useState(true);
   const [selectedMarker, setSelectedMarker] = useState<{
-    type: 'monster' | 'mission' | 'player';
+    type: 'monster' | 'mission' | 'player' | 'shop';
     data: any;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [heading, setHeading] = useState<number>(0);
+  const [nearbyShops, setNearbyShops] = useState<any[]>([]);
   
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const headingSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -206,17 +208,20 @@ export default function MapScreen() {
         spawnMonsters(currentPosition.latitude, currentPosition.longitude, player.level),
         generateMissions(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyPlayers(playerId, 500),
+        spawnShops(currentPosition.latitude, currentPosition.longitude, player.level),
       ]);
 
       const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
       const missions = results[1].status === 'fulfilled' ? results[1].value : [];
       const players = results[2].status === 'fulfilled' ? results[2].value : [];
+      const shops = results[3].status === 'fulfilled' ? results[3].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
       setNearbyPlayers(players);
+      setNearbyShops(shops);
       
-      entitiesCache.current = { time: now, data: { monsters, missions, players } };
+      entitiesCache.current = { time: now, data: { monsters, missions, players, shops } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
@@ -281,7 +286,14 @@ export default function MapScreen() {
       level: p.level,
       name: p.name,
     })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers]);
+    ...nearbyShops.map((s) => ({
+      id: s.id,
+      coordinate: { latitude: s.latitude, longitude: s.longitude },
+      type: 'shop' as const,
+      name: s.name,
+      level: s.level,
+    })),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -293,8 +305,11 @@ export default function MapScreen() {
     } else if (marker.type === 'player') {
       const targetPlayer = nearbyPlayers.find((p) => p.id === marker.id);
       if (targetPlayer) setSelectedMarker({ type: 'player', data: targetPlayer });
+    } else if (marker.type === 'shop') {
+      const shop = nearbyShops.find((s) => s.id === marker.id);
+      if (shop) setSelectedMarker({ type: 'shop', data: shop });
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops]);
 
   if (loading) {
     return (
@@ -357,6 +372,17 @@ export default function MapScreen() {
             >
               <Ionicons name="briefcase" size={18} color="#FBBC04" />
               <Text style={styles.entityName} numberOfLines={1}>{mission.title}</Text>
+            </TouchableOpacity>
+          ))}
+          {nearbyShops.slice(0, 3).map((shop) => (
+            <TouchableOpacity
+              key={shop.id}
+              style={[styles.entityCard, { borderLeftColor: '#FF6F00' }]}
+              onPress={() => setSelectedMarker({ type: 'shop', data: shop })}
+            >
+              <Ionicons name="storefront" size={18} color="#FF6F00" />
+              <Text style={styles.entityName} numberOfLines={1}>{shop.name}</Text>
+              <Text style={styles.entityLevel}>{shop.stock?.length || 0} items</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -430,6 +456,39 @@ export default function MapScreen() {
               </View>
               <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#4285F4'}]} onPress={() => handlePvPChallenge(selectedMarker.data)}>
                 <Text style={styles.actionButtonText}>CHALLENGE</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {selectedMarker.type === 'shop' && (
+            <View>
+              <View style={styles.popupHeader}>
+                <Ionicons name="storefront" size={28} color="#FF6F00" />
+                <View style={styles.popupHeaderText}>
+                  <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
+                  <Text style={styles.popupSubtitle}>
+                    {selectedMarker.data.stock?.length || 0} items • {selectedMarker.data.price_multiplier < 1 ? 'SALE!' : selectedMarker.data.price_multiplier > 1.2 ? 'Expensive' : 'Fair prices'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.rewardsRow}>
+                <View style={styles.rewardItem}>
+                  <Ionicons name="pricetag" size={14} color="#FF6F00" />
+                  <Text style={styles.rewardText}>{selectedMarker.data.price_multiplier < 1 ? `${Math.round((1 - selectedMarker.data.price_multiplier) * 100)}% OFF` : `${Math.round(selectedMarker.data.price_multiplier * 100)}% prices`}</Text>
+                </View>
+                <View style={styles.rewardItem}>
+                  <Ionicons name="cash" size={14} color="#34A853" />
+                  <Text style={styles.rewardText}>Your cash: ${player?.cash || 0}</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={[styles.actionButton, {backgroundColor: '#FF6F00'}]} 
+                onPress={() => {
+                  setSelectedMarker(null);
+                  router.push({ pathname: '/shop-detail', params: { shopData: JSON.stringify(selectedMarker.data) } });
+                }}
+              >
+                <Text style={styles.actionButtonText}>BROWSE SHOP</Text>
               </TouchableOpacity>
             </View>
           )}
