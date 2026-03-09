@@ -731,6 +731,26 @@ async def battle_action(battle_id: str, action: BattleAction):
                 "xp": enemy["loot_xp"],
                 "items": enemy.get("loot_items", [])
             }
+            
+            # Random item drop based on luck
+            drop_chance = 0.3 + (player_stats.get("luck", 0) * 0.02)  # 30% base + 2% per luck
+            dropped_item = None
+            if random.random() < drop_chance:
+                # Pick a random item based on enemy level
+                available_items = [
+                    item for item in ALL_ITEMS.values()
+                    if item["level_requirement"] <= enemy["level"] + 2
+                ]
+                if available_items:
+                    dropped_item = random.choice(available_items)
+                    rewards["items"] = [dropped_item["id"]]
+                    rewards["dropped_item"] = dropped_item
+                    await db.players.update_one(
+                        {"id": player["id"]},
+                        {"$push": {"inventory": dropped_item["id"]}}
+                    )
+                    combat_log.append(f"Loot drop: {dropped_item['name']}!")
+            
             # Update player stats
             new_xp = player["xp"] + rewards["xp"]
             new_cash = player["cash"] + rewards["cash"]
@@ -1076,6 +1096,29 @@ async def unequip_item(player_id: str, slot: str):
         {"$set": {f"equipment.{slot}": None}, "$push": {"inventory": current_item}}
     )
     return {"message": f"Unequipped item from {slot}"}
+
+@api_router.post("/players/{player_id}/buy-item")
+async def buy_item(player_id: str, item_id: str):
+    """Buy an item from the shop"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    item = ALL_ITEMS.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    if player.get("cash", 0) < item["value"]:
+        raise HTTPException(status_code=400, detail="Not enough cash")
+    
+    if player.get("level", 1) < item["level_requirement"]:
+        raise HTTPException(status_code=400, detail=f"Requires level {item['level_requirement']}")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$inc": {"cash": -item["value"]}, "$push": {"inventory": item_id}}
+    )
+    return {"message": f"Purchased {item['name']}!", "item": item}
 
 @api_router.get("/equipment/{equipment_id}")
 async def get_equipment(equipment_id: str):

@@ -322,6 +322,10 @@ export default function MapScreen() {
           <Text style={styles.playerLevel}>Lv.{player?.level}</Text>
         </View>
         <View style={styles.hudRight}>
+          <TouchableOpacity style={styles.shopButton} onPress={() => router.push('/shop')}>
+            <Ionicons name="storefront" size={16} color="#f39c12" />
+            <Text style={styles.shopCash}>${player?.cash || 0}</Text>
+          </TouchableOpacity>
           <View style={[styles.gpsIndicator, isTracking && styles.gpsActive]}>
             <Ionicons name="navigate" size={14} color={isTracking ? '#34A853' : '#888'} />
           </View>
@@ -448,7 +452,9 @@ const styles = StyleSheet.create({
   playerHud: { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
   playerName: { color: '#202124', fontWeight: '600', fontSize: 14 },
   playerLevel: { color: '#4285F4', fontWeight: '600', marginLeft: 6, fontSize: 14 },
-  hudRight: { flexDirection: 'row', alignItems: 'center' },
+  hudRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shopButton: { backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  shopCash: { color: '#f39c12', fontSize: 12, fontWeight: '700' },
   gpsIndicator: { backgroundColor: '#fff', padding: 8, borderRadius: 20, marginRight: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
   gpsActive: { backgroundColor: '#E8F5E9' },
   refreshButton: { backgroundColor: '#fff', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
