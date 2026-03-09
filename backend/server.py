@@ -87,6 +87,62 @@ CHARACTER_CLASSES = {
 EQUIPMENT_TYPES = ["weapon", "armor", "accessory", "vehicle"]
 RARITIES = ["common", "uncommon", "rare", "epic", "legendary"]
 
+# Starter equipment items
+STARTER_ITEMS = {
+    "rusty_pipe": {
+        "id": "rusty_pipe", "name": "Rusty Pipe", "description": "A bent pipe found in an alley. Better than nothing.",
+        "equipment_type": "weapon", "rarity": "common",
+        "stats_bonus": {"attack": 2}, "level_requirement": 1, "value": 10
+    },
+    "worn_jacket": {
+        "id": "worn_jacket", "name": "Worn Leather Jacket", "description": "A beat-up jacket that's seen better days.",
+        "equipment_type": "armor", "rarity": "common",
+        "stats_bonus": {"defense": 2, "speed": 1}, "level_requirement": 1, "value": 15
+    },
+    "brass_knuckles": {
+        "id": "brass_knuckles", "name": "Brass Knuckles", "description": "Classic street weapon. Hits hard.",
+        "equipment_type": "weapon", "rarity": "uncommon",
+        "stats_bonus": {"attack": 4, "speed": -1}, "level_requirement": 2, "value": 30
+    },
+    "chain_necklace": {
+        "id": "chain_necklace", "name": "Gold Chain", "description": "A flashy chain that boosts your street cred.",
+        "equipment_type": "accessory", "rarity": "uncommon",
+        "stats_bonus": {"luck": 3, "defense": 1}, "level_requirement": 1, "value": 25
+    },
+    "kevlar_vest": {
+        "id": "kevlar_vest", "name": "Kevlar Vest", "description": "Light body armor. Could save your life.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 6, "speed": -2}, "level_requirement": 5, "value": 80
+    },
+    "switchblade": {
+        "id": "switchblade", "name": "Switchblade", "description": "Quick and deadly. A street classic.",
+        "equipment_type": "weapon", "rarity": "uncommon",
+        "stats_bonus": {"attack": 3, "speed": 2}, "level_requirement": 3, "value": 40
+    },
+    "lucky_dice": {
+        "id": "lucky_dice", "name": "Lucky Dice", "description": "Loaded dice that bring good fortune.",
+        "equipment_type": "accessory", "rarity": "rare",
+        "stats_bonus": {"luck": 5}, "level_requirement": 3, "value": 50
+    },
+    "beat_up_bike": {
+        "id": "beat_up_bike", "name": "Beat-up Bike", "description": "A rusty bike that still gets you places faster.",
+        "equipment_type": "vehicle", "rarity": "common",
+        "stats_bonus": {"speed": 4}, "level_requirement": 1, "value": 20
+    },
+    "baseball_bat": {
+        "id": "baseball_bat", "name": "Baseball Bat", "description": "Louisville Slugger. Classic enforcer tool.",
+        "equipment_type": "weapon", "rarity": "uncommon",
+        "stats_bonus": {"attack": 5}, "level_requirement": 4, "value": 45
+    },
+    "hoodie_of_shadows": {
+        "id": "hoodie_of_shadows", "name": "Shadow Hoodie", "description": "Dark hoodie that helps you blend into the night.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 3, "speed": 3, "luck": 2}, "level_requirement": 5, "value": 75
+    },
+}
+
+ALL_ITEMS = {**STARTER_ITEMS}
+
 MONSTER_TEMPLATES = [
     {"name": "Street Thug", "type": "humanoid", "base_level": 1, "threat": "low"},
     {"name": "Gang Member", "type": "humanoid", "base_level": 3, "threat": "low"},
@@ -337,7 +393,9 @@ async def create_player(player_data: PlayerCreate):
             defense=base_stats["defense"],
             speed=base_stats["speed"],
             luck=base_stats["luck"]
-        )
+        ),
+        inventory=["rusty_pipe", "worn_jacket", "chain_necklace", "beat_up_bike"],
+        equipment={"weapon": None, "armor": None, "accessory": None, "vehicle": None}
     )
     
     await db.players.insert_one(player.dict())
@@ -876,6 +934,71 @@ async def list_guilds(limit: int = 20):
     return [serialize_doc(g) for g in guilds]
 
 # ============== EQUIPMENT ENDPOINTS ==============
+
+@api_router.get("/items")
+async def get_all_items():
+    """Get all available items in the game"""
+    return ALL_ITEMS
+
+@api_router.get("/items/{item_id}")
+async def get_item(item_id: str):
+    """Get item details by ID"""
+    item = ALL_ITEMS.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+@api_router.get("/players/{player_id}/inventory-details")
+async def get_player_inventory_details(player_id: str):
+    """Get player's inventory with full item details"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    inventory_items = []
+    for item_id in player.get("inventory", []):
+        item = ALL_ITEMS.get(item_id)
+        if item:
+            inventory_items.append(item)
+    return inventory_items
+
+@api_router.get("/players/{player_id}/equipment-details")
+async def get_player_equipment_details(player_id: str):
+    """Get player's equipped items with full details"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    equipment = player.get("equipment", {})
+    equipped = {}
+    for slot, item_id in equipment.items():
+        if item_id:
+            item = ALL_ITEMS.get(item_id)
+            equipped[slot] = item if item else {"id": item_id, "name": "Unknown", "equipment_type": slot, "rarity": "common", "stats_bonus": {}, "description": "Unknown item"}
+        else:
+            equipped[slot] = None
+    return equipped
+
+@api_router.post("/players/{player_id}/unequip")
+async def unequip_item(player_id: str, slot: str):
+    """Unequip an item from a slot"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if slot not in EQUIPMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid equipment slot")
+    
+    current_item = player.get("equipment", {}).get(slot)
+    if not current_item:
+        raise HTTPException(status_code=400, detail="Nothing equipped in that slot")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {f"equipment.{slot}": None}, "$push": {"inventory": current_item}}
+    )
+    return {"message": f"Unequipped item from {slot}"}
+
 @api_router.get("/equipment/{equipment_id}")
 async def get_equipment(equipment_id: str):
     """Get equipment details"""
@@ -891,7 +1014,7 @@ async def equip_item(player_id: str, equipment_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    equipment = await db.equipment.find_one({"id": equipment_id})
+    equipment = ALL_ITEMS.get(equipment_id)
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
     

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,26 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useGameStore } from '../../stores/gameStore';
-import { getPlayer, getPlayerSkills } from '../../services/api';
+import {
+  getPlayer,
+  getPlayerSkills,
+  getPlayerInventoryDetails,
+  getPlayerEquipmentDetails,
+  equipItem,
+  unequipItem,
+} from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
 import { Skill } from '../../types/game';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+type TabType = 'status' | 'equipment' | 'items' | 'skills';
 
 const CLASS_COLORS: Record<string, string> = {
   street_soldier: '#e74c3c',
@@ -32,60 +42,125 @@ const CLASS_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   ghost: 'eye-off',
 };
 
+const RARITY_COLORS: Record<string, string> = {
+  common: '#9e9e9e',
+  uncommon: '#4caf50',
+  rare: '#2196f3',
+  epic: '#9c27b0',
+  legendary: '#ff9800',
+};
+
+const SLOT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  weapon: 'flash',
+  armor: 'shield',
+  accessory: 'diamond',
+  vehicle: 'car-sport',
+};
+
+const SLOT_LABELS: Record<string, string> = {
+  weapon: 'Weapon',
+  armor: 'Armor',
+  accessory: 'Accessory',
+  vehicle: 'Vehicle',
+};
+
+interface EquipmentItem {
+  id: string;
+  name: string;
+  description: string;
+  equipment_type: string;
+  rarity: string;
+  stats_bonus: Record<string, number>;
+  level_requirement: number;
+  value: number;
+}
+
 export default function CharacterScreen() {
   const { player, playerId, setPlayer, clearPlayer } = useGameStore();
+  const [activeTab, setActiveTab] = useState<TabType>('status');
   const [refreshing, setRefreshing] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [inventory, setInventory] = useState<EquipmentItem[]>([]);
+  const [equipped, setEquipped] = useState<Record<string, EquipmentItem | null>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (playerId) {
-      loadPlayerData();
-    }
+    if (playerId) loadAllData();
   }, [playerId]);
 
-  const loadPlayerData = async () => {
+  // Refresh data when switching tabs
+  useEffect(() => {
+    if (playerId && (activeTab === 'equipment' || activeTab === 'items')) {
+      loadAllData();
+    }
+  }, [activeTab]);
+
+  const loadAllData = async () => {
     if (!playerId) return;
+    setLoading(true);
     try {
-      const [playerData, skillsData] = await Promise.all([
+      const results = await Promise.allSettled([
         getPlayer(playerId),
         getPlayerSkills(playerId),
+        getPlayerInventoryDetails(playerId),
+        getPlayerEquipmentDetails(playerId),
       ]);
-      setPlayer(playerData);
-      setSkills(skillsData);
+      if (results[0].status === 'fulfilled') setPlayer(results[0].value);
+      if (results[1].status === 'fulfilled') setSkills(results[1].value);
+      if (results[2].status === 'fulfilled') setInventory(results[2].value);
+      if (results[3].status === 'fulfilled') setEquipped(results[3].value);
     } catch (error) {
-      console.error('Failed to load player data:', error);
+      console.error('Failed to load character data:', error);
     }
+    setLoading(false);
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadPlayerData();
+    await loadAllData();
     setRefreshing(false);
   };
 
+  const handleEquip = async (item: EquipmentItem) => {
+    if (!playerId) return;
+    try {
+      await equipItem(playerId, item.id);
+      await loadAllData();
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to equip item');
+    }
+  };
+
+  const handleUnequip = async (slot: string) => {
+    if (!playerId) return;
+    try {
+      await unequipItem(playerId, slot);
+      await loadAllData();
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to unequip item');
+    }
+  };
+
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem('playerId');
-            clearPlayer();
-            router.replace('/');
-          },
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.removeItem('playerId');
+          clearPlayer();
+          router.replace('/');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   if (!player) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
+        <ActivityIndicator size="large" color="#e74c3c" />
+        <Text style={styles.loadingText}>Loading character...</Text>
       </View>
     );
   }
@@ -93,304 +168,625 @@ export default function CharacterScreen() {
   const classColor = CLASS_COLORS[player.character_class] || '#e74c3c';
   const xpProgress = (player.xp / player.xp_to_next) * 100;
 
+  // Tab buttons
+  const tabs: { key: TabType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { key: 'status', label: 'Status', icon: 'person' },
+    { key: 'equipment', label: 'Equip', icon: 'shield-checkmark' },
+    { key: 'items', label: 'Items', icon: 'bag' },
+    { key: 'skills', label: 'Skills', icon: 'flash' },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#e74c3c" />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={[styles.avatarContainer, { borderColor: classColor }]}>
-            <Ionicons name={CLASS_ICONS[player.character_class]} size={48} color={classColor} />
-          </View>
+      {/* Character Header - always visible */}
+      <View style={styles.header}>
+        <View style={[styles.avatarContainer, { borderColor: classColor }]}>
+          <Ionicons name={CLASS_ICONS[player.character_class]} size={32} color={classColor} />
+        </View>
+        <View style={styles.headerInfo}>
           <Text style={styles.playerName}>{player.name}</Text>
           <Text style={[styles.playerClass, { color: classColor }]}>
             {player.character_class.replace('_', ' ').toUpperCase()}
           </Text>
-        </View>
-
-        {/* Level & XP */}
-        <View style={styles.levelSection}>
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelLabel}>LEVEL</Text>
-            <Text style={styles.levelValue}>{player.level}</Text>
-          </View>
-          <View style={styles.xpContainer}>
-            <View style={styles.xpBar}>
-              <View style={[styles.xpFill, { width: `${xpProgress}%` }]} />
+          <View style={styles.levelRow}>
+            <View style={[styles.levelBadge, { backgroundColor: classColor }]}>
+              <Text style={styles.levelText}>Lv.{player.level}</Text>
             </View>
-            <Text style={styles.xpText}>
-              {player.xp} / {player.xp_to_next} XP
-            </Text>
+            <View style={styles.xpBarSmall}>
+              <View style={[styles.xpFillSmall, { width: `${Math.min(xpProgress, 100)}%`, backgroundColor: classColor }]} />
+            </View>
+            <Text style={styles.xpTextSmall}>{player.xp}/{player.xp_to_next}</Text>
           </View>
         </View>
-
-        {/* Health & Energy */}
-        <View style={styles.section}>
-          <HealthBar
-            current={player.stats.health}
-            max={player.stats.max_health}
-            label="HEALTH"
-            color="#e74c3c"
-          />
-          <View style={{ height: 12 }} />
-          <HealthBar
-            current={player.stats.energy}
-            max={player.stats.max_energy}
-            label="ENERGY"
-            color="#3498db"
-          />
-        </View>
-
-        {/* Stats */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>STATS</Text>
-          <View style={styles.statsGrid}>
-            <StatBar icon="flash" label="Attack" value={player.stats.attack} color="#e74c3c" />
-            <StatBar icon="shield" label="Defense" value={player.stats.defense} color="#3498db" />
-            <StatBar icon="speedometer" label="Speed" value={player.stats.speed} color="#2ecc71" />
-            <StatBar icon="dice" label="Luck" value={player.stats.luck} color="#f39c12" />
-          </View>
-        </View>
-
-        {/* Currency & Stats */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>RESOURCES</Text>
-          <View style={styles.resourcesRow}>
-            <View style={styles.resourceItem}>
-              <Ionicons name="cash" size={24} color="#f39c12" />
-              <Text style={styles.resourceValue}>${player.cash}</Text>
-              <Text style={styles.resourceLabel}>Cash</Text>
-            </View>
-            <View style={styles.resourceItem}>
-              <Ionicons name="star" size={24} color="#9b59b6" />
-              <Text style={styles.resourceValue}>{player.reputation}</Text>
-              <Text style={styles.resourceLabel}>Rep</Text>
-            </View>
-            <View style={styles.resourceItem}>
-              <Ionicons name="trophy" size={24} color="#27ae60" />
-              <Text style={styles.resourceValue}>{player.wins}</Text>
-              <Text style={styles.resourceLabel}>Wins</Text>
-            </View>
-            <View style={styles.resourceItem}>
-              <Ionicons name="briefcase" size={24} color="#3498db" />
-              <Text style={styles.resourceValue}>{player.missions_completed}</Text>
-              <Text style={styles.resourceLabel}>Missions</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Skills */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>SKILLS</Text>
-          <View style={styles.skillsGrid}>
-            {skills.map((skill) => (
-              <View
-                key={skill.id}
-                style={[
-                  styles.skillCard,
-                  !skill.unlocked && styles.skillLocked,
-                ]}
-              >
-                <Ionicons
-                  name="flash"
-                  size={20}
-                  color={skill.unlocked ? '#e74c3c' : '#555'}
-                />
-                <Text style={[styles.skillName, !skill.unlocked && styles.lockedText]}>
-                  {skill.name}
-                </Text>
-                <Text style={styles.skillCost}>{skill.cost} Energy</Text>
-                {!skill.unlocked && (
-                  <Text style={styles.skillUnlock}>Lv.{skill.unlock_level}</Text>
-                )}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out" size={20} color="#e74c3c" />
-          <Text style={styles.logoutText}>Logout</Text>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+          <Ionicons name="log-out-outline" size={22} color="#666" />
         </TouchableOpacity>
+      </View>
+
+      {/* Tab Bar */}
+      <View style={styles.tabBar}>
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[styles.tab, activeTab === tab.key && { borderBottomColor: classColor, borderBottomWidth: 2 }]}
+            onPress={() => setActiveTab(tab.key)}
+          >
+            <Ionicons
+              name={tab.icon}
+              size={18}
+              color={activeTab === tab.key ? classColor : '#666'}
+            />
+            <Text style={[styles.tabLabel, activeTab === tab.key && { color: classColor }]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={classColor} />
+        }
+      >
+        {activeTab === 'status' && (
+          <StatusTab player={player} classColor={classColor} />
+        )}
+        {activeTab === 'equipment' && (
+          <EquipmentTab
+            equipped={equipped}
+            classColor={classColor}
+            onUnequip={handleUnequip}
+            playerLevel={player.level}
+          />
+        )}
+        {activeTab === 'items' && (
+          <ItemsTab
+            inventory={inventory}
+            classColor={classColor}
+            onEquip={handleEquip}
+            playerLevel={player.level}
+          />
+        )}
+        {activeTab === 'skills' && (
+          <SkillsTab skills={skills} classColor={classColor} playerLevel={player.level} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// ========== STATUS TAB ==========
+function StatusTab({ player, classColor }: { player: any; classColor: string }) {
+  return (
+    <View>
+      {/* Health & Energy */}
+      <View style={styles.section}>
+        <HealthBar current={player.stats.health} max={player.stats.max_health} label="HEALTH" color="#e74c3c" />
+        <View style={{ height: 12 }} />
+        <HealthBar current={player.stats.energy} max={player.stats.max_energy} label="ENERGY" color="#3498db" />
+      </View>
+
+      {/* Stats */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>COMBAT STATS</Text>
+        <View style={styles.statsGrid}>
+          <StatBar icon="flash" label="Attack" value={player.stats.attack} color="#e74c3c" />
+          <StatBar icon="shield" label="Defense" value={player.stats.defense} color="#3498db" />
+          <StatBar icon="speedometer" label="Speed" value={player.stats.speed} color="#2ecc71" />
+          <StatBar icon="dice" label="Luck" value={player.stats.luck} color="#f39c12" />
+        </View>
+      </View>
+
+      {/* Resources */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>RESOURCES</Text>
+        <View style={styles.resourcesRow}>
+          <View style={styles.resourceItem}>
+            <Ionicons name="cash" size={24} color="#f39c12" />
+            <Text style={styles.resourceValue}>${player.cash}</Text>
+            <Text style={styles.resourceLabel}>Cash</Text>
+          </View>
+          <View style={styles.resourceItem}>
+            <Ionicons name="star" size={24} color="#9b59b6" />
+            <Text style={styles.resourceValue}>{player.reputation}</Text>
+            <Text style={styles.resourceLabel}>Rep</Text>
+          </View>
+          <View style={styles.resourceItem}>
+            <Ionicons name="trophy" size={24} color="#27ae60" />
+            <Text style={styles.resourceValue}>{player.wins}</Text>
+            <Text style={styles.resourceLabel}>Wins</Text>
+          </View>
+          <View style={styles.resourceItem}>
+            <Ionicons name="briefcase" size={24} color="#3498db" />
+            <Text style={styles.resourceValue}>{player.missions_completed}</Text>
+            <Text style={styles.resourceLabel}>Missions</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Battle Record */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>BATTLE RECORD</Text>
+        <View style={styles.battleRecord}>
+          <View style={styles.recordItem}>
+            <Text style={[styles.recordValue, { color: '#4caf50' }]}>{player.wins}</Text>
+            <Text style={styles.recordLabel}>Wins</Text>
+          </View>
+          <View style={styles.recordDivider} />
+          <View style={styles.recordItem}>
+            <Text style={[styles.recordValue, { color: '#f44336' }]}>{player.losses}</Text>
+            <Text style={styles.recordLabel}>Losses</Text>
+          </View>
+          <View style={styles.recordDivider} />
+          <View style={styles.recordItem}>
+            <Text style={[styles.recordValue, { color: '#ff9800' }]}>
+              {player.wins + player.losses > 0
+                ? Math.round((player.wins / (player.wins + player.losses)) * 100)
+                : 0}%
+            </Text>
+            <Text style={styles.recordLabel}>Win Rate</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ========== EQUIPMENT TAB ==========
+function EquipmentTab({
+  equipped,
+  classColor,
+  onUnequip,
+  playerLevel,
+}: {
+  equipped: Record<string, EquipmentItem | null>;
+  classColor: string;
+  onUnequip: (slot: string) => void;
+  playerLevel: number;
+}) {
+  const slots = ['weapon', 'armor', 'accessory', 'vehicle'];
+
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>EQUIPPED GEAR</Text>
+      {slots.map((slot) => {
+        const item = equipped[slot];
+        const rarityColor = item ? RARITY_COLORS[item.rarity] || '#9e9e9e' : '#333';
+
+        return (
+          <View key={slot} style={[styles.equipSlot, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
+            <View style={[styles.slotIcon, { backgroundColor: item ? `${rarityColor}20` : '#1a1a1a' }]}>
+              <Ionicons name={SLOT_ICONS[slot]} size={24} color={item ? rarityColor : '#444'} />
+            </View>
+            <View style={styles.slotInfo}>
+              <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
+              {item ? (
+                <>
+                  <Text style={[styles.slotItemName, { color: rarityColor }]}>{item.name}</Text>
+                  <View style={styles.statBonusRow}>
+                    {Object.entries(item.stats_bonus).map(([stat, val]) => (
+                      <Text
+                        key={stat}
+                        style={[styles.statBonusText, { color: (val as number) > 0 ? '#4caf50' : '#f44336' }]}
+                      >
+                        {(val as number) > 0 ? '+' : ''}{val as number} {stat}
+                      </Text>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.emptySlotText}>Empty - No item equipped</Text>
+              )}
+            </View>
+            {item && (
+              <TouchableOpacity
+                style={styles.unequipBtn}
+                onPress={() => onUnequip(slot)}
+              >
+                <Ionicons name="close-circle" size={24} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+
+      {/* Total bonus summary */}
+      <View style={[styles.section, { marginTop: 16 }]}>
+        <Text style={styles.sectionTitle}>EQUIPMENT BONUSES</Text>
+        <View style={styles.bonusSummary}>
+          {(() => {
+            const totals: Record<string, number> = {};
+            Object.values(equipped).forEach((item) => {
+              if (item?.stats_bonus) {
+                Object.entries(item.stats_bonus).forEach(([stat, val]) => {
+                  totals[stat] = (totals[stat] || 0) + (val as number);
+                });
+              }
+            });
+            const entries = Object.entries(totals);
+            if (entries.length === 0) {
+              return <Text style={styles.emptySlotText}>No bonuses - equip gear to boost stats</Text>;
+            }
+            return entries.map(([stat, val]) => (
+              <View key={stat} style={styles.bonusItem}>
+                <Text style={styles.bonusStat}>{stat.charAt(0).toUpperCase() + stat.slice(1)}</Text>
+                <Text style={[styles.bonusValue, { color: val > 0 ? '#4caf50' : '#f44336' }]}>
+                  {val > 0 ? '+' : ''}{val}
+                </Text>
+              </View>
+            ));
+          })()}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ========== ITEMS TAB ==========
+function ItemsTab({
+  inventory,
+  classColor,
+  onEquip,
+  playerLevel,
+}: {
+  inventory: EquipmentItem[];
+  classColor: string;
+  onEquip: (item: EquipmentItem) => void;
+  playerLevel: number;
+}) {
+  if (inventory.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="bag-outline" size={64} color="#333" />
+        <Text style={styles.emptyStateTitle}>No Items</Text>
+        <Text style={styles.emptyStateText}>
+          Defeat enemies and complete missions to earn loot!
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>INVENTORY ({inventory.length})</Text>
+      {inventory.map((item, index) => {
+        const rarityColor = RARITY_COLORS[item.rarity] || '#9e9e9e';
+        const canEquip = playerLevel >= item.level_requirement;
+
+        return (
+          <View key={`${item.id}-${index}`} style={[styles.itemCard, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
+            <View style={[styles.itemIconWrap, { backgroundColor: `${rarityColor}20` }]}>
+              <Ionicons name={SLOT_ICONS[item.equipment_type] || 'cube'} size={22} color={rarityColor} />
+            </View>
+            <View style={styles.itemInfo}>
+              <View style={styles.itemHeader}>
+                <Text style={[styles.itemName, { color: rarityColor }]}>{item.name}</Text>
+                <Text style={[styles.rarityBadge, { color: rarityColor }]}>
+                  {item.rarity.toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.itemDesc} numberOfLines={1}>{item.description}</Text>
+              <View style={styles.statBonusRow}>
+                {Object.entries(item.stats_bonus).map(([stat, val]) => (
+                  <Text
+                    key={stat}
+                    style={[styles.statBonusText, { color: (val as number) > 0 ? '#4caf50' : '#f44336' }]}
+                  >
+                    {(val as number) > 0 ? '+' : ''}{val as number} {stat}
+                  </Text>
+                ))}
+              </View>
+              {!canEquip && (
+                <Text style={styles.levelReqText}>Requires Lv.{item.level_requirement}</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.equipBtn, !canEquip && styles.equipBtnDisabled]}
+              onPress={() => canEquip && onEquip(item)}
+              disabled={!canEquip}
+            >
+              <Text style={[styles.equipBtnText, !canEquip && styles.equipBtnTextDisabled]}>
+                EQUIP
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ========== SKILLS TAB ==========
+function SkillsTab({
+  skills,
+  classColor,
+  playerLevel,
+}: {
+  skills: Skill[];
+  classColor: string;
+  playerLevel: number;
+}) {
+  const SKILL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+    heavy_strike: 'hammer',
+    quick_shot: 'flash',
+    defensive_stance: 'shield',
+    critical_aim: 'eye',
+    heal: 'medkit',
+    rage: 'flame',
+    execute: 'skull',
+  };
+
+  if (skills.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="flash-outline" size={64} color="#333" />
+        <Text style={styles.emptyStateTitle}>No Skills Yet</Text>
+        <Text style={styles.emptyStateText}>Level up to unlock powerful abilities!</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>ABILITIES</Text>
+      {skills.map((skill) => {
+        const unlocked = playerLevel >= skill.unlock_level;
+        return (
+          <View key={skill.id} style={[styles.skillRow, !unlocked && styles.skillLocked]}>
+            <View style={[styles.skillIconWrap, { backgroundColor: unlocked ? `${classColor}20` : '#1a1a1a' }]}>
+              <Ionicons
+                name={SKILL_ICONS[skill.id] || 'flash'}
+                size={24}
+                color={unlocked ? classColor : '#444'}
+              />
+            </View>
+            <View style={styles.skillInfo}>
+              <Text style={[styles.skillName, !unlocked && { color: '#555' }]}>{skill.name}</Text>
+              <View style={styles.skillDetails}>
+                {skill.damage_mult && (
+                  <Text style={styles.skillStat}>
+                    {skill.damage_mult}x DMG
+                  </Text>
+                )}
+                {skill.defense_buff && (
+                  <Text style={[styles.skillStat, { color: '#2196f3' }]}>
+                    {skill.defense_buff}x DEF
+                  </Text>
+                )}
+                {skill.heal_percent && (
+                  <Text style={[styles.skillStat, { color: '#4caf50' }]}>
+                    {Math.round(skill.heal_percent * 100)}% Heal
+                  </Text>
+                )}
+                {skill.crit_chance && (
+                  <Text style={[styles.skillStat, { color: '#ff9800' }]}>
+                    {Math.round(skill.crit_chance * 100)}% Crit
+                  </Text>
+                )}
+                <Text style={styles.skillCost}>{skill.cost} Energy</Text>
+              </View>
+            </View>
+            {!unlocked ? (
+              <View style={styles.lockBadge}>
+                <Ionicons name="lock-closed" size={14} color="#666" />
+                <Text style={styles.lockText}>Lv.{skill.unlock_level}</Text>
+              </View>
+            ) : (
+              <View style={[styles.unlockBadge, { backgroundColor: `${classColor}20` }]}>
+                <Ionicons name="checkmark" size={16} color={classColor} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ========== STYLES ==========
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-  },
-  loadingText: {
-    color: '#888',
-  },
-  scrollContent: {
-    padding: 20,
-  },
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' },
+  loadingText: { color: '#888', marginTop: 12, fontSize: 14 },
+
+  // Header
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
   },
   avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    marginBottom: 16,
+    borderWidth: 2,
   },
-  playerName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  playerClass: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 2,
-    marginTop: 4,
-  },
-  levelSection: {
+  headerInfo: { flex: 1, marginLeft: 12 },
+  playerName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  playerClass: { fontSize: 11, fontWeight: '600', letterSpacing: 1.5, marginTop: 2 },
+  levelRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  levelBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  levelText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  xpBarSmall: { flex: 1, height: 6, backgroundColor: '#222', borderRadius: 3, marginLeft: 8, overflow: 'hidden' },
+  xpFillSmall: { height: '100%', borderRadius: 3 },
+  xpTextSmall: { color: '#555', fontSize: 10, marginLeft: 6 },
+  logoutBtn: { padding: 8 },
+
+  // Tab Bar
+  tabBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
   },
-  levelBadge: {
-    backgroundColor: '#e74c3c',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  levelLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  levelValue: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  xpContainer: {
+  tab: {
     flex: 1,
-  },
-  xpBar: {
-    height: 12,
-    backgroundColor: '#333',
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  xpFill: {
-    height: '100%',
-    backgroundColor: '#e74c3c',
-    borderRadius: 6,
-  },
-  xpText: {
-    color: '#888',
-    fontSize: 12,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 2,
-    marginBottom: 12,
-  },
-  statsGrid: {
-    gap: 8,
-  },
-  resourcesRow: {
+    alignItems: 'center',
+    paddingVertical: 10,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 4,
   },
+  tabLabel: { fontSize: 12, color: '#666', fontWeight: '600' },
+
+  scrollContent: { padding: 16, paddingBottom: 40 },
+
+  // Section
+  section: { marginBottom: 24 },
+  sectionTitle: { color: '#666', fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 12 },
+
+  // Stats
+  statsGrid: { gap: 8 },
+
+  // Resources
+  resourcesRow: { flexDirection: 'row', gap: 8 },
   resourceItem: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    padding: 16,
+    backgroundColor: '#111',
+    padding: 14,
     borderRadius: 12,
-    marginHorizontal: 4,
   },
-  resourceValue: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 8,
+  resourceValue: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 6 },
+  resourceLabel: { color: '#555', fontSize: 10, marginTop: 2 },
+
+  // Battle Record
+  battleRecord: {
+    flexDirection: 'row',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
   },
-  resourceLabel: {
-    color: '#666',
-    fontSize: 10,
-    marginTop: 4,
+  recordItem: { flex: 1, alignItems: 'center' },
+  recordValue: { fontSize: 24, fontWeight: 'bold' },
+  recordLabel: { color: '#666', fontSize: 11, marginTop: 4 },
+  recordDivider: { width: 1, height: 32, backgroundColor: '#222' },
+
+  // Equipment Slots
+  equipSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
   },
-  skillsGrid: {
+  slotIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  slotInfo: { flex: 1, marginLeft: 12 },
+  slotLabel: { color: '#666', fontSize: 10, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
+  slotItemName: { fontSize: 15, fontWeight: '700', marginTop: 2 },
+  emptySlotText: { color: '#444', fontSize: 13, fontStyle: 'italic', marginTop: 2 },
+  unequipBtn: { padding: 8 },
+
+  // Stat Bonus
+  statBonusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  statBonusText: { fontSize: 11, fontWeight: '600' },
+
+  // Bonus Summary
+  bonusSummary: {
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 14,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
   },
-  skillCard: {
-    width: '48%',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  skillLocked: {
-    opacity: 0.5,
-  },
-  skillName: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  lockedText: {
-    color: '#666',
-  },
-  skillCost: {
-    color: '#3498db',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  skillUnlock: {
-    color: '#f39c12',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  logoutButton: {
+  bonusItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  bonusStat: { color: '#999', fontSize: 12 },
+  bonusValue: { fontSize: 14, fontWeight: 'bold' },
+
+  // Item Cards
+  itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e74c3c',
-    borderRadius: 8,
-    marginTop: 16,
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
   },
-  logoutText: {
-    color: '#e74c3c',
-    fontWeight: '600',
+  itemIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemInfo: { flex: 1, marginLeft: 10 },
+  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  itemName: { fontSize: 14, fontWeight: '700' },
+  rarityBadge: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  itemDesc: { color: '#666', fontSize: 11, marginTop: 2 },
+  levelReqText: { color: '#f44336', fontSize: 10, fontWeight: '600', marginTop: 3 },
+  equipBtn: {
+    backgroundColor: '#e74c3c',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
     marginLeft: 8,
   },
+  equipBtnDisabled: { backgroundColor: '#222' },
+  equipBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  equipBtnTextDisabled: { color: '#555' },
+
+  // Skills
+  skillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+  },
+  skillLocked: { opacity: 0.5 },
+  skillIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skillInfo: { flex: 1, marginLeft: 12 },
+  skillName: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  skillDetails: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  skillStat: { color: '#e74c3c', fontSize: 11, fontWeight: '600' },
+  skillCost: { color: '#2196f3', fontSize: 11, fontWeight: '600' },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  lockText: { color: '#666', fontSize: 11, fontWeight: '600' },
+  unlockBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyStateTitle: { color: '#555', fontSize: 18, fontWeight: '700', marginTop: 16 },
+  emptyStateText: { color: '#444', fontSize: 13, textAlign: 'center', marginTop: 8, paddingHorizontal: 32 },
 });

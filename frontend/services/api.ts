@@ -116,6 +116,32 @@ export const getPlayerSkills = async (playerId: string): Promise<Skill[]> => {
   return response.data;
 };
 
+// Inventory & Equipment APIs
+export const getPlayerInventoryDetails = async (playerId: string): Promise<any[]> => {
+  const response = await api.get(`/players/${playerId}/inventory-details`);
+  return response.data;
+};
+
+export const getPlayerEquipmentDetails = async (playerId: string): Promise<Record<string, any>> => {
+  const response = await api.get(`/players/${playerId}/equipment-details`);
+  return response.data;
+};
+
+export const equipItem = async (playerId: string, equipmentId: string): Promise<{ message: string }> => {
+  const response = await api.post(`/players/${playerId}/equip?equipment_id=${equipmentId}`);
+  return response.data;
+};
+
+export const unequipItem = async (playerId: string, slot: string): Promise<{ message: string }> => {
+  const response = await api.post(`/players/${playerId}/unequip?slot=${slot}`);
+  return response.data;
+};
+
+export const getAllItems = async (): Promise<Record<string, any>> => {
+  const response = await api.get('/items');
+  return response.data;
+};
+
 // Chat APIs
 export const sendChatMessage = async (channel: string, playerId: string, message: string): Promise<ChatMessage> => {
   const response = await api.post(`/chat?channel=${channel}&player_id=${playerId}&message=${encodeURIComponent(message)}`);
