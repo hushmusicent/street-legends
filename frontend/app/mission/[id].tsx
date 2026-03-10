@@ -32,6 +32,7 @@ const MISSION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 export default function MissionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { playerId, nearbyMissions, setPlayer, setCurrentMission } = useGameStore();
+  const removeMission = useGameStore((s) => s.removeMission);
   const [mission, setMission] = useState<Mission | null>(null);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
@@ -70,6 +71,10 @@ export default function MissionScreen() {
   };
 
   const handleExit = () => {
+    // Remove completed mission from map
+    if (completed && id) {
+      removeMission(id);
+    }
     setCurrentMission(null);
     router.back();
   };

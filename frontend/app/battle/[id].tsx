@@ -20,6 +20,7 @@ import { Battle, Skill } from '../../types/game';
 export default function BattleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { playerId, setPlayer, setCurrentBattle } = useGameStore();
+  const removeMonster = useGameStore((s) => s.removeMonster);
   const [battle, setBattle] = useState<Battle | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +81,10 @@ export default function BattleScreen() {
   };
 
   const handleExit = () => {
+    // Remove defeated monster from map
+    if (battle && battle.status === 'won' && battle.enemy_type === 'monster') {
+      removeMonster(battle.enemy_id);
+    }
     setCurrentBattle(null);
     router.back();
   };

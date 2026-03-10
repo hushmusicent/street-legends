@@ -34,6 +34,8 @@ interface GameState {
   setNearbyMonsters: (monsters: Monster[]) => void;
   setNearbyMissions: (missions: Mission[]) => void;
   setNearbyPlayers: (players: NearbyPlayer[]) => void;
+  removeMonster: (monsterId: string) => void;
+  removeMission: (missionId: string) => void;
   setCurrentBattle: (battle: Battle | null) => void;
   setCurrentMission: (mission: Mission | null) => void;
   setPlayerGuild: (guild: Guild | null) => void;
@@ -67,6 +69,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNearbyMonsters: (monsters) => set({ nearbyMonsters: monsters }),
   setNearbyMissions: (missions) => set({ nearbyMissions: missions }),
   setNearbyPlayers: (players) => set({ nearbyPlayers: players }),
+  removeMonster: (monsterId) => set((state) => ({
+    nearbyMonsters: state.nearbyMonsters.filter(m => m.id !== monsterId),
+  })),
+  removeMission: (missionId) => set((state) => ({
+    nearbyMissions: state.nearbyMissions.filter(m => m.id !== missionId),
+  })),
   setCurrentBattle: (battle) => set({ currentBattle: battle }),
   setCurrentMission: (mission) => set({ currentMission: mission }),
   setPlayerGuild: (guild) => set({ playerGuild: guild }),
