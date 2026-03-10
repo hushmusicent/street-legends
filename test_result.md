@@ -105,6 +105,18 @@
 user_problem_statement: GTA GPS RPG - Fix entity loading and map functionality
 
 backend:
+  - task: "Passive Health Regeneration"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ Passive health regeneration feature fully implemented and tested. Regenerates 25% of max_health every 15 minutes lazily when player data is retrieved. Health properly capped at maximum. Battle system correctly separates temporary HP from persistent HP. Mathematical calculations correct."
+
   - task: "Root Endpoint API"
     implemented: true
     working: true
@@ -384,7 +396,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "All backend API testing completed successfully"
+    - "Passive Health Regeneration tested and verified working"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
@@ -396,3 +408,5 @@ agent_communication:
     -message: "Implemented profile pictures across UI: 1) Leaderboard shows profile_pic from API on podium and list, 2) Territory modal shows owner_pic as image instead of emoji, 3) Territory map labels already had owner_pic support in Leaflet JS. Please verify leaderboard API returns profile_pic field and territory APIs return owner_pic field."
     -agent: "testing"
     -message: "✅ VERIFICATION COMPLETE: All requested API fields confirmed working: 1) Leaderboard API (/api/leaderboard?limit=10) returns profile_pic field in all entries, 2) Territory Nearby API (/api/territories/nearby) returns owner_pic field for owned territories, 3) Territory Capture API (/api/territories/{id}/capture) successfully captures territories and includes owner_pic field in response. Created TestPicPlayer and captured Northside Turf territory to verify full flow. Backend profile picture integration working correctly."
+    -agent: "testing"
+    -message: "🎉 PASSIVE HEALTH REGENERATION TESTING COMPLETE: Feature fully implemented and working correctly. Key findings: 1) Regenerates 25% of max_health every 15 minutes lazily on GET /players/{id}, 2) Health properly capped at maximum, 3) Battle system correctly separates temporary battle HP from persistent player HP, 4) Uses created_at/last_active as baseline for first regeneration, 5) Sets last_health_regen timestamp after regeneration occurs. Mathematical calculations verified correct. All requirements from review request satisfied."

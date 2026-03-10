@@ -725,10 +725,49 @@ async def create_player(player_data: PlayerCreate):
 
 @api_router.get("/players/{player_id}", response_model=Player)
 async def get_player(player_id: str):
-    """Get player by ID"""
+    """Get player by ID with passive health regeneration"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Passive health regen: 25% of max_health every 15 minutes
+    now = datetime.utcnow()
+    last_regen = player.get("last_health_regen")
+    current_hp = player["stats"]["health"]
+    max_hp = player["stats"]["max_health"]
+    
+    if current_hp < max_hp:
+        if last_regen:
+            if isinstance(last_regen, str):
+                last_regen = datetime.fromisoformat(last_regen)
+            elapsed_seconds = (now - last_regen).total_seconds()
+        else:
+            # First time - use last_active or created_at as baseline
+            baseline = player.get("last_active", player.get("created_at", now))
+            if isinstance(baseline, str):
+                baseline = datetime.fromisoformat(baseline)
+            elapsed_seconds = (now - baseline).total_seconds()
+        
+        intervals = int(elapsed_seconds // 900)  # 900 seconds = 15 minutes
+        if intervals > 0:
+            regen_amount = int(max_hp * 0.25 * intervals)
+            new_hp = min(max_hp, current_hp + regen_amount)
+            if new_hp != current_hp:
+                await db.players.update_one(
+                    {"id": player_id},
+                    {"$set": {
+                        "stats.health": new_hp,
+                        "last_health_regen": now.isoformat(),
+                    }}
+                )
+                player["stats"]["health"] = new_hp
+                player["last_health_regen"] = now.isoformat()
+            elif intervals > 0:
+                await db.players.update_one(
+                    {"id": player_id},
+                    {"$set": {"last_health_regen": now.isoformat()}}
+                )
+    
     return Player(**player)
 
 @api_router.put("/players/{player_id}/position")
