@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getLeaderboard } from '../../services/api';
@@ -62,7 +62,11 @@ export default function LeaderboardScreen() {
             {/* 2nd Place */}
             <View style={styles.podiumItem}>
               <View style={[styles.podiumAvatar, { borderColor: RANK_COLORS[2] }]}>
-                <Ionicons name="person" size={24} color="#fff" />
+                {leaderboard[1]?.profile_pic ? (
+                  <Image source={{ uri: leaderboard[1].profile_pic }} style={styles.podiumAvatarImg} />
+                ) : (
+                  <Ionicons name="person" size={24} color="#fff" />
+                )}
               </View>
               <Text style={styles.podiumName}>{leaderboard[1]?.name}</Text>
               <Text style={styles.podiumRep}>{leaderboard[1]?.reputation} REP</Text>
@@ -75,7 +79,11 @@ export default function LeaderboardScreen() {
             <View style={styles.podiumItem}>
               <Ionicons name="crown" size={24} color="#FFD700" style={styles.crown} />
               <View style={[styles.podiumAvatar, styles.firstPlace, { borderColor: RANK_COLORS[1] }]}>
-                <Ionicons name="person" size={28} color="#fff" />
+                {leaderboard[0]?.profile_pic ? (
+                  <Image source={{ uri: leaderboard[0].profile_pic }} style={styles.podiumAvatarImgFirst} />
+                ) : (
+                  <Ionicons name="person" size={28} color="#fff" />
+                )}
               </View>
               <Text style={styles.podiumName}>{leaderboard[0]?.name}</Text>
               <Text style={styles.podiumRep}>{leaderboard[0]?.reputation} REP</Text>
@@ -87,7 +95,11 @@ export default function LeaderboardScreen() {
             {/* 3rd Place */}
             <View style={styles.podiumItem}>
               <View style={[styles.podiumAvatar, { borderColor: RANK_COLORS[3] }]}>
-                <Ionicons name="person" size={24} color="#fff" />
+                {leaderboard[2]?.profile_pic ? (
+                  <Image source={{ uri: leaderboard[2].profile_pic }} style={styles.podiumAvatarImg} />
+                ) : (
+                  <Ionicons name="person" size={24} color="#fff" />
+                )}
               </View>
               <Text style={styles.podiumName}>{leaderboard[2]?.name}</Text>
               <Text style={styles.podiumRep}>{leaderboard[2]?.reputation} REP</Text>
@@ -115,7 +127,11 @@ export default function LeaderboardScreen() {
                   { borderColor: CLASS_COLORS[entry.character_class] || '#e74c3c' },
                 ]}
               >
-                <Ionicons name="person" size={16} color="#fff" />
+                {entry.profile_pic ? (
+                  <Image source={{ uri: entry.profile_pic }} style={styles.avatarImg} />
+                ) : (
+                  <Ionicons name="person" size={16} color="#fff" />
+                )}
               </View>
               <View style={styles.info}>
                 <Text style={styles.name}>
@@ -197,11 +213,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3,
     marginBottom: 8,
+    overflow: 'hidden',
   },
   firstPlace: {
     width: 56,
     height: 56,
     borderRadius: 28,
+  },
+  podiumAvatarImg: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+  },
+  podiumAvatarImgFirst: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   podiumName: {
     color: '#fff',
@@ -255,6 +282,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   info: {
     flex: 1,

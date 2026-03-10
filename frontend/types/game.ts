@@ -165,6 +165,7 @@ export interface LeaderboardEntry {
   reputation: number;
   wins: number;
   character_class: string;
+  profile_pic?: string | null;
 }
 
 export interface ChatMessage {

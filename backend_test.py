@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # API Configuration
-API_BASE_URL = "https://gta-quest-map.preview.emergentagent.com/api"
+API_BASE_URL = "https://real-world-raid-game.preview.emergentagent.com/api"
 
 class RPGAPITester:
     def __init__(self, base_url: str):
@@ -398,6 +398,156 @@ class RPGAPITester:
         
         return success
 
+    async def test_15_leaderboard_profile_pic_field(self) -> bool:
+        """Test GET /leaderboard for profile_pic field"""
+        print("\n15. Testing Leaderboard Profile Pic Field")
+        
+        params = {"limit": 10}
+        result = await self.make_request("GET", "/leaderboard", params=params)
+        success = self.print_result("Leaderboard API", result)
+        
+        if success and result["data"] and isinstance(result["data"], list):
+            players = result["data"]
+            print(f"   Leaderboard entries: {len(players)}")
+            
+            # Verify profile_pic field exists in each entry
+            all_have_profile_pic = True
+            for i, player in enumerate(players):
+                if "profile_pic" not in player:
+                    print(f"   ❌ Entry {i+1} missing profile_pic field")
+                    all_have_profile_pic = False
+                else:
+                    pic_value = player["profile_pic"]
+                    print(f"   ✅ Entry {i+1}: profile_pic = {type(pic_value).__name__} ({'null' if pic_value is None else 'has_value'})")
+            
+            if all_have_profile_pic:
+                print("   ✅ All leaderboard entries have profile_pic field")
+                return True
+            else:
+                print("   ❌ Some leaderboard entries missing profile_pic field")
+                return False
+        else:
+            print("   ❌ Failed to get leaderboard data")
+            return False
+
+    async def test_16_territory_nearby_api(self) -> bool:
+        """Test GET /territories/nearby for owner_pic field"""
+        print("\n16. Testing Territory Nearby API")
+        
+        params = {
+            "latitude": 40.758,
+            "longitude": -73.9855,
+            "player_level": 1
+        }
+        
+        result = await self.make_request("GET", "/territories/nearby", params=params)
+        success = self.print_result("Territory Nearby API", result)
+        
+        if success and result["data"] and isinstance(result["data"], list):
+            territories = result["data"]
+            print(f"   Territories found: {len(territories)}")
+            
+            self.test_data["territories"] = territories
+            
+            # Check for owner_pic field when territory is owned
+            owned_territories = [t for t in territories if t.get("owner_id")]
+            unowned_territories = [t for t in territories if not t.get("owner_id")]
+            
+            print(f"   Owned territories: {len(owned_territories)}")
+            print(f"   Unowned territories: {len(unowned_territories)}")
+            
+            for i, territory in enumerate(owned_territories):
+                if "owner_pic" in territory:
+                    pic_value = territory["owner_pic"]
+                    print(f"   ✅ Owned territory {i+1}: owner_pic = {type(pic_value).__name__} ({'null' if pic_value is None else 'has_value'})")
+                else:
+                    print(f"   ❌ Owned territory {i+1}: missing owner_pic field")
+                    return False
+            
+            return True
+        else:
+            print("   ❌ Failed to get territory data")
+            return False
+
+    async def test_17_create_test_player_for_territory(self) -> bool:
+        """Create a test player specifically for territory testing"""
+        print("\n17. Creating Test Player for Territory Capture")
+        
+        player_data = {
+            "name": "TestPicPlayer",
+            "character_class": "street_soldier"
+        }
+        
+        result = await self.make_request("POST", "/players", data=player_data)
+        success = self.print_result("Create test player", result)
+        
+        if success and result["data"]:
+            player_id = result["data"].get("id")
+            player_name = result["data"].get("name")
+            
+            print(f"   Test Player ID: {player_id}")
+            print(f"   Test Player Name: {player_name}")
+            
+            self.test_data["test_player_id"] = player_id
+            self.test_data["test_player_name"] = player_name
+        
+        return success
+
+    async def test_18_territory_capture_api(self) -> bool:
+        """Test POST /territories/{territory_id}/capture for owner_pic field"""
+        print("\n18. Testing Territory Capture API")
+        
+        if "test_player_id" not in self.test_data:
+            print("❌ Skipping - No test player ID from previous test")
+            return False
+        
+        if "territories" not in self.test_data:
+            print("❌ Skipping - No territories from nearby test")
+            return False
+        
+        test_player_id = self.test_data["test_player_id"]
+        territories = self.test_data["territories"]
+        
+        # Find an unowned territory to capture
+        unowned_territories = [t for t in territories if not t.get("owner_id")]
+        if not unowned_territories:
+            print("   ℹ️  No unowned territories available for capture test")
+            return True
+        
+        territory_id = unowned_territories[0]["id"]
+        territory_name = unowned_territories[0]["name"]
+        
+        print(f"   Attempting to capture territory: {territory_name}")
+        
+        params = {"player_id": test_player_id}
+        result = await self.make_request("POST", f"/territories/{territory_id}/capture", params=params)
+        
+        success = self.print_result("Territory capture", result)
+        
+        if success and result["data"]:
+            capture_result = result["data"]
+            battle_result = capture_result.get("result")
+            
+            print(f"   Capture result: {battle_result}")
+            
+            if battle_result == "victory":
+                captured_territory = capture_result.get("territory", {})
+                
+                if "owner_pic" in captured_territory:
+                    pic_value = captured_territory["owner_pic"]
+                    print(f"   ✅ Captured territory has owner_pic field: {type(pic_value).__name__} ({'null' if pic_value is None else 'has_value'})")
+                    print(f"   ✅ Territory now owned by: {captured_territory.get('owner_name')}")
+                    return True
+                else:
+                    print(f"   ❌ Captured territory missing owner_pic field")
+                    return False
+            else:
+                print(f"   ℹ️  Territory capture failed (result: {battle_result}), but API worked correctly")
+                return True
+        else:
+            print("   ❌ Failed to capture territory")
+            return False
+
     async def run_all_tests(self) -> Dict[str, bool]:
         """Run all API tests in sequence"""
         print("=" * 60)
@@ -423,7 +573,11 @@ class RPGAPITester:
             ("List Guilds", self.test_11_list_guilds),
             ("Leaderboard", self.test_12_leaderboard),
             ("Get Skills", self.test_13_get_skills),
-            ("Player Skills", self.test_14_player_skills)
+            ("Player Skills", self.test_14_player_skills),
+            ("Leaderboard Profile Pic Field", self.test_15_leaderboard_profile_pic_field),
+            ("Territory Nearby API", self.test_16_territory_nearby_api),
+            ("Create Test Player for Territory", self.test_17_create_test_player_for_territory),
+            ("Territory Capture API", self.test_18_territory_capture_api)
         ]
         
         # Run tests

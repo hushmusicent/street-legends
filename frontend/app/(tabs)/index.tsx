@@ -9,6 +9,7 @@ import {
   ScrollView,
   Modal,
   Pressable,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -271,6 +272,7 @@ export default function MapScreen() {
       color: t.color || '#e74c3c',
       owner_id: t.owner_id || null,
       owner_name: t.owner_name || null,
+      owner_pic: t.owner_pic || null,
     }));
   }, [territories]);
 
@@ -595,7 +597,14 @@ export default function MapScreen() {
                 {/* Header */}
                 <View style={[styles.terrHeader, { borderLeftColor: selectedTerritory.color || '#e74c3c' }]}>
                   <View style={styles.terrHeaderLeft}>
-                    <Text style={styles.terrIcon}>{selectedTerritory.owner_id ? '👑' : '⚔️'}</Text>
+                    {selectedTerritory.owner_pic ? (
+                      <Image
+                        source={{ uri: selectedTerritory.owner_pic }}
+                        style={styles.terrOwnerPic}
+                      />
+                    ) : (
+                      <Text style={styles.terrIcon}>{selectedTerritory.owner_id ? '👑' : '⚔️'}</Text>
+                    )}
                     <View>
                       <Text style={styles.terrTitle}>{selectedTerritory.name}</Text>
                       <Text style={styles.terrOwner}>
@@ -725,6 +734,7 @@ const styles = StyleSheet.create({
   terrHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 4, paddingLeft: 12, marginBottom: 16 },
   terrHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   terrIcon: { fontSize: 28 },
+  terrOwnerPic: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#f39c12' },
   terrTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
   terrOwner: { color: '#888', fontSize: 12, marginTop: 2 },
   terrInfoRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },

@@ -810,7 +810,8 @@ async def get_leaderboard(limit: int = 20):
             "level": p["level"],
             "reputation": p["reputation"],
             "wins": p["wins"],
-            "character_class": p["character_class"]
+            "character_class": p["character_class"],
+            "profile_pic": p.get("profile_pic", None),
         }
         for i, p in enumerate(players)
     ]
@@ -1876,6 +1877,7 @@ async def capture_territory(territory_id: str, player_id: str):
             {"$set": {
                 "owner_id": player_id,
                 "owner_name": player["name"],
+                "owner_pic": player.get("profile_pic", None),
                 "last_income_collected": datetime.utcnow().isoformat(),
             }}
         )
@@ -1955,6 +1957,7 @@ async def challenge_territory_owner(territory: dict, challenger: dict):
             {"$set": {
                 "owner_id": challenger["id"],
                 "owner_name": challenger["name"],
+                "owner_pic": challenger.get("profile_pic", None),
                 "last_income_collected": datetime.utcnow().isoformat(),
             }}
         )

@@ -31,6 +31,7 @@ interface MapTerritory {
   color: string;
   owner_id: string | null;
   owner_name: string | null;
+  owner_pic?: string | null;
 }
 
 interface GameMapProps {
@@ -183,6 +184,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
       territories.forEach(function(t) {
         var color = t.color || '#e74c3c';
         var isOwned = !!t.owner_id;
+        var ownerPic = t.owner_pic || '';
         
         // Circle zone
         var circle = L.circle([t.location.latitude, t.location.longitude], {
@@ -199,10 +201,15 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
         circle.addTo(map);
         territoryLayers.push(circle);
         
-        // Territory label marker
+        // Territory label with owner pic
+        var picHtml = '';
+        if (isOwned && ownerPic) {
+          picHtml = '<img src="' + ownerPic + '" style="width:20px;height:20px;border-radius:50%;border:2px solid #fff;object-fit:cover;margin-right:4px;vertical-align:middle;" />';
+        }
+        var prefixIcon = isOwned ? (ownerPic ? '' : '👑 ') : '⚔️ ';
         var labelIcon = L.divIcon({
           className: 'territory-label',
-          html: '<div style="background:' + color + '; color:#fff; padding:4px 10px; border-radius:10px; font-size:12px; font-weight:800; white-space:nowrap; text-align:center; opacity:0.95; border:2px solid rgba(255,255,255,0.4); pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.4);">' + (isOwned ? '👑 ' : '⚔️ ') + t.name + '</div>',
+          html: '<div style="background:' + color + '; color:#fff; padding:4px 10px; border-radius:10px; font-size:12px; font-weight:800; white-space:nowrap; text-align:center; opacity:0.95; border:2px solid rgba(255,255,255,0.4); pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.4); display:flex; align-items:center;">' + picHtml + prefixIcon + t.name + '</div>',
           iconSize: [0, 0],
           iconAnchor: [0, -5],
         });

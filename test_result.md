@@ -248,6 +248,12 @@ backend:
         -working: true
         -agent: "testing"
         -comment: "✅ GET /leaderboard endpoint working correctly. Returns players sorted by reputation with ranking information."
+        -working: true
+        -agent: "main"
+        -comment: "Leaderboard API now includes profile_pic field in response. Need to verify."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: GET /leaderboard?limit=10 returns profile_pic field in all entries. Tested with 10 entries - all have profile_pic field (some with values, some null). API working correctly."
 
   - task: "Skills List API"
     implemented: true
@@ -284,6 +290,42 @@ backend:
         -working: true
         -agent: "main"
         -comment: "✅ POST /players/{id}/profile-pic and GET /players/{id}/profile-pic endpoints verified working via curl."
+
+  - task: "Territory Nearby API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: GET /territories/nearby?latitude=40.758&longitude=-73.9855&player_level=1 returns territories with owner_pic field when territories are owned. Tested with owned territory - owner_pic field present (null value as expected for no uploaded picture)."
+
+  - task: "Territory Capture API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: POST /territories/{territory_id}/capture?player_id={player_id} successfully captures territories and returns owner_pic field in response. Created TestPicPlayer, captured Northside Turf territory, confirmed owner_pic field present in captured territory response."
+
+  - task: "Profile Pictures on Leaderboard and Territories"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/leaderboard.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "✅ Implemented profile pictures on leaderboard (podium + list), territory modal header, and territory map labels. Backend already provides profile_pic in leaderboard and owner_pic in territory APIs."
 
 frontend:
   - task: "Profile Picture Upload Modal"
@@ -342,7 +384,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "All backend API endpoints have been tested and are working"
+    - "All backend API testing completed successfully"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
@@ -350,3 +392,7 @@ test_plan:
 agent_communication:
     -agent: "testing"
     -message: "Completed comprehensive backend API testing. All 14 endpoints tested successfully with 100% pass rate. Backend is fully functional with MongoDB integration, AI content generation, and real-time battle system working correctly."
+    -agent: "main"
+    -message: "Implemented profile pictures across UI: 1) Leaderboard shows profile_pic from API on podium and list, 2) Territory modal shows owner_pic as image instead of emoji, 3) Territory map labels already had owner_pic support in Leaflet JS. Please verify leaderboard API returns profile_pic field and territory APIs return owner_pic field."
+    -agent: "testing"
+    -message: "✅ VERIFICATION COMPLETE: All requested API fields confirmed working: 1) Leaderboard API (/api/leaderboard?limit=10) returns profile_pic field in all entries, 2) Territory Nearby API (/api/territories/nearby) returns owner_pic field for owned territories, 3) Territory Capture API (/api/territories/{id}/capture) successfully captures territories and includes owner_pic field in response. Created TestPicPlayer and captured Northside Turf territory to verify full flow. Backend profile picture integration working correctly."
