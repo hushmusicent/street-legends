@@ -339,6 +339,18 @@ backend:
         -agent: "main"
         -comment: "✅ Implemented profile pictures on leaderboard (podium + list), territory modal header, and territory map labels. Backend already provides profile_pic in leaderboard and owner_pic in territory APIs."
 
+  - task: "10-Tier Enemy System"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ 10-TIER ENEMY SYSTEM FULLY VERIFIED: All 6 tier system tests PASSED (100% success rate). Key findings: 1) Level 1-10 players get only Tier 1 enemies (Thug, Gangster, Criminal, Villain, Bandit) with NO bosses, 2) Level 11+ players can encounter bosses (Super Thug, Super Bully, etc.), 3) Level 15+ players get Tier 1 + Tier 2 enemies (Assassin, Thief, Hoodlum, Pirate, Bully), 4) Level 25+ players get Tier 1 + Tier 2 + Tier 3 enemies (Offender, Hood, Mobster, Hooligan), 5) Monster names follow new tier system correctly - NO old naming system detected (no 'Street Thug', 'Gang Member', etc.), 6) Boss spawning rules work correctly - bosses only appear for level 11+ players. Enemy tier distribution verified across all test coordinates. System working exactly as specified."
+
 frontend:
   - task: "Profile Picture Upload Modal"
     implemented: true
@@ -396,7 +408,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Passive Health Regeneration tested and verified working"
+    - "10-Tier Enemy System fully tested and verified working"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
@@ -410,3 +422,5 @@ agent_communication:
     -message: "✅ VERIFICATION COMPLETE: All requested API fields confirmed working: 1) Leaderboard API (/api/leaderboard?limit=10) returns profile_pic field in all entries, 2) Territory Nearby API (/api/territories/nearby) returns owner_pic field for owned territories, 3) Territory Capture API (/api/territories/{id}/capture) successfully captures territories and includes owner_pic field in response. Created TestPicPlayer and captured Northside Turf territory to verify full flow. Backend profile picture integration working correctly."
     -agent: "testing"
     -message: "🎉 PASSIVE HEALTH REGENERATION TESTING COMPLETE: Feature fully implemented and working correctly. Key findings: 1) Regenerates 25% of max_health every 15 minutes lazily on GET /players/{id}, 2) Health properly capped at maximum, 3) Battle system correctly separates temporary battle HP from persistent player HP, 4) Uses created_at/last_active as baseline for first regeneration, 5) Sets last_health_regen timestamp after regeneration occurs. Mathematical calculations verified correct. All requirements from review request satisfied."
+    -agent: "testing"
+    -message: "🎯 10-TIER ENEMY SYSTEM TESTING COMPLETE: All 6 specialized tests PASSED with 100% success rate. Comprehensive verification completed: ✅ Level 1 players (Tier 1 only - Thug, Gangster, Criminal, Villain, Bandit, NO bosses), ✅ Level 5 players (still Tier 1 only), ✅ Level 15 players (Tier 1+2 - includes Assassin, Thief, Hoodlum, Pirate, Bully), ✅ Level 25 players (Tier 1+2+3 - includes Offender, Hood, Mobster, Hooligan), ✅ Monster names verified (new tier system confirmed, NO old names like 'Street Thug'), ✅ Boss spawning rules (Super Thug, Super Bully only for level 11+). Enemy tier distribution working exactly as specified in review request. System ready for production use."

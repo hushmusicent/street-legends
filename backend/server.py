@@ -372,16 +372,120 @@ SHOP_TYPES = {
     "general_shop": {"name_suffix": "", "focus": ["weapon", "armor", "accessory", "vehicle"], "icon": "storefront"},
 }
 
-MONSTER_TEMPLATES = [
-    {"name": "Street Thug", "type": "humanoid", "base_level": 1, "threat": "low"},
-    {"name": "Gang Member", "type": "humanoid", "base_level": 3, "threat": "low"},
-    {"name": "Corrupt Cop", "type": "humanoid", "base_level": 5, "threat": "medium"},
-    {"name": "Cartel Soldier", "type": "humanoid", "base_level": 8, "threat": "medium"},
-    {"name": "Crime Boss", "type": "boss", "base_level": 10, "threat": "high"},
-    {"name": "Cyber Mercenary", "type": "tech", "base_level": 12, "threat": "high"},
-    {"name": "Shadow Assassin", "type": "stealth", "base_level": 15, "threat": "extreme"},
-    {"name": "Kingpin", "type": "boss", "base_level": 20, "threat": "extreme"}
+ENEMY_TIERS = [
+    # Tier 1 (Levels 1-10, Boss at 11)
+    {"tier": 1, "name": "Thug", "level_min": 1, "level_max": 2, "is_boss": False},
+    {"tier": 1, "name": "Gangster", "level_min": 3, "level_max": 4, "is_boss": False},
+    {"tier": 1, "name": "Criminal", "level_min": 5, "level_max": 6, "is_boss": False},
+    {"tier": 1, "name": "Villain", "level_min": 7, "level_max": 8, "is_boss": False},
+    {"tier": 1, "name": "Bandit", "level_min": 9, "level_max": 10, "is_boss": False},
+    {"tier": 1, "name": "Super Thug", "level_min": 11, "level_max": 11, "is_boss": True},
+    # Tier 2 (Levels 11-20, Boss at 21)
+    {"tier": 2, "name": "Assassin", "level_min": 11, "level_max": 12, "is_boss": False},
+    {"tier": 2, "name": "Thief", "level_min": 13, "level_max": 14, "is_boss": False},
+    {"tier": 2, "name": "Hoodlum", "level_min": 15, "level_max": 16, "is_boss": False},
+    {"tier": 2, "name": "Pirate", "level_min": 17, "level_max": 18, "is_boss": False},
+    {"tier": 2, "name": "Bully", "level_min": 19, "level_max": 20, "is_boss": False},
+    {"tier": 2, "name": "Super Bully", "level_min": 21, "level_max": 21, "is_boss": True},
+    # Tier 3 (Levels 21-30, Boss at 31)
+    {"tier": 3, "name": "Offender", "level_min": 21, "level_max": 22, "is_boss": False},
+    {"tier": 3, "name": "Hood", "level_min": 23, "level_max": 24, "is_boss": False},
+    {"tier": 3, "name": "Mobster", "level_min": 25, "level_max": 26, "is_boss": False},
+    {"tier": 3, "name": "Gangster", "level_min": 27, "level_max": 28, "is_boss": False},
+    {"tier": 3, "name": "Hooligan", "level_min": 29, "level_max": 30, "is_boss": False},
+    {"tier": 3, "name": "Super Hood", "level_min": 31, "level_max": 31, "is_boss": True},
+    # Tier 4 (Levels 31-40, Boss at 41)
+    {"tier": 4, "name": "Goon", "level_min": 31, "level_max": 32, "is_boss": False},
+    {"tier": 4, "name": "Ruffian", "level_min": 33, "level_max": 34, "is_boss": False},
+    {"tier": 4, "name": "Gang Banger", "level_min": 35, "level_max": 36, "is_boss": False},
+    {"tier": 4, "name": "Tough Guy", "level_min": 37, "level_max": 38, "is_boss": False},
+    {"tier": 4, "name": "Gorilla", "level_min": 39, "level_max": 40, "is_boss": False},
+    {"tier": 4, "name": "Super Goon", "level_min": 41, "level_max": 41, "is_boss": True},
+    # Tier 5 (Levels 41-50, Boss at 51)
+    {"tier": 5, "name": "Punk", "level_min": 41, "level_max": 42, "is_boss": False},
+    {"tier": 5, "name": "Rough Neck", "level_min": 43, "level_max": 44, "is_boss": False},
+    {"tier": 5, "name": "Rowdy Person", "level_min": 45, "level_max": 46, "is_boss": False},
+    {"tier": 5, "name": "Yardie", "level_min": 47, "level_max": 48, "is_boss": False},
+    {"tier": 5, "name": "Perpetrator", "level_min": 49, "level_max": 50, "is_boss": False},
+    {"tier": 5, "name": "Super Punk", "level_min": 51, "level_max": 51, "is_boss": True},
+    # Tier 6 (Levels 51-60, Boss at 61)
+    {"tier": 6, "name": "Vigilante", "level_min": 51, "level_max": 52, "is_boss": False},
+    {"tier": 6, "name": "Scoundrel", "level_min": 53, "level_max": 54, "is_boss": False},
+    {"tier": 6, "name": "Robber", "level_min": 55, "level_max": 56, "is_boss": False},
+    {"tier": 6, "name": "Toughie", "level_min": 57, "level_max": 58, "is_boss": False},
+    {"tier": 6, "name": "Felon", "level_min": 59, "level_max": 60, "is_boss": False},
+    {"tier": 6, "name": "Super Felon", "level_min": 61, "level_max": 61, "is_boss": True},
+    # Tier 7 (Levels 61-70, Boss at 71)
+    {"tier": 7, "name": "Outlaw", "level_min": 61, "level_max": 62, "is_boss": False},
+    {"tier": 7, "name": "Crook", "level_min": 63, "level_max": 64, "is_boss": False},
+    {"tier": 7, "name": "Cutthroat", "level_min": 65, "level_max": 66, "is_boss": False},
+    {"tier": 7, "name": "Brigade", "level_min": 67, "level_max": 68, "is_boss": False},
+    {"tier": 7, "name": "Mafioso", "level_min": 69, "level_max": 70, "is_boss": False},
+    {"tier": 7, "name": "Super Outlaw", "level_min": 71, "level_max": 71, "is_boss": True},
+    # Tier 8 (Levels 71-80, Boss at 81)
+    {"tier": 8, "name": "Perp", "level_min": 71, "level_max": 72, "is_boss": False},
+    {"tier": 8, "name": "Mugger", "level_min": 73, "level_max": 74, "is_boss": False},
+    {"tier": 8, "name": "LawBreaker", "level_min": 75, "level_max": 76, "is_boss": False},
+    {"tier": 8, "name": "Racketeer", "level_min": 77, "level_max": 78, "is_boss": False},
+    {"tier": 8, "name": "Desperado", "level_min": 79, "level_max": 80, "is_boss": False},
+    {"tier": 8, "name": "Super Mugger", "level_min": 81, "level_max": 81, "is_boss": True},
+    # Tier 9 (Levels 81-90, Boss at 91)
+    {"tier": 9, "name": "Highway Man", "level_min": 81, "level_max": 82, "is_boss": False},
+    {"tier": 9, "name": "Gunman", "level_min": 83, "level_max": 84, "is_boss": False},
+    {"tier": 9, "name": "Vandal", "level_min": 85, "level_max": 86, "is_boss": False},
+    {"tier": 9, "name": "Pick Pocket", "level_min": 87, "level_max": 88, "is_boss": False},
+    {"tier": 9, "name": "Swindler", "level_min": 89, "level_max": 90, "is_boss": False},
+    {"tier": 9, "name": "Super Vandal", "level_min": 91, "level_max": 91, "is_boss": True},
+    # Tier 10 (Levels 91-100, Boss at 101)
+    {"tier": 10, "name": "Malefactor", "level_min": 91, "level_max": 92, "is_boss": False},
+    {"tier": 10, "name": "Bravo", "level_min": 93, "level_max": 94, "is_boss": False},
+    {"tier": 10, "name": "Delinquent", "level_min": 95, "level_max": 96, "is_boss": False},
+    {"tier": 10, "name": "Maniac", "level_min": 97, "level_max": 98, "is_boss": False},
+    {"tier": 10, "name": "Psycho", "level_min": 99, "level_max": 100, "is_boss": False},
+    {"tier": 10, "name": "Super Psycho", "level_min": 101, "level_max": 101, "is_boss": True},
 ]
+
+def get_player_tier(player_level: int) -> int:
+    """Get the player's current tier (1-10) based on level"""
+    return min(10, max(1, (player_level - 1) // 10 + 1))
+
+def get_eligible_enemies(player_level: int):
+    """Get enemies from current tier and all previous tiers"""
+    current_tier = get_player_tier(player_level)
+    eligible = [e for e in ENEMY_TIERS if e["tier"] <= current_tier]
+    
+    # Filter: mostly show enemies close to player level, but allow some from lower tiers
+    # Prioritize current tier enemies and bosses near player level
+    weighted = []
+    for e in eligible:
+        if e["is_boss"]:
+            # Bosses only spawn when player is at or above the boss level
+            if player_level >= e["level_min"]:
+                weighted.append((e, 1))  # Lower weight for bosses (rarer)
+        else:
+            # Regular enemies: higher weight for enemies closer to player level
+            level_diff = abs(((e["level_min"] + e["level_max"]) / 2) - player_level)
+            if level_diff <= 5:
+                weighted.append((e, 5))  # High weight - close to player level
+            elif level_diff <= 15:
+                weighted.append((e, 2))  # Medium weight
+            else:
+                weighted.append((e, 1))  # Low weight - far from player level
+    
+    if not weighted:
+        # Fallback to first tier
+        weighted = [(e, 1) for e in ENEMY_TIERS if e["tier"] == 1 and not e["is_boss"]]
+    
+    return weighted
+
+def calculate_enemy_stats(enemy_level: int, is_boss: bool) -> dict:
+    """Calculate enemy stats based on level and boss status"""
+    # Base stats scale with level, bosses get a significant multiplier
+    boss_mult = 2.0 if is_boss else 1.0
+    health = int((80 + enemy_level * 18) * boss_mult)
+    attack = int((8 + enemy_level * 3.2) * boss_mult)
+    defense = int((5 + enemy_level * 1.8) * boss_mult)
+    return {"health": health, "max_health": health, "attack": attack, "defense": defense}
 
 SKILLS = {
     "heavy_strike": {"name": "Heavy Strike", "damage_mult": 1.5, "cost": 10, "unlock_level": 1},
@@ -865,7 +969,7 @@ async def get_leaderboard(limit: int = 20):
 # ============== MONSTER ENDPOINTS ==============
 @api_router.get("/monsters/spawn")
 async def spawn_monsters(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn monsters near a location based on player level"""
+    """Spawn monsters near a location based on player level using the tier system"""
     position = Position(latitude=latitude, longitude=longitude)
     
     # Clean up expired monsters
@@ -878,37 +982,43 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
     monsters_to_spawn = max(0, 5 - nearby_count)
     spawned = []
     
+    # Get eligible enemies for this player level
+    weighted_enemies = get_eligible_enemies(player_level)
+    if not weighted_enemies:
+        weighted_enemies = [(ENEMY_TIERS[0], 1)]
+    
     for _ in range(monsters_to_spawn):
-        # Select appropriate monster template based on player level
-        suitable_templates = [t for t in MONSTER_TEMPLATES if abs(t["base_level"] - player_level) <= 3]
-        if not suitable_templates:
-            suitable_templates = MONSTER_TEMPLATES[:3]
+        # Weighted random selection
+        enemies, weights = zip(*weighted_enemies)
+        template = random.choices(enemies, weights=weights, k=1)[0]
         
-        template = random.choice(suitable_templates)
+        # Determine the actual monster level within its range
+        monster_level = random.randint(template["level_min"], template["level_max"])
         
         # Randomize position slightly (within 100-300m)
         offset_lat = random.uniform(-0.003, 0.003)
         offset_lon = random.uniform(-0.003, 0.003)
         
-        monster_level = max(1, player_level + random.randint(-2, 2))
-        base_stats = {"health": 78 + monster_level * 16, "attack": 8 + monster_level * 3, "defense": 5 + int(monster_level * 1.55)}
+        # Calculate stats using the new tier-aware function
+        enemy_stats = calculate_enemy_stats(monster_level, template["is_boss"])
         
         # Generate AI description
+        enemy_type = "boss" if template["is_boss"] else "humanoid"
         description = await generate_ai_content("monster", {
             "name": template["name"],
             "level": monster_level,
-            "type": template["type"]
+            "type": enemy_type
         })
         
         monster = Monster(
             name=template["name"],
             description=description,
-            monster_type=template["type"],
+            monster_type=enemy_type,
             level=monster_level,
-            stats=calculate_stats_for_level(base_stats, monster_level),
+            stats=enemy_stats,
             position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
-            loot_cash=monster_level * random.randint(10, 25),
-            loot_xp=monster_level * random.randint(15, 30),
+            loot_cash=monster_level * random.randint(10, 25) * (3 if template["is_boss"] else 1),
+            loot_xp=monster_level * random.randint(15, 30) * (3 if template["is_boss"] else 1),
             expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 1)
         )
         
