@@ -393,6 +393,24 @@ SKILLS = {
     "execute": {"name": "Execute", "damage_mult": 3.0, "cost": 40, "unlock_level": 15}
 }
 
+# ============== TERRITORY SYSTEM ==============
+TERRITORY_NAMES = [
+    "Northside Turf", "Downtown Block", "The Docks", "Eastside Plaza", "Westend Corner",
+    "Central Park Zone", "Old Factory Row", "Market Square", "Riverside Strip", "The Underpass",
+    "Southgate Junction", "Warehouse District", "Rail Yard Outpost", "Harbor Heights", "Canal Street Turf",
+    "Hilltop Lookout", "Bridge Crossing", "Neon Alley", "Freeway Overpass", "Dead End Zone",
+]
+
+TERRITORY_BOSS_NAMES = [
+    "Turf Guardian", "Block Captain", "Dock Warden", "Plaza Enforcer", "Corner King",
+    "Zone Protector", "Factory Foreman", "Market Boss", "Strip Lord", "Underpass Phantom",
+]
+
+TERRITORY_COLORS = [
+    "#e74c3c", "#3498db", "#2ecc71", "#9b59b6", "#f39c12",
+    "#1abc9c", "#e91e63", "#ff5722", "#607d8b", "#795548",
+]
+
 # ============== MODELS ==============
 class Position(BaseModel):
     latitude: float
@@ -1683,6 +1701,295 @@ async def get_player_buffs(player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return player.get("active_buffs", [])
+
+# ============== TERRITORY ENDPOINTS ==============
+
+def generate_territories_for_location(lat: float, lng: float, player_level: int = 1):
+    """Generate 3-5 territories deterministically for a given area"""
+    # Grid-snap to ~0.005 degree (~500m) so territories are stable per area
+    grid_lat = round(lat / 0.005) * 0.005
+    grid_lng = round(lng / 0.005) * 0.005
+    seed = int(abs(grid_lat * 1000000 + grid_lng * 1000000)) % 2147483647
+    rng = random.Random(seed)
+    
+    count = rng.randint(3, 5)
+    territories = []
+    
+    for i in range(count):
+        idx = (seed + i) % len(TERRITORY_NAMES)
+        boss_idx = (seed + i) % len(TERRITORY_BOSS_NAMES)
+        color_idx = (seed + i) % len(TERRITORY_COLORS)
+        
+        # Spread territories within ~100-300m of grid center
+        offset_lat = rng.uniform(-0.002, 0.002)
+        offset_lng = rng.uniform(-0.002, 0.002)
+        t_lat = grid_lat + offset_lat
+        t_lng = grid_lng + offset_lng
+        
+        # Boss scales with zone difficulty
+        zone_level = max(1, player_level + rng.randint(-2, 3))
+        boss_hp = 60 + zone_level * 15
+        boss_atk = 8 + zone_level * 3
+        boss_def = 5 + zone_level * 2
+        
+        # Territory benefits
+        passive_income = 5 + zone_level * 2  # cash per collection
+        atk_boost = 1 + (zone_level // 3)
+        def_boost = 1 + (zone_level // 4)
+        
+        territory_id = f"territory_{grid_lat:.3f}_{grid_lng:.3f}_{i}"
+        territories.append({
+            "id": territory_id,
+            "name": TERRITORY_NAMES[idx],
+            "location": {"latitude": t_lat, "longitude": t_lng},
+            "radius": rng.randint(200, 350),  # meters display radius
+            "color": TERRITORY_COLORS[color_idx],
+            "boss": {
+                "name": TERRITORY_BOSS_NAMES[boss_idx],
+                "level": zone_level,
+                "health": boss_hp,
+                "max_health": boss_hp,
+                "attack": boss_atk,
+                "defense": boss_def,
+            },
+            "rewards": {
+                "passive_income": passive_income,
+                "stat_boosts": {"attack": atk_boost, "defense": def_boost},
+            },
+            "owner_id": None,
+            "owner_name": None,
+        })
+    return territories
+
+@api_router.get("/territories/nearby")
+async def get_nearby_territories(latitude: float, longitude: float, player_level: int = 1):
+    """Get or create territories near a location"""
+    grid_lat = round(latitude / 0.005) * 0.005
+    grid_lng = round(longitude / 0.005) * 0.005
+    grid_key = f"{grid_lat:.3f}_{grid_lng:.3f}"
+    
+    # Check if territories already exist in DB for this grid
+    existing = await db.territories.find({"grid_key": grid_key}).to_list(length=10)
+    if existing:
+        return [serialize_doc(t) for t in existing]
+    
+    # Generate new territories and store them
+    territories = generate_territories_for_location(latitude, longitude, player_level)
+    for t in territories:
+        t["grid_key"] = grid_key
+        t["created_at"] = datetime.utcnow().isoformat()
+        t["last_income_collected"] = None
+    await db.territories.insert_many(territories)
+    
+    stored = await db.territories.find({"grid_key": grid_key}).to_list(length=10)
+    return [serialize_doc(t) for t in stored]
+
+@api_router.post("/territories/{territory_id}/capture")
+async def capture_territory(territory_id: str, player_id: str):
+    """Fight the territory boss to capture an unclaimed territory"""
+    territory = await db.territories.find_one({"id": territory_id})
+    if not territory:
+        raise HTTPException(status_code=404, detail="Territory not found")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if territory.get("owner_id") == player_id:
+        raise HTTPException(status_code=400, detail="You already own this territory")
+    
+    # If territory is owned by someone else, this is a PvP challenge
+    if territory.get("owner_id"):
+        return await challenge_territory_owner(territory, player)
+    
+    # Fight the boss (NPC)
+    boss = territory["boss"]
+    p_stats = player["stats"]
+    
+    # Apply active buffs
+    buff_atk = sum(b["amount"] for b in player.get("active_buffs", []) if b["type"] == "max_health")
+    
+    player_hp = p_stats["health"]
+    boss_hp = boss["health"]
+    combat_log = [f"⚔️ You challenge {boss['name']} (Lv.{boss['level']}) for {territory['name']}!"]
+    
+    round_num = 0
+    max_rounds = 20
+    while player_hp > 0 and boss_hp > 0 and round_num < max_rounds:
+        round_num += 1
+        
+        # Player attacks
+        p_dmg = max(1, p_stats["attack"] + random.randint(-3, 5) - boss["defense"] // 2)
+        # Crit chance
+        if random.random() < 0.15:
+            p_dmg = int(p_dmg * 1.5)
+            combat_log.append(f"Round {round_num}: CRITICAL! You deal {p_dmg} damage!")
+        else:
+            combat_log.append(f"Round {round_num}: You deal {p_dmg} damage.")
+        boss_hp -= p_dmg
+        
+        if boss_hp <= 0:
+            break
+        
+        # Boss attacks
+        b_dmg = max(1, boss["attack"] + random.randint(-2, 4) - p_stats["defense"] // 2)
+        if random.random() < 0.1:
+            b_dmg = int(b_dmg * 1.5)
+            combat_log.append(f"Round {round_num}: {boss['name']} CRITS for {b_dmg} damage!")
+        else:
+            combat_log.append(f"Round {round_num}: {boss['name']} deals {b_dmg} damage.")
+        player_hp -= b_dmg
+    
+    won = boss_hp <= 0
+    
+    if won:
+        combat_log.append(f"🏆 Victory! You defeated {boss['name']} and claimed {territory['name']}!")
+        # Transfer ownership
+        await db.territories.update_one(
+            {"id": territory_id},
+            {"$set": {
+                "owner_id": player_id,
+                "owner_name": player["name"],
+                "last_income_collected": datetime.utcnow().isoformat(),
+            }}
+        )
+        # Update player stats
+        await db.players.update_one(
+            {"id": player_id},
+            {"$set": {"stats.health": max(1, player_hp)}, "$inc": {"xp": 50, "reputation": 10}}
+        )
+        return {
+            "result": "victory",
+            "combat_log": combat_log,
+            "territory": serialize_doc(await db.territories.find_one({"id": territory_id})),
+            "rewards": {"xp": 50, "reputation": 10},
+        }
+    else:
+        combat_log.append(f"💀 Defeated! {boss['name']} defended {territory['name']}.")
+        await db.players.update_one(
+            {"id": player_id},
+            {"$set": {"stats.health": max(1, player_hp)}}
+        )
+        return {
+            "result": "defeat",
+            "combat_log": combat_log,
+            "territory": serialize_doc(await db.territories.find_one({"id": territory_id})),
+        }
+
+async def challenge_territory_owner(territory: dict, challenger: dict):
+    """PvP-style challenge: fight using the owner's stats"""
+    owner = await db.players.find_one({"id": territory["owner_id"]})
+    if not owner:
+        # Owner no longer exists, reset territory
+        await db.territories.update_one(
+            {"id": territory["id"]},
+            {"$set": {"owner_id": None, "owner_name": None}}
+        )
+        raise HTTPException(status_code=400, detail="Territory owner not found. Territory has been reset.")
+    
+    c_stats = challenger["stats"]
+    o_stats = owner["stats"]
+    
+    challenger_hp = c_stats["health"]
+    owner_hp = o_stats["health"]
+    combat_log = [f"⚔️ You challenge {owner['name']} (Lv.{owner['level']}) for {territory['name']}!"]
+    
+    round_num = 0
+    max_rounds = 25
+    while challenger_hp > 0 and owner_hp > 0 and round_num < max_rounds:
+        round_num += 1
+        
+        # Challenger attacks
+        c_dmg = max(1, c_stats["attack"] + random.randint(-3, 5) - o_stats["defense"] // 2)
+        if random.random() < (0.1 + c_stats.get("luck", 10) * 0.005):
+            c_dmg = int(c_dmg * 1.5)
+            combat_log.append(f"Round {round_num}: CRITICAL! You deal {c_dmg} damage!")
+        else:
+            combat_log.append(f"Round {round_num}: You deal {c_dmg} damage.")
+        owner_hp -= c_dmg
+        
+        if owner_hp <= 0:
+            break
+        
+        # Owner (defender) attacks
+        o_dmg = max(1, o_stats["attack"] + random.randint(-3, 5) - c_stats["defense"] // 2)
+        if random.random() < (0.1 + o_stats.get("luck", 10) * 0.005):
+            o_dmg = int(o_dmg * 1.5)
+            combat_log.append(f"Round {round_num}: {owner['name']} CRITS for {o_dmg} damage!")
+        else:
+            combat_log.append(f"Round {round_num}: {owner['name']} deals {o_dmg} damage.")
+        challenger_hp -= o_dmg
+    
+    won = owner_hp <= 0
+    
+    if won:
+        combat_log.append(f"🏆 Victory! You defeated {owner['name']} and took over {territory['name']}!")
+        await db.territories.update_one(
+            {"id": territory["id"]},
+            {"$set": {
+                "owner_id": challenger["id"],
+                "owner_name": challenger["name"],
+                "last_income_collected": datetime.utcnow().isoformat(),
+            }}
+        )
+        await db.players.update_one(
+            {"id": challenger["id"]},
+            {"$set": {"stats.health": max(1, challenger_hp)}, "$inc": {"xp": 75, "reputation": 15, "wins": 1}}
+        )
+        await db.players.update_one(
+            {"id": owner["id"]},
+            {"$inc": {"losses": 1, "reputation": -5}}
+        )
+        return {
+            "result": "victory",
+            "combat_log": combat_log,
+            "territory": serialize_doc(await db.territories.find_one({"id": territory["id"]})),
+            "rewards": {"xp": 75, "reputation": 15},
+        }
+    else:
+        combat_log.append(f"💀 Defeated! {owner['name']} defended {territory['name']}.")
+        await db.players.update_one(
+            {"id": challenger["id"]},
+            {"$set": {"stats.health": max(1, challenger_hp)}, "$inc": {"losses": 1}}
+        )
+        return {
+            "result": "defeat",
+            "combat_log": combat_log,
+            "territory": serialize_doc(await db.territories.find_one({"id": territory["id"]})),
+        }
+
+@api_router.post("/territories/{territory_id}/collect-income")
+async def collect_territory_income(territory_id: str, player_id: str):
+    """Collect passive income from an owned territory"""
+    territory = await db.territories.find_one({"id": territory_id})
+    if not territory:
+        raise HTTPException(status_code=404, detail="Territory not found")
+    if territory.get("owner_id") != player_id:
+        raise HTTPException(status_code=403, detail="You don't own this territory")
+    
+    last = territory.get("last_income_collected")
+    now = datetime.utcnow()
+    if last:
+        last_dt = datetime.fromisoformat(last)
+        elapsed_minutes = (now - last_dt).total_seconds() / 60
+        if elapsed_minutes < 5:
+            remaining = 5 - elapsed_minutes
+            raise HTTPException(status_code=400, detail=f"Income available in {int(remaining)+1} minutes")
+    
+    income = territory["rewards"]["passive_income"]
+    await db.players.update_one({"id": player_id}, {"$inc": {"cash": income}})
+    await db.territories.update_one(
+        {"id": territory_id},
+        {"$set": {"last_income_collected": now.isoformat()}}
+    )
+    
+    return {"message": f"Collected ${income} from {territory['name']}!", "income": income}
+
+@api_router.get("/territories/owned/{player_id}")
+async def get_owned_territories(player_id: str):
+    """Get all territories owned by a player"""
+    territories = await db.territories.find({"owner_id": player_id}).to_list(length=50)
+    return [serialize_doc(t) for t in territories]
 
 # Include the router in the main app
 app.include_router(api_router)

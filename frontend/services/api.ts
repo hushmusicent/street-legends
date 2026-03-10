@@ -196,6 +196,27 @@ export const buyConsumable = async (playerId: string, itemId: string): Promise<a
   return response.data;
 };
 
+// Territory APIs
+export const getNearbyTerritories = async (lat: number, lng: number, playerLevel: number = 1): Promise<any[]> => {
+  const response = await api.get(`/territories/nearby?latitude=${lat}&longitude=${lng}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const captureTerritory = async (territoryId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/territories/${territoryId}/capture?player_id=${playerId}`);
+  return response.data;
+};
+
+export const collectTerritoryIncome = async (territoryId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/territories/${territoryId}/collect-income?player_id=${playerId}`);
+  return response.data;
+};
+
+export const getOwnedTerritories = async (playerId: string): Promise<any[]> => {
+  const response = await api.get(`/territories/owned/${playerId}`);
+  return response.data;
+};
+
 // Chat APIs
 export const sendChatMessage = async (channel: string, playerId: string, message: string): Promise<ChatMessage> => {
   const response = await api.post(`/chat?channel=${channel}&player_id=${playerId}&message=${encodeURIComponent(message)}`);

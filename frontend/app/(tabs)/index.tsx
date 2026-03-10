@@ -7,6 +7,8 @@ import {
   Alert,
   TouchableOpacity,
   ScrollView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -22,6 +24,9 @@ import {
   startBattle,
   spawnShops,
   getProfilePic,
+  getNearbyTerritories,
+  captureTerritory,
+  collectTerritoryIncome,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -62,6 +67,10 @@ export default function MapScreen() {
   const [isTracking, setIsTracking] = useState(false);
   const [heading, setHeading] = useState<number>(0);
   const [nearbyShops, setNearbyShops] = useState<any[]>([]);
+  const [territories, setTerritories] = useState<any[]>([]);
+  const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
+  const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
+  const [territoryFighting, setTerritoryFighting] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -223,19 +232,22 @@ export default function MapScreen() {
         generateMissions(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyPlayers(playerId, 500),
         spawnShops(currentPosition.latitude, currentPosition.longitude, player.level),
+        getNearbyTerritories(currentPosition.latitude, currentPosition.longitude, player.level),
       ]);
 
       const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
       const missions = results[1].status === 'fulfilled' ? results[1].value : [];
       const players = results[2].status === 'fulfilled' ? results[2].value : [];
       const shops = results[3].status === 'fulfilled' ? results[3].value : [];
+      const terrs = results[4].status === 'fulfilled' ? results[4].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
       setNearbyPlayers(players);
       setNearbyShops(shops);
+      setTerritories(terrs);
       
-      entitiesCache.current = { time: now, data: { monsters, missions, players, shops } };
+      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
@@ -248,6 +260,63 @@ export default function MapScreen() {
     await loadNearbyEntities();
     setRefreshing(false);
   }, [loadNearbyEntities]);
+
+  // Build territory data for the map
+  const mapTerritories = useMemo(() => {
+    return territories.map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      location: { latitude: t.location?.latitude || 0, longitude: t.location?.longitude || 0 },
+      radius: t.radius || 100,
+      color: t.color || '#e74c3c',
+      owner_id: t.owner_id || null,
+      owner_name: t.owner_name || null,
+    }));
+  }, [territories]);
+
+  const handleTerritoryPress = useCallback((territory: any) => {
+    // Find full territory data
+    const fullTerritory = territories.find((t: any) => t.id === territory.id);
+    if (fullTerritory) {
+      setSelectedTerritory(fullTerritory);
+      setTerritoryBattleLog([]);
+    }
+  }, [territories]);
+
+  const handleTerritoryCapture = useCallback(async () => {
+    if (!playerId || !selectedTerritory) return;
+    try {
+      setTerritoryFighting(true);
+      const result = await captureTerritory(selectedTerritory.id, playerId);
+      setTerritoryBattleLog(result.combat_log || []);
+      
+      // Update territories list with new ownership
+      if (result.territory) {
+        setTerritories(prev => prev.map((t: any) => t.id === result.territory.id ? result.territory : t));
+        setSelectedTerritory(result.territory);
+      }
+      
+      // Refresh player data
+      const updatedPlayer = await getPlayer(playerId);
+      setPlayer(updatedPlayer);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to challenge territory');
+    } finally {
+      setTerritoryFighting(false);
+    }
+  }, [playerId, selectedTerritory]);
+
+  const handleCollectIncome = useCallback(async () => {
+    if (!playerId || !selectedTerritory) return;
+    try {
+      const result = await collectTerritoryIncome(selectedTerritory.id, playerId);
+      Alert.alert('Income Collected!', result.message);
+      const updatedPlayer = await getPlayer(playerId);
+      setPlayer(updatedPlayer);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to collect income');
+    }
+  }, [playerId, selectedTerritory]);
 
   const handleStartBattle = useCallback(async (monster: Monster) => {
     if (!playerId) return;
@@ -342,7 +411,9 @@ export default function MapScreen() {
           markers={mapMarkers}
           heading={heading}
           playerAvatar={globalProfilePic}
+          territories={mapTerritories}
           onMarkerPress={handleMarkerPress}
+          onTerritoryPress={handleTerritoryPress}
         />
       )}
 
@@ -509,6 +580,110 @@ export default function MapScreen() {
           )}
         </View>
       )}
+
+      {/* Territory Modal */}
+      <Modal
+        visible={!!selectedTerritory}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setSelectedTerritory(null); setTerritoryBattleLog([]); }}
+      >
+        <Pressable style={styles.terrOverlay} onPress={() => { setSelectedTerritory(null); setTerritoryBattleLog([]); }}>
+          <Pressable style={styles.terrModal} onPress={() => {}}>
+            {selectedTerritory && (
+              <>
+                {/* Header */}
+                <View style={[styles.terrHeader, { borderLeftColor: selectedTerritory.color || '#e74c3c' }]}>
+                  <View style={styles.terrHeaderLeft}>
+                    <Text style={styles.terrIcon}>{selectedTerritory.owner_id ? '👑' : '⚔️'}</Text>
+                    <View>
+                      <Text style={styles.terrTitle}>{selectedTerritory.name}</Text>
+                      <Text style={styles.terrOwner}>
+                        {selectedTerritory.owner_id === playerId ? 'Owned by YOU'
+                          : selectedTerritory.owner_id ? `Owned by ${selectedTerritory.owner_name}`
+                          : 'Unclaimed Territory'}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity onPress={() => { setSelectedTerritory(null); setTerritoryBattleLog([]); }}>
+                    <Ionicons name="close-circle" size={28} color="#555" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Info */}
+                <View style={styles.terrInfoRow}>
+                  <View style={styles.terrInfoBox}>
+                    <Ionicons name="cash" size={16} color="#f39c12" />
+                    <Text style={styles.terrInfoLabel}>Income</Text>
+                    <Text style={styles.terrInfoValue}>${selectedTerritory.rewards?.passive_income || 0}/5min</Text>
+                  </View>
+                  <View style={styles.terrInfoBox}>
+                    <Ionicons name="shield" size={16} color="#3498db" />
+                    <Text style={styles.terrInfoLabel}>Boosts</Text>
+                    <Text style={styles.terrInfoValue}>
+                      +{selectedTerritory.rewards?.stat_boosts?.attack || 0} ATK, +{selectedTerritory.rewards?.stat_boosts?.defense || 0} DEF
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Boss info (if unclaimed) */}
+                {!selectedTerritory.owner_id && selectedTerritory.boss && (
+                  <View style={styles.terrBossRow}>
+                    <Ionicons name="skull" size={16} color="#e74c3c" />
+                    <Text style={styles.terrBossText}>
+                      Boss: {selectedTerritory.boss.name} (Lv.{selectedTerritory.boss.level}) — HP: {selectedTerritory.boss.health} / ATK: {selectedTerritory.boss.attack}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Battle Log */}
+                {territoryBattleLog.length > 0 && (
+                  <ScrollView style={styles.terrBattleLog}>
+                    {territoryBattleLog.map((line, idx) => (
+                      <Text key={idx} style={[
+                        styles.terrLogLine,
+                        line.includes('Victory') && styles.terrLogVictory,
+                        line.includes('Defeated') && styles.terrLogDefeat,
+                        line.includes('CRITICAL') && styles.terrLogCrit,
+                      ]}>{line}</Text>
+                    ))}
+                  </ScrollView>
+                )}
+
+                {/* Actions */}
+                <View style={styles.terrActions}>
+                  {selectedTerritory.owner_id === playerId ? (
+                    <TouchableOpacity
+                      style={[styles.terrBtn, { backgroundColor: '#f39c12' }]}
+                      onPress={handleCollectIncome}
+                    >
+                      <Ionicons name="cash" size={18} color="#fff" />
+                      <Text style={styles.terrBtnText}>COLLECT INCOME</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.terrBtn, { backgroundColor: '#e74c3c' }]}
+                      onPress={handleTerritoryCapture}
+                      disabled={territoryFighting}
+                    >
+                      {territoryFighting ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="flash" size={18} color="#fff" />
+                          <Text style={styles.terrBtnText}>
+                            {selectedTerritory.owner_id ? 'CHALLENGE OWNER' : 'FIGHT BOSS'}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -550,4 +725,27 @@ const styles = StyleSheet.create({
   rewardText: { color: '#202124', marginLeft: 4, fontWeight: '600', fontSize: 13 },
   actionButton: { backgroundColor: '#EA4335', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8 },
   actionButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  // Territory Modal
+  terrOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  terrModal: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '75%' },
+  terrHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 4, paddingLeft: 12, marginBottom: 16 },
+  terrHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  terrIcon: { fontSize: 28 },
+  terrTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  terrOwner: { color: '#888', fontSize: 12, marginTop: 2 },
+  terrInfoRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  terrInfoBox: { flex: 1, backgroundColor: '#222', borderRadius: 12, padding: 12, alignItems: 'center', gap: 4 },
+  terrInfoLabel: { color: '#888', fontSize: 10, fontWeight: '700' },
+  terrInfoValue: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  terrBossRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(231,76,60,0.1)', padding: 10, borderRadius: 10, marginBottom: 12 },
+  terrBossText: { color: '#e74c3c', fontSize: 12, fontWeight: '600', flex: 1 },
+  terrBattleLog: { maxHeight: 180, backgroundColor: '#111', borderRadius: 10, padding: 10, marginBottom: 12 },
+  terrLogLine: { color: '#aaa', fontSize: 11, marginBottom: 3, fontFamily: 'monospace' },
+  terrLogVictory: { color: '#4caf50', fontWeight: '700' },
+  terrLogDefeat: { color: '#e74c3c', fontWeight: '700' },
+  terrLogCrit: { color: '#f39c12' },
+  terrActions: { marginTop: 4 },
+  terrBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
+  terrBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 1 },
 });

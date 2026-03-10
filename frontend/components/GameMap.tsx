@@ -23,12 +23,24 @@ interface MapMarker {
   name?: string;
 }
 
+interface MapTerritory {
+  id: string;
+  name: string;
+  location: Position;
+  radius: number;
+  color: string;
+  owner_id: string | null;
+  owner_name: string | null;
+}
+
 interface GameMapProps {
   center: Position;
   markers: MapMarker[];
   heading?: number;
   playerAvatar?: string | null;
+  territories?: MapTerritory[];
   onMarkerPress?: (marker: MapMarker) => void;
+  onTerritoryPress?: (territory: MapTerritory) => void;
 }
 
 const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
@@ -161,6 +173,48 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
       }
     };
 
+    // API: Update territories (circles on map)
+    var territoryLayers = [];
+    window.updateTerritories = function(territories) {
+      // Remove old territory layers
+      territoryLayers.forEach(function(layer) { map.removeLayer(layer); });
+      territoryLayers = [];
+      
+      territories.forEach(function(t) {
+        var color = t.color || '#e74c3c';
+        var isOwned = !!t.owner_id;
+        
+        // Circle zone
+        var circle = L.circle([t.location.latitude, t.location.longitude], {
+          radius: t.radius,
+          color: color,
+          fillColor: color,
+          fillOpacity: isOwned ? 0.35 : 0.2,
+          weight: 3,
+          dashArray: isOwned ? null : '8, 10',
+        });
+        circle.on('click', function() {
+          sendMessage({ type: 'territory', id: t.id });
+        });
+        circle.addTo(map);
+        territoryLayers.push(circle);
+        
+        // Territory label marker
+        var labelIcon = L.divIcon({
+          className: 'territory-label',
+          html: '<div style="background:' + color + '; color:#fff; padding:4px 10px; border-radius:10px; font-size:12px; font-weight:800; white-space:nowrap; text-align:center; opacity:0.95; border:2px solid rgba(255,255,255,0.4); pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.4);">' + (isOwned ? '👑 ' : '⚔️ ') + t.name + '</div>',
+          iconSize: [0, 0],
+          iconAnchor: [0, -5],
+        });
+        var label = L.marker([t.location.latitude, t.location.longitude], { icon: labelIcon, interactive: true });
+        label.on('click', function() {
+          sendMessage({ type: 'territory', id: t.id });
+        });
+        label.addTo(map);
+        territoryLayers.push(label);
+      });
+    };
+
     // API: Center on player
     window.centerOnPlayer = function() {
       isFollowing = true;
@@ -221,6 +275,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
         else if (data.type === 'centerOnPlayer') window.centerOnPlayer();
         else if (data.type === 'updateMarkers') window.updateMarkers(data.markers);
         else if (data.type === 'updatePlayerAvatar') window.updatePlayerAvatar(data.avatarUrl);
+        else if (data.type === 'updateTerritories') window.updateTerritories(data.territories);
       } catch(e) {}
     });
 
@@ -232,14 +287,18 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
   `;
 };
 
-export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, playerAvatar, onMarkerPress }) => {
+export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, playerAvatar, territories = [], onMarkerPress, onTerritoryPress }) => {
   const webViewRef = useRef<any>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const markersRef = useRef<MapMarker[]>([]);
   const onMarkerPressRef = useRef(onMarkerPress);
+  const onTerritoryPressRef = useRef(onTerritoryPress);
+  const territoriesRef = useRef(territories);
   onMarkerPressRef.current = onMarkerPress;
+  onTerritoryPressRef.current = onTerritoryPress;
   markersRef.current = markers;
+  territoriesRef.current = territories;
 
   // Generate HTML only ONCE with initial position - never regenerate
   const initialCenter = useRef(center);
@@ -278,7 +337,6 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
   // --- Update player avatar ---
   useEffect(() => {
     if (!mapReady || !playerAvatar) return;
-    // Escape any quotes in the base64 data URL
     const safeUrl = playerAvatar.replace(/'/g, "\\'").replace(/"/g, '\\"');
     if (Platform.OS !== 'web' && webViewRef.current) {
       webViewRef.current.injectJavaScript(`window.updatePlayerAvatar('${safeUrl}'); true;`);
@@ -288,6 +346,19 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
       );
     }
   }, [playerAvatar, mapReady]);
+
+  // --- Update territories ---
+  useEffect(() => {
+    if (!mapReady || !territories || territories.length === 0) return;
+    const terrData = JSON.stringify(territories);
+    if (Platform.OS !== 'web' && webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.updateTerritories(${terrData}); true;`);
+    } else if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ type: 'updateTerritories', territories }), '*'
+      );
+    }
+  }, [territories, mapReady]);
 
   // --- Update markers via JS injection (not HTML regen!) ---
   useEffect(() => {
@@ -306,12 +377,27 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
 
     if (Platform.OS !== 'web' && mapReady && webViewRef.current) {
       webViewRef.current.injectJavaScript(`window.updateMarkers('${escaped}'); true;`);
+      // Also send territories
+      if (territories.length > 0) {
+        const terrData = JSON.stringify(territories);
+        webViewRef.current.injectJavaScript(`window.updateTerritories(${terrData}); true;`);
+      }
     } else if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
         JSON.stringify({ type: 'updateMarkers', markers: markersPayload }), '*'
       );
+      // Send territories with a small delay to avoid message collision
+      if (territories.length > 0) {
+        setTimeout(() => {
+          try {
+            if (iframeRef.current?.contentWindow && (iframeRef.current.contentWindow as any).updateTerritories) {
+              (iframeRef.current.contentWindow as any).updateTerritories(territories);
+            }
+          } catch (e) { console.log('Territory update error:', e); }
+        }, 500);
+      }
     }
-  }, [markers, mapReady]);
+  }, [markers, territories, mapReady]);
 
   // --- Handle messages from map ---
   const handleMapMessage = useCallback((msgData: string) => {
@@ -322,6 +408,9 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
       } else if (data.type === 'marker' && onMarkerPressRef.current) {
         const marker = markersRef.current.find(m => m.id === data.id);
         if (marker) onMarkerPressRef.current(marker);
+      } else if (data.type === 'territory' && onTerritoryPressRef.current) {
+        const territory = territoriesRef.current.find(t => t.id === data.id);
+        if (territory) onTerritoryPressRef.current(territory);
       }
     } catch {}
   }, []);
