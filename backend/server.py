@@ -266,95 +266,95 @@ CONSUMABLE_ITEMS = {
         "id": "health_syringe", "name": "Health Syringe", "category": "health_recharge",
         "description": "Quick street med. Restores 30 HP.",
         "icon": "medkit", "rarity": "common",
-        "effect": {"restore_health": 30}, "price": 17, "level_requirement": 1,
+        "effect": {"restore_health": 30}, "price": 26, "level_requirement": 1,
     },
     "med_kit": {
         "id": "med_kit", "name": "Med Kit", "category": "health_recharge",
         "description": "Military first aid. Restores 75 HP.",
         "icon": "medkit", "rarity": "uncommon",
-        "effect": {"restore_health": 75}, "price": 40, "level_requirement": 3,
+        "effect": {"restore_health": 75}, "price": 60, "level_requirement": 3,
     },
     "full_heal_pack": {
         "id": "full_heal_pack", "name": "Full Heal Pack", "category": "health_recharge",
         "description": "Top-shelf trauma kit. Restores ALL health.",
         "icon": "medkit", "rarity": "rare",
-        "effect": {"restore_health_full": True}, "price": 92, "level_requirement": 5,
+        "effect": {"restore_health_full": True}, "price": 138, "level_requirement": 5,
     },
     # --- Energy Recharges ---
     "energy_drink": {
         "id": "energy_drink", "name": "Energy Drink", "category": "energy_recharge",
         "description": "Cheap caffeine hit. Restores 25 Energy.",
         "icon": "battery-charging", "rarity": "common",
-        "effect": {"restore_energy": 25}, "price": 14, "level_requirement": 1,
+        "effect": {"restore_energy": 25}, "price": 21, "level_requirement": 1,
     },
     "adrenaline_shot": {
         "id": "adrenaline_shot", "name": "Adrenaline Shot", "category": "energy_recharge",
         "description": "Pure adrenaline rush. Restores 60 Energy.",
         "icon": "battery-charging", "rarity": "uncommon",
-        "effect": {"restore_energy": 60}, "price": 35, "level_requirement": 3,
+        "effect": {"restore_energy": 60}, "price": 53, "level_requirement": 3,
     },
     "full_energy_cell": {
         "id": "full_energy_cell", "name": "Full Energy Cell", "category": "energy_recharge",
         "description": "Military-grade stimulant. Restores ALL energy.",
         "icon": "battery-charging", "rarity": "rare",
-        "effect": {"restore_energy_full": True}, "price": 81, "level_requirement": 5,
+        "effect": {"restore_energy_full": True}, "price": 122, "level_requirement": 5,
     },
     # --- Combo Packs ---
     "street_rations": {
         "id": "street_rations", "name": "Street Rations", "category": "combo",
         "description": "Food & drink combo. Restores 20 HP and 20 Energy.",
         "icon": "fast-food", "rarity": "common",
-        "effect": {"restore_health": 20, "restore_energy": 20}, "price": 23, "level_requirement": 1,
+        "effect": {"restore_health": 20, "restore_energy": 20}, "price": 35, "level_requirement": 1,
     },
     "combat_stim": {
         "id": "combat_stim", "name": "Combat Stimulant", "category": "combo",
         "description": "Black market stim. Restores 50 HP and 50 Energy.",
         "icon": "fast-food", "rarity": "rare",
-        "effect": {"restore_health": 50, "restore_energy": 50}, "price": 86, "level_requirement": 5,
+        "effect": {"restore_health": 50, "restore_energy": 50}, "price": 129, "level_requirement": 5,
     },
     "full_recovery_kit": {
         "id": "full_recovery_kit", "name": "Full Recovery Kit", "category": "combo",
         "description": "The ultimate package. Fully restores HP and Energy.",
         "icon": "fast-food", "rarity": "epic",
-        "effect": {"restore_health_full": True, "restore_energy_full": True}, "price": 173, "level_requirement": 8,
+        "effect": {"restore_health_full": True, "restore_energy_full": True}, "price": 260, "level_requirement": 8,
     },
     # --- Special: Extra Max Health (TEMPORARY) ---
     "heart_implant_mk1": {
         "id": "heart_implant_mk1", "name": "Heart Implant Mk1", "category": "extra_health",
         "description": "Cybernetic heart boost. +10 Max HP for 5 battles.",
         "icon": "heart", "rarity": "rare",
-        "effect": {"temp_max_health": 10, "duration_battles": 5}, "price": 92, "level_requirement": 5,
+        "effect": {"temp_max_health": 10, "duration_battles": 5}, "price": 138, "level_requirement": 5,
     },
     "heart_implant_mk2": {
         "id": "heart_implant_mk2", "name": "Heart Implant Mk2", "category": "extra_health",
         "description": "Advanced cyber-heart. +25 Max HP for 5 battles.",
         "icon": "heart", "rarity": "epic",
-        "effect": {"temp_max_health": 25, "duration_battles": 5}, "price": 184, "level_requirement": 8,
+        "effect": {"temp_max_health": 25, "duration_battles": 5}, "price": 276, "level_requirement": 8,
     },
     "heart_implant_mk3": {
         "id": "heart_implant_mk3", "name": "Heart Implant Mk3", "category": "extra_health",
         "description": "Legendary bio-mod. +50 Max HP for 5 battles.",
         "icon": "heart", "rarity": "legendary",
-        "effect": {"temp_max_health": 50, "duration_battles": 5}, "price": 368, "level_requirement": 12,
+        "effect": {"temp_max_health": 50, "duration_battles": 5}, "price": 552, "level_requirement": 12,
     },
     # --- Special: Extra Max Energy (TEMPORARY) ---
     "neural_booster_mk1": {
         "id": "neural_booster_mk1", "name": "Neural Booster Mk1", "category": "extra_energy",
         "description": "Brain chip boost. +10 Max Energy for 5 battles.",
         "icon": "flash", "rarity": "rare",
-        "effect": {"temp_max_energy": 10, "duration_battles": 5}, "price": 86, "level_requirement": 5,
+        "effect": {"temp_max_energy": 10, "duration_battles": 5}, "price": 129, "level_requirement": 5,
     },
     "neural_booster_mk2": {
         "id": "neural_booster_mk2", "name": "Neural Booster Mk2", "category": "extra_energy",
         "description": "Advanced neural link. +25 Max Energy for 5 battles.",
         "icon": "flash", "rarity": "epic",
-        "effect": {"temp_max_energy": 25, "duration_battles": 5}, "price": 173, "level_requirement": 8,
+        "effect": {"temp_max_energy": 25, "duration_battles": 5}, "price": 260, "level_requirement": 8,
     },
     "neural_booster_mk3": {
         "id": "neural_booster_mk3", "name": "Neural Booster Mk3", "category": "extra_energy",
         "description": "Legendary neuro-mod. +50 Max Energy for 5 battles.",
         "icon": "flash", "rarity": "legendary",
-        "effect": {"temp_max_energy": 50, "duration_battles": 5}, "price": 345, "level_requirement": 12,
+        "effect": {"temp_max_energy": 50, "duration_battles": 5}, "price": 518, "level_requirement": 12,
     },
 }
 
@@ -844,7 +844,7 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
         offset_lon = random.uniform(-0.003, 0.003)
         
         monster_level = max(1, player_level + random.randint(-2, 2))
-        base_stats = {"health": 58 + monster_level * 12, "attack": 6 + monster_level * 2, "defense": 4 + int(monster_level * 1.15)}
+        base_stats = {"health": 78 + monster_level * 16, "attack": 8 + monster_level * 3, "defense": 5 + int(monster_level * 1.55)}
         
         # Generate AI description
         description = await generate_ai_content("monster", {
