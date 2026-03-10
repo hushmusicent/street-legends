@@ -1705,8 +1705,8 @@ async def get_player_buffs(player_id: str):
 # ============== TERRITORY ENDPOINTS ==============
 
 def generate_territories_for_location(lat: float, lng: float, player_level: int = 1):
-    """Generate 3-5 territories deterministically for a given area"""
-    # Grid-snap to ~0.005 degree (~500m) so territories are stable per area
+    """Generate 3-5 non-overlapping territories for a given area, cash-only daily rewards"""
+    import math
     grid_lat = round(lat / 0.005) * 0.005
     grid_lng = round(lng / 0.005) * 0.005
     seed = int(abs(grid_lat * 1000000 + grid_lng * 1000000)) % 2147483647
@@ -1714,17 +1714,46 @@ def generate_territories_for_location(lat: float, lng: float, player_level: int 
     
     count = rng.randint(3, 5)
     territories = []
+    placed = []  # list of (lat, lng, radius_deg) for overlap checking
+    
+    # 1 degree latitude ≈ 111,000 m, 1 degree longitude ≈ 85,000 m (at ~40° lat)
+    LAT_M = 111000.0
+    LNG_M = 85000.0
+    
+    def overlaps(t_lat, t_lng, t_radius_m):
+        """Check if a new territory overlaps any existing one"""
+        for (p_lat, p_lng, p_radius_m) in placed:
+            dist_m = math.sqrt(((t_lat - p_lat) * LAT_M) ** 2 + ((t_lng - p_lng) * LNG_M) ** 2)
+            min_gap = t_radius_m + p_radius_m + 50  # 50m buffer between territories
+            if dist_m < min_gap:
+                return True
+        return False
+    
+    # Place territories in a spread pattern around grid center
+    angles = [rng.uniform(0, 2 * math.pi)]
+    for _ in range(count - 1):
+        angles.append(angles[-1] + (2 * math.pi / count) + rng.uniform(-0.3, 0.3))
     
     for i in range(count):
         idx = (seed + i) % len(TERRITORY_NAMES)
         boss_idx = (seed + i) % len(TERRITORY_BOSS_NAMES)
         color_idx = (seed + i) % len(TERRITORY_COLORS)
         
-        # Spread territories within ~100-300m of grid center
-        offset_lat = rng.uniform(-0.002, 0.002)
-        offset_lng = rng.uniform(-0.002, 0.002)
-        t_lat = grid_lat + offset_lat
-        t_lng = grid_lng + offset_lng
+        radius_m = rng.randint(150, 250)
+        
+        # Place using angular spread to avoid overlaps
+        for attempt in range(10):
+            dist = rng.uniform(0.001, 0.003)  # ~110-330m from center
+            if attempt > 0:
+                dist += attempt * 0.0005  # push further out on retries
+            angle = angles[i] if i < len(angles) else rng.uniform(0, 2 * math.pi)
+            t_lat = grid_lat + dist * math.sin(angle)
+            t_lng = grid_lng + dist * math.cos(angle)
+            
+            if not overlaps(t_lat, t_lng, radius_m):
+                break
+        
+        placed.append((t_lat, t_lng, radius_m))
         
         # Boss scales with zone difficulty
         zone_level = max(1, player_level + rng.randint(-2, 3))
@@ -1732,17 +1761,15 @@ def generate_territories_for_location(lat: float, lng: float, player_level: int 
         boss_atk = 8 + zone_level * 3
         boss_def = 5 + zone_level * 2
         
-        # Territory benefits
-        passive_income = 5 + zone_level * 2  # cash per collection
-        atk_boost = 1 + (zone_level // 3)
-        def_boost = 1 + (zone_level // 4)
+        # Daily cash reward only
+        daily_income = 20 + zone_level * 10
         
         territory_id = f"territory_{grid_lat:.3f}_{grid_lng:.3f}_{i}"
         territories.append({
             "id": territory_id,
             "name": TERRITORY_NAMES[idx],
-            "location": {"latitude": t_lat, "longitude": t_lng},
-            "radius": rng.randint(200, 350),  # meters display radius
+            "location": {"latitude": round(t_lat, 6), "longitude": round(t_lng, 6)},
+            "radius": radius_m,
             "color": TERRITORY_COLORS[color_idx],
             "boss": {
                 "name": TERRITORY_BOSS_NAMES[boss_idx],
@@ -1753,8 +1780,7 @@ def generate_territories_for_location(lat: float, lng: float, player_level: int 
                 "defense": boss_def,
             },
             "rewards": {
-                "passive_income": passive_income,
-                "stat_boosts": {"attack": atk_boost, "defense": def_boost},
+                "passive_income": daily_income,
             },
             "owner_id": None,
             "owner_name": None,
@@ -1971,10 +1997,11 @@ async def collect_territory_income(territory_id: str, player_id: str):
     now = datetime.utcnow()
     if last:
         last_dt = datetime.fromisoformat(last)
-        elapsed_minutes = (now - last_dt).total_seconds() / 60
-        if elapsed_minutes < 5:
-            remaining = 5 - elapsed_minutes
-            raise HTTPException(status_code=400, detail=f"Income available in {int(remaining)+1} minutes")
+        elapsed_hours = (now - last_dt).total_seconds() / 3600
+        if elapsed_hours < 24:
+            remaining_h = int(24 - elapsed_hours)
+            remaining_m = int(((24 - elapsed_hours) - remaining_h) * 60)
+            raise HTTPException(status_code=400, detail=f"Income available in {remaining_h}h {remaining_m}m")
     
     income = territory["rewards"]["passive_income"]
     await db.players.update_one({"id": player_id}, {"$inc": {"cash": income}})

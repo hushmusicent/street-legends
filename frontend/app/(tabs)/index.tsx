@@ -613,16 +613,9 @@ export default function MapScreen() {
                 {/* Info */}
                 <View style={styles.terrInfoRow}>
                   <View style={styles.terrInfoBox}>
-                    <Ionicons name="cash" size={16} color="#f39c12" />
-                    <Text style={styles.terrInfoLabel}>Income</Text>
-                    <Text style={styles.terrInfoValue}>${selectedTerritory.rewards?.passive_income || 0}/5min</Text>
-                  </View>
-                  <View style={styles.terrInfoBox}>
-                    <Ionicons name="shield" size={16} color="#3498db" />
-                    <Text style={styles.terrInfoLabel}>Boosts</Text>
-                    <Text style={styles.terrInfoValue}>
-                      +{selectedTerritory.rewards?.stat_boosts?.attack || 0} ATK, +{selectedTerritory.rewards?.stat_boosts?.defense || 0} DEF
-                    </Text>
+                    <Ionicons name="cash" size={20} color="#f39c12" />
+                    <Text style={styles.terrInfoLabel}>DAILY INCOME</Text>
+                    <Text style={styles.terrInfoValue}>${selectedTerritory.rewards?.passive_income || 0}/day</Text>
                   </View>
                 </View>
 
