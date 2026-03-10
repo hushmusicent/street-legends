@@ -201,17 +201,35 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
         circle.addTo(map);
         territoryLayers.push(circle);
         
-        // Territory label with owner pic
-        var picHtml = '';
+        // Owner profile picture marker (large, prominent)
         if (isOwned && ownerPic) {
-          picHtml = '<img src="' + ownerPic + '" style="width:20px;height:20px;border-radius:50%;border:2px solid #fff;object-fit:cover;margin-right:4px;vertical-align:middle;" />';
+          var picIcon = L.divIcon({
+            className: 'custom-marker',
+            html: '<div style="position:relative;width:44px;height:52px;">' +
+              '<div style="width:44px;height:44px;border-radius:50%;border:3px solid ' + color + ';box-shadow:0 2px 8px rgba(0,0,0,0.5);overflow:hidden;background:#222;cursor:pointer;">' +
+              '<img src="' + ownerPic.replace(/"/g, '&quot;') + '" style="width:100%;height:100%;object-fit:cover;display:block;" />' +
+              '</div>' +
+              '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid ' + color + ';"></div>' +
+              '</div>',
+            iconSize: [44, 52],
+            iconAnchor: [22, 52],
+          });
+          var picMarker = L.marker([t.location.latitude, t.location.longitude], { icon: picIcon, interactive: true, zIndexOffset: 500 });
+          picMarker.on('click', function() {
+            sendMessage({ type: 'territory', id: t.id });
+          });
+          picMarker.addTo(map);
+          territoryLayers.push(picMarker);
         }
-        var prefixIcon = isOwned ? (ownerPic ? '' : '👑 ') : '⚔️ ';
+        
+        // Territory name label (below the pic or standalone)
+        var prefixIcon = isOwned ? (ownerPic ? '' : '\\u{1F451} ') : '\\u{2694}\\u{FE0F} ';
+        var labelOffset = (isOwned && ownerPic) ? 20 : -5;
         var labelIcon = L.divIcon({
           className: 'territory-label',
-          html: '<div style="background:' + color + '; color:#fff; padding:4px 10px; border-radius:10px; font-size:12px; font-weight:800; white-space:nowrap; text-align:center; opacity:0.95; border:2px solid rgba(255,255,255,0.4); pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.4); display:flex; align-items:center;">' + picHtml + prefixIcon + t.name + '</div>',
+          html: '<div style="background:' + color + '; color:#fff; padding:3px 10px; border-radius:10px; font-size:11px; font-weight:800; white-space:nowrap; text-align:center; opacity:0.95; border:2px solid rgba(255,255,255,0.4); pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.4);">' + prefixIcon + t.name + '</div>',
           iconSize: [0, 0],
-          iconAnchor: [0, -5],
+          iconAnchor: [0, -labelOffset],
         });
         var label = L.marker([t.location.latitude, t.location.longitude], { icon: labelIcon, interactive: true });
         label.on('click', function() {

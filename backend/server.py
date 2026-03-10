@@ -760,6 +760,13 @@ async def upload_profile_pic(player_id: str, data: ProfilePicUpload):
         {"id": player_id},
         {"$set": {"profile_pic": data.image}}
     )
+    
+    # Also update profile pic on any territories this player owns
+    await db.territories.update_many(
+        {"owner_id": player_id},
+        {"$set": {"owner_pic": data.image}}
+    )
+    
     return {"message": "Profile picture updated"}
 
 @api_router.get("/players/{player_id}/profile-pic")
