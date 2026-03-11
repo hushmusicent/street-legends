@@ -1583,6 +1583,31 @@ async def accept_mission(mission_id: str, player_id: str):
     
     return {"message": f"Mission accepted: {mission['title']}", "mission_id": mission_id}
 
+@api_router.post("/missions/{mission_id}/cancel")
+async def cancel_mission(mission_id: str, player_id: str):
+    """Cancel/abandon an accepted mission"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    active = player.get("active_missions", [])
+    if mission_id not in active:
+        raise HTTPException(status_code=400, detail="Mission not in your active list")
+    
+    # Remove from player's active missions
+    active.remove(mission_id)
+    await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active}})
+    
+    # Remove player's progress from the mission
+    mission = await db.missions.find_one({"id": mission_id})
+    if mission:
+        pp = mission.get("player_progress", {})
+        if player_id in pp:
+            del pp[player_id]
+            await db.missions.update_one({"id": mission_id}, {"$set": {"player_progress": pp}})
+    
+    return {"message": "Mission cancelled"}
+
 @api_router.put("/missions/{mission_id}/progress")
 async def update_mission_progress(mission_id: str, player_id: str, progress: int):
     """Update progress on a mission goal for a specific player"""

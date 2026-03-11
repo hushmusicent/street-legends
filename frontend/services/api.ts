@@ -86,6 +86,11 @@ export const getActiveMissions = async (playerId: string): Promise<any[]> => {
   return response.data;
 };
 
+export const cancelMission = async (missionId: string, playerId: string): Promise<{ message: string }> => {
+  const response = await api.post(`/missions/${missionId}/cancel?player_id=${playerId}`);
+  return response.data;
+};
+
 // Guild APIs
 export const createGuild = async (name: string, tag: string, description: string, leaderId: string): Promise<Guild> => {
   const response = await api.post(`/guilds?leader_id=${leaderId}`, { name, tag, description });

@@ -7,12 +7,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
-import { getActiveMissions } from '../../services/api';
+import { getActiveMissions, cancelMission } from '../../services/api';
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   easy: '#27ae60',
@@ -64,6 +65,29 @@ export default function MissionsTrackerScreen() {
 
   const handleMissionTap = (missionId: string) => {
     router.push(`/mission/${missionId}`);
+  };
+
+  const handleCancel = (mission: any) => {
+    Alert.alert(
+      'Cancel Mission',
+      `Abandon "${mission.title}"? All progress will be lost.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel Mission',
+          style: 'destructive',
+          onPress: async () => {
+            if (!playerId) return;
+            try {
+              await cancelMission(mission.id, playerId);
+              setMissions((prev) => prev.filter((m) => m.id !== mission.id));
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.detail || 'Failed to cancel');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatTarget = (mission: any) => {
@@ -174,6 +198,7 @@ export default function MissionsTrackerScreen() {
                       key={mission.id}
                       mission={mission}
                       onPress={() => handleMissionTap(mission.id)}
+                      onCancel={() => handleCancel(mission)}
                       isReady
                     />
                   ))}
@@ -194,6 +219,7 @@ export default function MissionsTrackerScreen() {
                       key={mission.id}
                       mission={mission}
                       onPress={() => handleMissionTap(mission.id)}
+                      onCancel={() => handleCancel(mission)}
                     />
                   ))}
               </View>
@@ -208,10 +234,12 @@ export default function MissionsTrackerScreen() {
 function MissionCard({
   mission,
   onPress,
+  onCancel,
   isReady = false,
 }: {
   mission: any;
   onPress: () => void;
+  onCancel: () => void;
   isReady?: boolean;
 }) {
   const progress = mission.goal_progress || 0;
@@ -290,27 +318,35 @@ function MissionCard({
       </View>
       <Text style={styles.cardProgressText}>{formatProgressText()}</Text>
 
-      {/* Rewards preview */}
-      <View style={styles.cardRewards}>
-        <View style={styles.cardRewardItem}>
-          <Ionicons name="cash" size={13} color="#f39c12" />
-          <Text style={styles.cardRewardText}>${mission.rewards?.cash}</Text>
-        </View>
-        <View style={styles.cardRewardItem}>
-          <Ionicons name="star" size={13} color="#3498db" />
-          <Text style={styles.cardRewardText}>{mission.rewards?.xp} XP</Text>
-        </View>
-        {mission.rewards?.reputation > 0 && (
+      {/* Rewards preview + Cancel */}
+      <View style={styles.cardBottom}>
+        <View style={styles.cardRewards}>
           <View style={styles.cardRewardItem}>
-            <Ionicons name="ribbon" size={13} color="#9b59b6" />
-            <Text style={styles.cardRewardText}>{mission.rewards.reputation} REP</Text>
+            <Ionicons name="cash" size={13} color="#f39c12" />
+            <Text style={styles.cardRewardText}>${mission.rewards?.cash}</Text>
           </View>
-        )}
-        {isReady && (
-          <View style={styles.claimHint}>
-            <Text style={styles.claimHintText}>TAP TO CLAIM</Text>
+          <View style={styles.cardRewardItem}>
+            <Ionicons name="star" size={13} color="#3498db" />
+            <Text style={styles.cardRewardText}>{mission.rewards?.xp} XP</Text>
           </View>
-        )}
+          {mission.rewards?.reputation > 0 && (
+            <View style={styles.cardRewardItem}>
+              <Ionicons name="ribbon" size={13} color="#9b59b6" />
+              <Text style={styles.cardRewardText}>{mission.rewards.reputation} REP</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.cardActions}>
+          {isReady && (
+            <View style={styles.claimHint}>
+              <Text style={styles.claimHintText}>TAP TO CLAIM</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
+            <Ionicons name="close-circle" size={14} color="#e74c3c" />
+            <Text style={styles.cancelBtnText}>CANCEL</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -524,6 +560,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  cardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   cardRewardItem: {
     flexDirection: 'row',
@@ -544,6 +591,23 @@ const styles = StyleSheet.create({
   },
   claimHintText: {
     color: '#4caf50',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(231, 76, 60, 0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(231, 76, 60, 0.25)',
+  },
+  cancelBtnText: {
+    color: '#e74c3c',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
