@@ -1,10 +1,63 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
+import { Audio } from 'expo-av';
 import { useGameStore } from '../stores/gameStore';
 import { getPlayer } from '../services/api';
 import { GameButton } from '../components/GameButton';
 import { Ionicons } from '@expo/vector-icons';
+
+export default function Index() {
+  const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
+  const [error, setError] = useState<string | null>(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    initializeApp();
+    startMusic();
+
+    return () => {
+      stopMusic();
+    };
+  }, []);
+
+  const startMusic = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+      const { sound } = await Audio.Sound.createAsync(
+        require('../assets/mob_ties.mp3'),
+        { isLooping: true, volume: 0.7, shouldPlay: true }
+      );
+      soundRef.current = sound;
+      setMusicPlaying(true);
+    } catch (e) {
+      console.log('Music load error:', e);
+    }
+  };
+
+  const stopMusic = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+        setMusicPlaying(false);
+      }
+    } catch (e) {
+      console.log('Music stop error:', e);
+    }
+  };
+
+  const handleNavigate = async (path: string) => {
+    await stopMusic();
+    router.push(path as any);
+  };
 
 export default function Index() {
   const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
@@ -24,6 +77,7 @@ export default function Index() {
           const playerData = await getPlayer(storedId);
           setPlayer(playerData);
           setPlayerId(storedId);
+          await stopMusic();
           router.replace('/(tabs)');
         } catch (err) {
           setPlayerId('');
@@ -80,7 +134,7 @@ export default function Index() {
       <View style={styles.footer}>
         <GameButton
           title="LOGIN"
-          onPress={() => router.push('/login')}
+          onPress={() => handleNavigate('/login')}
           variant="primary"
           icon="log-in"
           size="large"
@@ -88,12 +142,28 @@ export default function Index() {
         />
         <GameButton
           title="SIGN UP"
-          onPress={() => router.push('/create-character')}
+          onPress={() => handleNavigate('/create-character')}
           variant="secondary"
           icon="person-add"
           size="large"
           style={styles.signupButton}
         />
+        {musicPlaying && (
+          <TouchableOpacity style={styles.musicToggle} onPress={async () => {
+            if (soundRef.current) {
+              const status = await soundRef.current.getStatusAsync();
+              if (status.isLoaded && status.isPlaying) {
+                await soundRef.current.pauseAsync();
+                setMusicPlaying(false);
+              } else if (status.isLoaded) {
+                await soundRef.current.playAsync();
+                setMusicPlaying(true);
+              }
+            }
+          }}>
+            <Ionicons name={musicPlaying ? "volume-high" : "volume-mute"} size={20} color="#666" />
+          </TouchableOpacity>
+        )}
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
     </View>
@@ -185,6 +255,11 @@ const styles = StyleSheet.create({
   },
   signupButton: {
     width: '100%',
+  },
+  musicToggle: {
+    padding: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   errorText: {
     color: '#e74c3c',
