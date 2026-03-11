@@ -14,7 +14,8 @@
         "NSLocationWhenInUseUsageDescription": "Track your location to discover monsters and missions nearby",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Track your location to discover monsters and missions nearby",
         "NSCameraUsageDescription": "Take photos for your character profile",
-        "NSPhotoLibraryUsageDescription": "Choose a profile picture from your gallery"
+        "NSPhotoLibraryUsageDescription": "Choose a profile picture from your gallery",
+        "NSMotionUsageDescription": "Track your steps to earn fitness rewards"
       }
     },
     "android": {
@@ -27,7 +28,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
-        "READ_MEDIA_IMAGES"
+        "READ_MEDIA_IMAGES",
+        "ACTIVITY_RECOGNITION"
       ]
     },
     "web": {

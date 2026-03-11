@@ -2311,6 +2311,55 @@ async def get_nearby_territories(latitude: float, longitude: float, player_level
     all_terrs = await db.territories.find({"id": {"$in": territory_ids}}).to_list(length=25)
     return [serialize_doc(t) for t in all_terrs]
 
+
+@api_router.post("/territories/collect-income/{player_id}")
+async def collect_territory_income(player_id: str):
+    """Collect daily income from all owned territories"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    owned = await db.territories.find({"owner_id": player_id}).to_list(100)
+    if not owned:
+        return {"message": "You don't own any territories", "income": 0, "territories": 0}
+    
+    now = datetime.utcnow()
+    total_income = 0
+    territories_paid = 0
+    
+    for t in owned:
+        last_collected = t.get("last_income_collected")
+        if last_collected:
+            try:
+                last_dt = datetime.fromisoformat(last_collected)
+                hours_since = (now - last_dt).total_seconds() / 3600
+                if hours_since < 24:
+                    continue  # Not ready yet
+            except (ValueError, TypeError):
+                pass
+        
+        income = t.get("passive_income", 30)
+        total_income += income
+        territories_paid += 1
+        
+        await db.territories.update_one(
+            {"id": t["id"]},
+            {"$set": {"last_income_collected": now.isoformat()}}
+        )
+    
+    if total_income > 0:
+        await db.players.update_one(
+            {"id": player_id},
+            {"$inc": {"cash": total_income}}
+        )
+    
+    return {
+        "message": f"Collected ${total_income} from {territories_paid} territories!" if total_income > 0 else "No income ready to collect yet. Come back in 24 hours.",
+        "income": total_income,
+        "territories": territories_paid,
+    }
+
+
 @api_router.post("/territories/{territory_id}/capture")
 async def capture_territory(territory_id: str, player_id: str):
     """Fight the territory boss to capture an unclaimed territory"""
@@ -2370,7 +2419,10 @@ async def capture_territory(territory_id: str, player_id: str):
     won = boss_hp <= 0
     
     if won:
+        # Calculate capture bonus from territory income
+        capture_bonus = territory.get("passive_income", 30)
         combat_log.append(f"🏆 Victory! You defeated {boss['name']} and claimed {territory['name']}!")
+        combat_log.append(f"💰 Capture bonus: ${capture_bonus}")
         # Transfer ownership and change color
         owner_color = get_owner_color(player_id)
         await db.territories.update_one(
@@ -2383,16 +2435,16 @@ async def capture_territory(territory_id: str, player_id: str):
                 "last_income_collected": datetime.utcnow().isoformat(),
             }}
         )
-        # Update player stats
+        # Update player stats + give capture cash bonus
         await db.players.update_one(
             {"id": player_id},
-            {"$set": {"stats.health": max(1, player_hp)}, "$inc": {"xp": 50, "reputation": 10}}
+            {"$set": {"stats.health": max(1, player_hp)}, "$inc": {"xp": 50, "reputation": 10, "cash": capture_bonus}}
         )
         return {
             "result": "victory",
             "combat_log": combat_log,
             "territory": serialize_doc(await db.territories.find_one({"id": territory_id})),
-            "rewards": {"xp": 50, "reputation": 10},
+            "rewards": {"xp": 50, "reputation": 10, "cash": capture_bonus},
         }
     else:
         combat_log.append(f"💀 Defeated! {boss['name']} defended {territory['name']}.")

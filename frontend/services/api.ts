@@ -91,6 +91,11 @@ export const cancelMission = async (missionId: string, playerId: string): Promis
   return response.data;
 };
 
+export const collectTerritoryIncome = async (playerId: string): Promise<{ message: string; income: number; territories: number }> => {
+  const response = await api.post(`/territories/collect-income/${playerId}`);
+  return response.data;
+};
+
 // Guild APIs
 export const createGuild = async (name: string, tag: string, description: string, leaderId: string): Promise<Guild> => {
   const response = await api.post(`/guilds?leader_id=${leaderId}`, { name, tag, description });
@@ -216,11 +221,6 @@ export const getNearbyTerritories = async (lat: number, lng: number, playerLevel
 
 export const captureTerritory = async (territoryId: string, playerId: string): Promise<any> => {
   const response = await api.post(`/territories/${territoryId}/capture?player_id=${playerId}`);
-  return response.data;
-};
-
-export const collectTerritoryIncome = async (territoryId: string, playerId: string): Promise<any> => {
-  const response = await api.post(`/territories/${territoryId}/collect-income?player_id=${playerId}`);
   return response.data;
 };
 

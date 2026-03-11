@@ -31,6 +31,7 @@ import {
   getOwnedTerritories,
   deleteItem,
   sellItem,
+  collectTerritoryIncome,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -382,7 +383,7 @@ export default function CharacterScreen() {
         }
       >
         {activeTab === 'status' && (
-          <StatusTab player={player} classColor={classColor} territories={ownedTerritories} />
+          <StatusTab player={player} classColor={classColor} territories={ownedTerritories} playerId={playerId} />
         )}
         {activeTab === 'equipment' && (
           <EquipmentTab
@@ -456,8 +457,9 @@ export default function CharacterScreen() {
 }
 
 // ========== STATUS TAB ==========
-function StatusTab({ player, classColor, territories }: { player: any; classColor: string; territories: any[] }) {
+function StatusTab({ player, classColor, territories, playerId }: { player: any; classColor: string; territories: any[]; playerId: string }) {
   const totalIncome = territories.reduce((sum: number, t: any) => sum + (t.rewards?.passive_income || 0), 0);
+  const [collecting, setCollecting] = useState(false);
 
   return (
     <View>
@@ -523,8 +525,39 @@ function StatusTab({ player, classColor, territories }: { player: any; classColo
         ) : (
           <>
             <View style={styles.terrIncomeBar}>
-              <Ionicons name="trending-up" size={18} color="#4caf50" />
-              <Text style={styles.terrIncomeText}>Total Daily Income: ${totalIncome}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Ionicons name="trending-up" size={18} color="#4caf50" />
+                <Text style={styles.terrIncomeText}>Daily Income: ${totalIncome}</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.collectBtn, collecting && { opacity: 0.6 }]}
+                onPress={async () => {
+                  if (collecting || !playerId) return;
+                  setCollecting(true);
+                  try {
+                    const result = await collectTerritoryIncome(playerId);
+                    Alert.alert(
+                      result.income > 0 ? '💰 Income Collected!' : 'No Income Ready',
+                      result.message
+                    );
+                  } catch (err: any) {
+                    Alert.alert('Error', err?.response?.data?.detail || 'Failed to collect');
+                  } finally {
+                    setCollecting(false);
+                  }
+                }}
+                disabled={collecting}
+                activeOpacity={0.7}
+              >
+                {collecting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="wallet" size={14} color="#fff" />
+                    <Text style={styles.collectBtnText}>COLLECT</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
             {territories.map((t: any) => (
               <View key={t.id} style={[styles.terrCard, { borderLeftColor: t.color || classColor }]}>
@@ -1226,6 +1259,23 @@ const styles = StyleSheet.create({
     color: '#4caf50',
     fontSize: 14,
     fontWeight: '800',
+  },
+  collectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#4caf50',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 90,
+    justifyContent: 'center',
+  },
+  collectBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   terrCard: {
     flexDirection: 'row',
