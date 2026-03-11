@@ -26,6 +26,9 @@ interface GameState {
   // Profile pic (shared between character & map)
   profilePic: string | null;
   
+  // Audio
+  isMuted: boolean;
+  
   // Actions
   setPlayer: (player: Player) => void;
   setPlayerId: (id: string) => void;
@@ -40,6 +43,7 @@ interface GameState {
   setCurrentMission: (mission: Mission | null) => void;
   setPlayerGuild: (guild: Guild | null) => void;
   setProfilePic: (pic: string | null) => void;
+  setMuted: (muted: boolean) => void;
   clearPlayer: () => void;
   
   // Persistence
@@ -60,6 +64,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentMission: null,
   playerGuild: null,
   profilePic: null,
+  isMuted: false,
   
   // Actions
   setPlayer: (player) => set({ player }),
@@ -79,6 +84,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setCurrentMission: (mission) => set({ currentMission: mission }),
   setPlayerGuild: (guild) => set({ playerGuild: guild }),
   setProfilePic: (pic) => set({ profilePic: pic }),
+  setMuted: (muted) => set({ isMuted: muted }),
   
   clearPlayer: () => set({
     player: null,

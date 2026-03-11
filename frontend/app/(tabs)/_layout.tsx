@@ -1,10 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OptionsModal } from '../../components/OptionsModal';
+import { useGameStore } from '../../stores/gameStore';
 
 export default function TabLayout() {
+  const [optionsVisible, setOptionsVisible] = useState(false);
+  const { isMuted, setMuted } = useGameStore();
+  const insets = useSafeAreaInsets();
+
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -88,6 +96,25 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+
+      {/* Floating Gear Icon */}
+      <TouchableOpacity
+        style={[styles.gearButton, { top: insets.top + 8 }]}
+        onPress={() => setOptionsVisible(true)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="settings-sharp" size={20} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Options Modal */}
+      <OptionsModal
+        visible={optionsVisible}
+        onClose={() => setOptionsVisible(false)}
+        onToggleMute={() => setMuted(!isMuted)}
+        isMuted={isMuted}
+        showQuit={true}
+      />
+    </View>
   );
 }
 
@@ -107,5 +134,30 @@ const styles = StyleSheet.create({
   },
   tabIcon: {
     marginBottom: -4,
+  },
+  gearButton: {
+    position: 'absolute',
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(30, 30, 30, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    zIndex: 999,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 6,
+      },
+      default: {},
+    }),
   },
 });

@@ -6,11 +6,13 @@ import { useGameStore } from '../stores/gameStore';
 import { getPlayer } from '../services/api';
 import { GameButton } from '../components/GameButton';
 import { Ionicons } from '@expo/vector-icons';
+import { OptionsModal } from '../components/OptionsModal';
 
 export default function Index() {
-  const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
+  const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading, isMuted, setMuted } = useGameStore();
   const [error, setError] = useState<string | null>(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export default function Index() {
   }, []);
 
   const startMusic = async () => {
+    if (isMuted) return;
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -38,6 +41,22 @@ export default function Index() {
       setMusicPlaying(true);
     } catch (e) {
       console.log('Music load error:', e);
+    }
+  };
+
+  const toggleMute = async () => {
+    const newMuted = !isMuted;
+    setMuted(newMuted);
+    if (soundRef.current) {
+      if (newMuted) {
+        await soundRef.current.pauseAsync();
+        setMusicPlaying(false);
+      } else {
+        await soundRef.current.playAsync();
+        setMusicPlaying(true);
+      }
+    } else if (!newMuted) {
+      await startMusic();
     }
   };
 
@@ -140,24 +159,20 @@ export default function Index() {
           size="large"
           style={styles.signupButton}
         />
-        {musicPlaying && (
-          <TouchableOpacity style={styles.musicToggle} onPress={async () => {
-            if (soundRef.current) {
-              const status = await soundRef.current.getStatusAsync();
-              if (status.isLoaded && status.isPlaying) {
-                await soundRef.current.pauseAsync();
-                setMusicPlaying(false);
-              } else if (status.isLoaded) {
-                await soundRef.current.playAsync();
-                setMusicPlaying(true);
-              }
-            }
-          }}>
-            <Ionicons name={musicPlaying ? "volume-high" : "volume-mute"} size={20} color="#666" />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.optionsBtn} onPress={() => setShowOptions(true)} activeOpacity={0.7}>
+          <Ionicons name="settings-sharp" size={22} color="#888" />
+          <Text style={styles.optionsBtnText}>OPTIONS</Text>
+        </TouchableOpacity>
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
+
+      <OptionsModal
+        visible={showOptions}
+        onClose={() => setShowOptions(false)}
+        onToggleMute={toggleMute}
+        isMuted={isMuted}
+        showQuit={false}
+      />
     </View>
   );
 }
@@ -248,10 +263,22 @@ const styles = StyleSheet.create({
   signupButton: {
     width: '100%',
   },
-  musicToggle: {
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  optionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  optionsBtnText: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 2,
   },
   errorText: {
     color: '#e74c3c',
