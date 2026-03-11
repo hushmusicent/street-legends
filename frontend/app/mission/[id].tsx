@@ -13,6 +13,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
 import { completeMission, getPlayer } from '../../services/api';
+import api from '../../services/api';
 import { GameButton } from '../../components/GameButton';
 import { Mission } from '../../types/game';
 
@@ -22,56 +23,77 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   hard: '#e74c3c',
 };
 
-const MISSION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  combat: 'flash',
-  delivery: 'car',
-  investigation: 'search',
-  heist: 'diamond',
+const MISSION_TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  defeat_monsters: 'skull',
+  travel_distance: 'navigate',
+  walk_steps: 'footsteps',
+};
+
+const MISSION_TYPE_LABELS: Record<string, string> = {
+  defeat_monsters: 'Defeat Monsters',
+  travel_distance: 'Travel Distance',
+  walk_steps: 'Walk Steps',
 };
 
 export default function MissionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { playerId, nearbyMissions, setPlayer, setCurrentMission } = useGameStore();
   const removeMission = useGameStore((s) => s.removeMission);
-  const [mission, setMission] = useState<Mission | null>(null);
+  const [mission, setMission] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [accepting, setAccepting] = useState(false);
+  const [accepted, setAccepted] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [rewards, setRewards] = useState<any>(null);
   const [levelUp, setLevelUp] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [target, setTarget] = useState(0);
 
   useEffect(() => {
-    // Find mission from nearby missions
     const found = nearbyMissions.find((m) => m.id === id);
     if (found) {
       setMission(found);
       setCurrentMission(found);
+      setProgress(found.goal_progress || 0);
+      setTarget(found.goal_target || 0);
+      setAccepted(!!found.accepted_by);
     }
     setLoading(false);
   }, [id, nearbyMissions]);
 
+  const handleAccept = async () => {
+    if (!id || !playerId) return;
+    setAccepting(true);
+    try {
+      await api.post(`/missions/${id}/accept?player_id=${playerId}`);
+      setAccepted(true);
+      Alert.alert('Mission Accepted!', 'Go out and complete the objective!');
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.detail || 'Failed to accept mission');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
   const handleComplete = async () => {
     if (!id || !playerId || !mission) return;
-
     try {
       setCompleting(true);
       const result = await completeMission(id, playerId);
       setRewards(result.rewards);
       setLevelUp(result.level_up);
       setCompleted(true);
-
-      // Refresh player data
-      const playerData = await getPlayer(playerId);
-      setPlayer(playerData);
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to complete mission');
+      const updatedPlayer = await getPlayer(playerId);
+      setPlayer(updatedPlayer);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.detail || 'Cannot complete yet');
     } finally {
       setCompleting(false);
     }
   };
 
   const handleExit = () => {
-    // Remove completed mission from map
     if (completed && id) {
       removeMission(id);
     }
@@ -79,154 +101,187 @@ export default function MissionScreen() {
     router.back();
   };
 
-  if (loading || !mission) {
+  const goalProgress = target > 0 ? Math.min(1, progress / target) : 0;
+  const goalComplete = progress >= target && target > 0;
+
+  if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" color="#e74c3c" />
-        <Text style={styles.loadingText}>Loading mission...</Text>
-      </View>
+      </SafeAreaView>
     );
+  }
+
+  if (!mission) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle" size={64} color="#e74c3c" />
+          <Text style={styles.errorText}>Mission not found</Text>
+          <GameButton title="BACK" onPress={() => router.back()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const diffColor = DIFFICULTY_COLORS[mission.difficulty] || '#f39c12';
+  const typeIcon = MISSION_TYPE_ICONS[mission.mission_type] || 'help-circle';
+  const typeLabel = MISSION_TYPE_LABELS[mission.mission_type] || mission.mission_type;
+
+  // Format target display
+  let targetDisplay = `${target}`;
+  if (mission.mission_type === 'travel_distance') {
+    targetDisplay = target >= 1000 ? `${(target / 1000).toFixed(1)}km` : `${target}m`;
+  } else if (mission.mission_type === 'walk_steps') {
+    targetDisplay = `${target.toLocaleString()} steps`;
+  } else if (mission.mission_type === 'defeat_monsters') {
+    targetDisplay = `${target} monsters`;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Close Button */}
-        <TouchableOpacity style={styles.closeButton} onPress={handleExit}>
-          <Ionicons name="close" size={28} color="#888" />
-        </TouchableOpacity>
-
-        {/* Mission Header */}
-        <View style={styles.header}>
-          <View
-            style={[
-              styles.missionIcon,
-              { backgroundColor: `${DIFFICULTY_COLORS[mission.difficulty]}30` },
-            ]}
-          >
-            <Ionicons
-              name={MISSION_ICONS[mission.mission_type] || 'briefcase'}
-              size={40}
-              color={DIFFICULTY_COLORS[mission.difficulty]}
-            />
+        {/* Phone Booth Header */}
+        <View style={styles.phoneBoothHeader}>
+          <View style={styles.phoneIcon}>
+            <Text style={styles.phoneEmoji}>☎️</Text>
           </View>
-          <Text style={styles.missionType}>{mission.mission_type.toUpperCase()}</Text>
-          <Text style={styles.missionTitle}>{mission.title}</Text>
-          <View style={styles.difficultyBadge}>
-            <Text
-              style={[styles.difficultyText, { color: DIFFICULTY_COLORS[mission.difficulty] }]}
-            >
-              {mission.difficulty.toUpperCase()}
-            </Text>
-          </View>
+          <Text style={styles.phoneLabel}>PHONE BOOTH</Text>
         </View>
 
-        {/* Dialogue */}
-        <View style={styles.dialogueBox}>
-          <Ionicons name="chatbubble" size={20} color="#f39c12" />
-          <Text style={styles.dialogueText}>"{mission.dialogue}"</Text>
-        </View>
-
-        {/* Description */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>BRIEFING</Text>
-          <Text style={styles.description}>{mission.description}</Text>
-        </View>
-
-        {/* Objectives */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>OBJECTIVES</Text>
-          {mission.objectives.map((objective, index) => (
-            <View key={index} style={styles.objectiveItem}>
-              <View style={styles.objectiveCheckbox}>
-                {completed ? (
-                  <Ionicons name="checkmark" size={16} color="#27ae60" />
-                ) : (
-                  <View style={styles.emptyCheckbox} />
-                )}
+        {/* Mission Card */}
+        <View style={[styles.missionCard, { borderTopColor: diffColor }]}>
+          <View style={styles.titleRow}>
+            <Ionicons name={typeIcon} size={24} color={diffColor} />
+            <View style={styles.titleInfo}>
+              <Text style={styles.missionTitle}>{mission.title}</Text>
+              <View style={styles.badges}>
+                <View style={[styles.badge, { backgroundColor: `${diffColor}22` }]}>
+                  <Text style={[styles.badgeText, { color: diffColor }]}>
+                    {(mission.difficulty || 'medium').toUpperCase()}
+                  </Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: '#1a1a2e' }]}>
+                  <Text style={[styles.badgeText, { color: '#aaa' }]}>{typeLabel}</Text>
+                </View>
               </View>
-              <Text style={[styles.objectiveText, completed && styles.completedObjective]}>
-                {objective}
-              </Text>
             </View>
-          ))}
-        </View>
-
-        {/* Rewards */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>REWARDS</Text>
-          <View style={styles.rewardsGrid}>
-            <View style={styles.rewardCard}>
-              <Ionicons name="cash" size={28} color="#f39c12" />
-              <Text style={styles.rewardValue}>${mission.rewards.cash}</Text>
-              <Text style={styles.rewardLabel}>Cash</Text>
-            </View>
-            <View style={styles.rewardCard}>
-              <Ionicons name="star" size={28} color="#3498db" />
-              <Text style={styles.rewardValue}>{mission.rewards.xp}</Text>
-              <Text style={styles.rewardLabel}>XP</Text>
-            </View>
-            {mission.rewards.reputation && (
-              <View style={styles.rewardCard}>
-                <Ionicons name="trending-up" size={28} color="#9b59b6" />
-                <Text style={styles.rewardValue}>{mission.rewards.reputation}</Text>
-                <Text style={styles.rewardLabel}>Rep</Text>
-              </View>
-            )}
           </View>
-        </View>
 
-        {/* Requirements */}
-        <View style={styles.requirementsRow}>
-          <View style={styles.requirementItem}>
-            <Ionicons name="person" size={16} color="#888" />
-            <Text style={styles.requirementText}>Level {mission.level_requirement}+</Text>
-          </View>
-          <View style={styles.requirementItem}>
-            <Ionicons name="time" size={16} color="#888" />
-            <Text style={styles.requirementText}>{mission.time_limit_minutes} min</Text>
-          </View>
-        </View>
+          <Text style={styles.dialogue}>"{mission.dialogue}"</Text>
 
-        {/* Action Button */}
-        {!completed ? (
-          <GameButton
-            title="COMPLETE MISSION"
-            onPress={handleComplete}
-            variant="success"
-            icon="checkmark-circle"
-            size="large"
-            loading={completing}
-            style={styles.actionButton}
-          />
-        ) : (
-          <View style={styles.completedContainer}>
-            <Ionicons name="checkmark-circle" size={64} color="#27ae60" />
-            <Text style={styles.completedText}>MISSION COMPLETE!</Text>
-            {levelUp && (
-              <View style={styles.levelUpBadge}>
-                <Ionicons name="arrow-up" size={20} color="#f39c12" />
-                <Text style={styles.levelUpText}>LEVEL UP!</Text>
-              </View>
-            )}
-            {rewards && (
-              <View style={styles.earnedRewards}>
-                <Text style={styles.earnedTitle}>You earned:</Text>
-                <Text style={styles.earnedText}>
-                  ${rewards.cash} Cash | {rewards.xp} XP
-                  {rewards.reputation ? ` | ${rewards.reputation} Rep` : ''}
+          {/* Objective */}
+          <View style={styles.objectiveBox}>
+            <Text style={styles.objectiveLabel}>OBJECTIVE</Text>
+            <Text style={styles.objectiveText}>{mission.description}</Text>
+          </View>
+
+          {/* Goal Progress */}
+          {accepted && !completed && (
+            <View style={styles.progressSection}>
+              <Text style={styles.progressLabel}>PROGRESS</Text>
+              <View style={styles.progressRow}>
+                <View style={styles.progressBarBg}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${goalProgress * 100}%`, backgroundColor: goalComplete ? '#4caf50' : diffColor },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressText, goalComplete && { color: '#4caf50' }]}>
+                  {progress}/{target}
                 </Text>
               </View>
-            )}
-            <GameButton
-              title="BACK TO MAP"
-              onPress={handleExit}
-              variant="primary"
-              icon="map"
-              style={styles.backButton}
-            />
+              {goalComplete && (
+                <View style={styles.completeReady}>
+                  <Ionicons name="checkmark-circle" size={18} color="#4caf50" />
+                  <Text style={styles.completeReadyText}>Goal reached! Claim your reward.</Text>
+                </View>
+              )}
+              {!goalComplete && (
+                <Text style={styles.progressHint}>
+                  {mission.mission_type === 'defeat_monsters'
+                    ? 'Defeat monsters on the map to make progress.'
+                    : mission.mission_type === 'travel_distance'
+                    ? 'Move around in the real world to cover distance.'
+                    : 'Walk to accumulate steps.'}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Rewards */}
+          <View style={styles.rewardsSection}>
+            <Text style={styles.rewardsLabel}>REWARDS</Text>
+            <View style={styles.rewardsRow}>
+              <View style={styles.rewardItem}>
+                <Ionicons name="cash" size={20} color="#f39c12" />
+                <Text style={styles.rewardValue}>${mission.rewards?.cash}</Text>
+              </View>
+              <View style={styles.rewardItem}>
+                <Ionicons name="star" size={20} color="#3498db" />
+                <Text style={styles.rewardValue}>{mission.rewards?.xp} XP</Text>
+              </View>
+              <View style={styles.rewardItem}>
+                <Ionicons name="ribbon" size={20} color="#9b59b6" />
+                <Text style={styles.rewardValue}>{mission.rewards?.reputation} REP</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Completed State */}
+        {completed && rewards && (
+          <View style={styles.completedCard}>
+            <Ionicons name="trophy" size={48} color="#f39c12" />
+            <Text style={styles.completedTitle}>MISSION COMPLETE!</Text>
+            {levelUp && <Text style={styles.levelUpText}>LEVEL UP!</Text>}
+            <View style={styles.rewardsRow}>
+              <View style={styles.rewardItem}>
+                <Ionicons name="cash" size={20} color="#f39c12" />
+                <Text style={styles.rewardValue}>+${rewards.cash}</Text>
+              </View>
+              <View style={styles.rewardItem}>
+                <Ionicons name="star" size={20} color="#3498db" />
+                <Text style={styles.rewardValue}>+{rewards.xp} XP</Text>
+              </View>
+            </View>
           </View>
         )}
+
+        {/* Action Buttons */}
+        <View style={styles.actions}>
+          {completed ? (
+            <GameButton title="BACK TO MAP" onPress={handleExit} />
+          ) : !accepted ? (
+            <>
+              <GameButton
+                title={accepting ? 'ACCEPTING...' : 'ACCEPT MISSION'}
+                onPress={handleAccept}
+                disabled={accepting}
+              />
+              <TouchableOpacity style={styles.declineBtn} onPress={handleExit}>
+                <Text style={styles.declineBtnText}>DECLINE</Text>
+              </TouchableOpacity>
+            </>
+          ) : goalComplete ? (
+            <>
+              <GameButton
+                title={completing ? 'CLAIMING...' : 'CLAIM REWARD'}
+                onPress={handleComplete}
+                disabled={completing}
+              />
+              <TouchableOpacity style={styles.declineBtn} onPress={handleExit}>
+                <Text style={styles.declineBtnText}>BACK TO MAP</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.declineBtn} onPress={handleExit}>
+              <Text style={styles.declineBtnText}>BACK TO MAP</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -237,209 +292,212 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0a',
   },
-  loadingContainer: {
+  center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-  },
-  loadingText: {
-    color: '#888',
-    marginTop: 16,
+    padding: 20,
   },
   scrollContent: {
-    padding: 24,
+    padding: 16,
   },
-  closeButton: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    padding: 8,
-    zIndex: 1,
+  errorText: {
+    color: '#fff',
+    fontSize: 18,
+    marginVertical: 16,
   },
-  header: {
+  phoneBoothHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  missionIcon: {
+  phoneIcon: {
     width: 80,
     height: 80,
-    borderRadius: 40,
+    borderRadius: 20,
+    backgroundColor: '#1a1a2e',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FBBC04',
+    marginBottom: 10,
+  },
+  phoneEmoji: {
+    fontSize: 40,
+  },
+  phoneLabel: {
+    color: '#FBBC04',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
+  missionCard: {
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    padding: 20,
+    borderTopWidth: 4,
     marginBottom: 16,
   },
-  missionType: {
-    color: '#888',
-    fontSize: 12,
-    letterSpacing: 2,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  titleInfo: {
+    flex: 1,
   },
   missionTitle: {
     color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 8,
+    fontSize: 20,
+    fontWeight: '900',
   },
-  difficultyBadge: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  difficultyText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    letterSpacing: 2,
-  },
-  dialogueBox: {
-    backgroundColor: 'rgba(243, 156, 18, 0.1)',
-    borderRadius: 12,
-    padding: 16,
+  badges: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f39c12',
+    gap: 8,
+    marginTop: 6,
   },
-  dialogueText: {
-    color: '#fff',
-    fontStyle: 'italic',
-    fontSize: 15,
-    lineHeight: 22,
-    marginLeft: 12,
-    flex: 1,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 2,
-    marginBottom: 12,
-  },
-  description: {
-    color: '#aaa',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  objectiveItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    padding: 14,
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: 8,
-    marginBottom: 8,
   },
-  objectiveCheckbox: {
-    width: 24,
-    height: 24,
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  dialogue: {
+    color: '#aaa',
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  objectiveBox: {
+    backgroundColor: '#0d0d1a',
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FBBC04',
   },
-  emptyCheckbox: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#333',
+  objectiveLabel: {
+    color: '#FBBC04',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 4,
   },
   objectiveText: {
-    color: '#fff',
+    color: '#ddd',
     fontSize: 14,
-    flex: 1,
+    fontWeight: '600',
   },
-  completedObjective: {
-    textDecorationLine: 'line-through',
-    color: '#666',
+  progressSection: {
+    marginBottom: 16,
   },
-  rewardsGrid: {
+  progressLabel: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  progressRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  rewardCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 12,
-    padding: 20,
     alignItems: 'center',
-    minWidth: 100,
+    gap: 12,
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 10,
+    backgroundColor: '#222',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: 10,
+    borderRadius: 5,
+  },
+  progressText: {
+    color: '#aaa',
+    fontSize: 13,
+    fontWeight: '800',
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  completeReady: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  completeReadyText: {
+    color: '#4caf50',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  progressHint: {
+    color: '#555',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  rewardsSection: {
+    marginTop: 4,
+  },
+  rewardsLabel: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  rewardsRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  rewardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   rewardValue: {
     color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  completedCard: {
+    backgroundColor: '#1a2e1a',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#4caf50',
+  },
+  completedTitle: {
+    color: '#4caf50',
+    fontSize: 22,
+    fontWeight: '900',
     marginTop: 8,
-  },
-  rewardLabel: {
-    color: '#666',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  requirementsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  requirementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-  },
-  requirementText: {
-    color: '#888',
-    marginLeft: 6,
-    fontSize: 13,
-  },
-  actionButton: {
-    marginTop: 16,
-  },
-  completedContainer: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  completedText: {
-    color: '#27ae60',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 16,
     letterSpacing: 2,
-  },
-  levelUpBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(243, 156, 18, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginTop: 16,
   },
   levelUpText: {
     color: '#f39c12',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  earnedRewards: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  earnedTitle: {
-    color: '#888',
-    fontSize: 12,
-  },
-  earnedText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '900',
     marginTop: 4,
   },
-  backButton: {
-    marginTop: 32,
-    minWidth: 200,
+  actions: {
+    gap: 12,
+    marginTop: 8,
+  },
+  declineBtn: {
+    alignItems: 'center',
+    padding: 14,
+  },
+  declineBtnText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

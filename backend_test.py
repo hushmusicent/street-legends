@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive Backend API Testing for GTA GPS RPG Game
-Focuses on Fitness Tracker API functionality
+Focuses on Phone Booth Mission System functionality
 """
 
 import requests
@@ -19,6 +19,8 @@ class APITester:
         self.session = requests.Session()
         self.test_results = []
         self.current_player_id = None
+        self.generated_missions = []
+        self.accepted_mission_id = None
         
     def log_test(self, test_name: str, success: bool, details: str = ""):
         """Log test results"""
@@ -58,54 +60,41 @@ class APITester:
             print(f"Error making API call: {e}")
             return False, {"error": str(e)}
 
-    def test_fitness_api_comprehensive(self):
-        """Test the complete fitness tracker API as specified in review request"""
-        print("\n🏃 TESTING FITNESS TRACKER API")
-        print("=" * 50)
+    def test_phone_booth_mission_system(self):
+        """Test the complete phone booth mission system as specified in review request"""
+        print("\n📞 TESTING PHONE BOOTH MISSION SYSTEM")
+        print("=" * 60)
         
         # Step 1: Create a player first
-        self.test_create_player_for_fitness()
+        self.test_create_player_for_missions()
         
         if not self.current_player_id:
-            self.log_test("Fitness API Testing", False, "Could not create test player")
+            self.log_test("Mission System Testing", False, "Could not create test player")
             return False
             
-        # Step 2: Get initial fitness data
-        self.test_get_initial_fitness_data()
+        # Step 2: Generate missions at specific coordinates (NYC Times Square)
+        self.test_generate_missions()
         
-        # Step 3: Update steps to 5000
-        self.test_update_steps_5000()
+        # Step 3: Accept a mission
+        self.test_accept_mission()
         
-        # Step 4: Verify steps=5000 and calculations
-        self.test_verify_steps_5000()
+        # Step 4: Update mission progress
+        self.test_update_mission_progress()
         
-        # Step 5: Claim 3000 step goal
-        self.test_claim_3000_step_goal()
+        # Step 5: Complete mission when goal met
+        self.test_complete_mission_when_goal_met()
         
-        # Step 6: Verify 3000 is in claimed_goals
-        self.test_verify_3000_claimed()
-        
-        # Step 7: Set steps to 7000 for 6000 goal test
-        self.test_update_steps_7000()
-        
-        # Step 8: Claim 6000 step goal
-        self.test_claim_6000_step_goal()
-        
-        # Step 9: Test error - double claim 3000
-        self.test_error_double_claim_3000()
-        
-        # Step 10: Test error - claim 10000 with only 7000 steps
-        self.test_error_insufficient_steps_10000()
+        # Step 6: Test cannot complete if goal not met
+        self.test_cannot_complete_if_goal_not_met()
         
         return True
 
-    def test_create_player_for_fitness(self):
-        """Create a test player for fitness testing"""
-        print("\n📝 Creating test player for fitness testing...")
+    def test_create_player_for_missions(self):
+        """Create a test player for mission testing"""
+        print("\n📝 Creating test player for mission testing...")
         
         # Generate unique name with timestamp
-        import time
-        unique_name = f"FitTest_{int(time.time())}"
+        unique_name = f"PhoneTest_{int(time.time())}"
         
         player_data = {
             "name": unique_name,
@@ -116,170 +105,229 @@ class APITester:
         
         if success and response.get("id"):
             self.current_player_id = response["id"]
-            self.log_test("Create Player for Fitness", True, f"Player ID: {self.current_player_id}")
+            self.log_test("Create Player for Missions", True, f"Player ID: {self.current_player_id}")
         else:
-            self.log_test("Create Player for Fitness", False, f"Failed to create player: {response}")
+            self.log_test("Create Player for Missions", False, f"Failed to create player: {response}")
 
-    def test_get_initial_fitness_data(self):
-        """Test GET /api/fitness/{player_id} - should return initial data"""
-        print(f"\n📊 Testing GET /api/fitness/{self.current_player_id}...")
+    def test_generate_missions(self):
+        """Test GET /api/missions/generate with specific coordinates and player level"""
+        print("\n🎯 Testing mission generation at Times Square NYC...")
         
-        success, response = self.api_call("GET", f"/fitness/{self.current_player_id}")
+        # Use Times Square coordinates as specified in review request
+        latitude = 40.758
+        longitude = -73.9855
+        player_level = 5
+        
+        success, response = self.api_call("GET", f"/missions/generate", 
+                                        params={
+                                            "latitude": latitude,
+                                            "longitude": longitude,
+                                            "player_level": player_level
+                                        })
         
         if success:
-            # Verify initial data structure
-            expected_fields = ["steps", "calories", "distance_km", "claimed_goals", "goals"]
-            missing_fields = [field for field in expected_fields if field not in response]
+            missions = response if isinstance(response, list) else []
             
-            if missing_fields:
-                self.log_test("Get Initial Fitness Data", False, f"Missing fields: {missing_fields}")
-                return
+            if len(missions) >= 1:
+                # Store missions for later tests
+                self.generated_missions = missions
                 
-            # Verify initial values
-            if (response.get("steps") == 0 and
-                isinstance(response.get("calories"), (int, float)) and
-                isinstance(response.get("distance_km"), (int, float)) and
-                response.get("claimed_goals") == [] and
-                len(response.get("goals", [])) == 3):
+                # Verify mission structure
+                mission = missions[0]
+                required_fields = ["id", "mission_type", "goal_target", "goal_progress", "title", "description", "rewards"]
+                missing_fields = [field for field in required_fields if field not in mission]
                 
-                self.log_test("Get Initial Fitness Data", True, 
-                            f"Steps: {response['steps']}, Goals: {len(response['goals'])}")
+                if missing_fields:
+                    self.log_test("Generate Missions - Structure", False, f"Missing fields: {missing_fields}")
+                    return
+                
+                # Check mission types
+                valid_types = ["defeat_monsters", "travel_distance", "walk_steps"]
+                mission_type = mission.get("mission_type")
+                
+                if mission_type not in valid_types:
+                    self.log_test("Generate Missions - Type", False, f"Invalid mission type: {mission_type}")
+                    return
+                
+                # Check goal_progress starts at 0
+                if mission.get("goal_progress") != 0:
+                    self.log_test("Generate Missions - Progress", False, f"Goal progress should start at 0, got: {mission.get('goal_progress')}")
+                    return
+                
+                # Check goal_target is numeric
+                goal_target = mission.get("goal_target")
+                if not isinstance(goal_target, (int, float)) or goal_target <= 0:
+                    self.log_test("Generate Missions - Target", False, f"Invalid goal_target: {goal_target}")
+                    return
+                
+                self.log_test("Generate Missions", True, 
+                            f"Generated {len(missions)} missions. Sample: {mission['mission_type']} - {mission['title']} (target: {goal_target})")
             else:
-                self.log_test("Get Initial Fitness Data", False, 
-                            f"Invalid initial data: {response}")
+                self.log_test("Generate Missions", False, f"Should return at least 1 mission, got: {len(missions)}")
         else:
-            self.log_test("Get Initial Fitness Data", False, f"API call failed: {response}")
+            self.log_test("Generate Missions", False, f"API call failed: {response}")
 
-    def test_update_steps_5000(self):
-        """Test PUT /api/fitness/{player_id}/steps?steps=5000"""
-        print(f"\n🚶 Testing PUT /api/fitness/{self.current_player_id}/steps?steps=5000...")
+    def test_accept_mission(self):
+        """Test POST /api/missions/{mission_id}/accept"""
+        print(f"\n✅ Testing mission acceptance...")
         
-        success, response = self.api_call("PUT", f"/fitness/{self.current_player_id}/steps", 
-                                        params={"steps": 5000})
+        if not self.generated_missions:
+            self.log_test("Accept Mission", False, "No generated missions available")
+            return
         
-        if success and response.get("steps") == 5000:
-            self.log_test("Update Steps to 5000", True, f"Steps updated to: {response['steps']}")
-        else:
-            self.log_test("Update Steps to 5000", False, f"Failed to update steps: {response}")
-
-    def test_verify_steps_5000(self):
-        """Verify steps=5000 and that calories/distance are calculated correctly"""
-        print(f"\n🔍 Verifying steps=5000 and calculations...")
+        mission = self.generated_missions[0]
+        mission_id = mission["id"]
+        self.accepted_mission_id = mission_id
         
-        success, response = self.api_call("GET", f"/fitness/{self.current_player_id}")
+        success, response = self.api_call("POST", f"/missions/{mission_id}/accept", 
+                                        params={"player_id": self.current_player_id})
         
         if success:
-            steps = response.get("steps", 0)
-            calories = response.get("calories", 0)
-            distance_km = response.get("distance_km", 0)
+            # Should return success message
+            message = response.get("message", "")
+            if "accepted" in message.lower() or "success" in str(response).lower():
+                self.log_test("Accept Mission", True, f"Mission accepted: {message}")
+            else:
+                self.log_test("Accept Mission", False, f"Unexpected response: {response}")
+        else:
+            self.log_test("Accept Mission", False, f"Failed to accept mission: {response}")
+
+    def test_update_mission_progress(self):
+        """Test PUT /api/missions/{mission_id}/progress"""
+        print(f"\n📈 Testing mission progress update...")
+        
+        if not self.accepted_mission_id:
+            self.log_test("Update Mission Progress", False, "No accepted mission available")
+            return
+        
+        # Update progress to 3
+        progress_value = 3
+        
+        success, response = self.api_call("PUT", f"/missions/{self.accepted_mission_id}/progress", 
+                                        params={
+                                            "player_id": self.current_player_id,
+                                            "progress": progress_value
+                                        })
+        
+        if success:
+            # Should return updated progress
+            returned_progress = response.get("progress")
+            target = response.get("target")
             
-            if steps == 5000:
-                # Check if calories and distance are reasonable (non-zero)
-                if calories > 0 and distance_km > 0:
-                    self.log_test("Verify Steps 5000 Calculations", True, 
-                                f"Steps: {steps}, Calories: {calories}, Distance: {distance_km}km")
-                else:
-                    self.log_test("Verify Steps 5000 Calculations", False, 
-                                f"Invalid calculations - Calories: {calories}, Distance: {distance_km}")
+            if returned_progress == progress_value:
+                self.log_test("Update Mission Progress", True, 
+                            f"Progress updated to {returned_progress}/{target}")
             else:
-                self.log_test("Verify Steps 5000 Calculations", False, 
-                            f"Steps not updated correctly: {steps}")
+                self.log_test("Update Mission Progress", False, 
+                            f"Expected progress {progress_value}, got {returned_progress}")
         else:
-            self.log_test("Verify Steps 5000 Calculations", False, f"API call failed: {response}")
+            self.log_test("Update Mission Progress", False, f"Failed to update progress: {response}")
 
-    def test_claim_3000_step_goal(self):
-        """Test POST /api/fitness/{player_id}/claim/3000 - should succeed"""
-        print(f"\n🏆 Testing POST /api/fitness/{self.current_player_id}/claim/3000...")
+    def test_complete_mission_when_goal_met(self):
+        """Test POST /api/missions/{mission_id}/complete when goal is met"""
+        print(f"\n🏆 Testing mission completion when goal is met...")
         
-        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/3000")
+        if not self.accepted_mission_id:
+            self.log_test("Complete Mission (Goal Met)", False, "No accepted mission available")
+            return
+        
+        # First, get the mission's goal target
+        original_mission = None
+        for mission in self.generated_missions:
+            if mission["id"] == self.accepted_mission_id:
+                original_mission = mission
+                break
+        
+        if not original_mission:
+            self.log_test("Complete Mission (Goal Met)", False, "Original mission not found")
+            return
+        
+        goal_target = original_mission["goal_target"]
+        
+        # Set progress to match goal target
+        success, response = self.api_call("PUT", f"/missions/{self.accepted_mission_id}/progress", 
+                                        params={
+                                            "player_id": self.current_player_id,
+                                            "progress": goal_target
+                                        })
+        
+        if not success:
+            self.log_test("Complete Mission (Goal Met)", False, f"Failed to set progress to goal: {response}")
+            return
+        
+        # Now try to complete the mission
+        success, response = self.api_call("POST", f"/missions/{self.accepted_mission_id}/complete", 
+                                        params={"player_id": self.current_player_id})
         
         if success:
-            # Should return success message and XP reward
-            if "xp" in response or "XP" in str(response) or "reward" in str(response).lower():
-                self.log_test("Claim 3000 Step Goal", True, f"Goal claimed successfully: {response}")
+            # Should return rewards
+            rewards = response.get("rewards", {})
+            if rewards and ("cash" in rewards or "xp" in rewards):
+                self.log_test("Complete Mission (Goal Met)", True, f"Mission completed with rewards: {rewards}")
             else:
-                self.log_test("Claim 3000 Step Goal", False, f"Unexpected response: {response}")
+                self.log_test("Complete Mission (Goal Met)", True, f"Mission completed: {response}")
         else:
-            self.log_test("Claim 3000 Step Goal", False, f"Failed to claim goal: {response}")
+            error_msg = response.get("error", str(response))
+            self.log_test("Complete Mission (Goal Met)", False, f"Failed to complete mission: {error_msg}")
 
-    def test_verify_3000_claimed(self):
-        """Verify 3000 is in claimed_goals"""
-        print(f"\n✅ Verifying 3000 is in claimed_goals...")
+    def test_cannot_complete_if_goal_not_met(self):
+        """Test that mission completion fails with 'Goal not met' when progress < goal_target"""
+        print(f"\n🚫 Testing mission completion failure when goal not met...")
         
-        success, response = self.api_call("GET", f"/fitness/{self.current_player_id}")
+        # Generate a new mission for this test
+        latitude = 40.758
+        longitude = -73.9855
+        player_level = 5
         
-        if success:
-            claimed_goals = response.get("claimed_goals", [])
-            if 3000 in claimed_goals:
-                self.log_test("Verify 3000 in Claimed Goals", True, f"Claimed goals: {claimed_goals}")
-            else:
-                self.log_test("Verify 3000 in Claimed Goals", False, 
-                            f"3000 not found in claimed_goals: {claimed_goals}")
-        else:
-            self.log_test("Verify 3000 in Claimed Goals", False, f"API call failed: {response}")
-
-    def test_update_steps_7000(self):
-        """Set steps to 7000 for 6000 goal test"""
-        print(f"\n🏃 Testing PUT /api/fitness/{self.current_player_id}/steps?steps=7000...")
+        success, response = self.api_call("GET", f"/missions/generate", 
+                                        params={
+                                            "latitude": latitude,
+                                            "longitude": longitude,
+                                            "player_level": player_level
+                                        })
         
-        success, response = self.api_call("PUT", f"/fitness/{self.current_player_id}/steps", 
-                                        params={"steps": 7000})
+        if not success or not response:
+            self.log_test("Cannot Complete (Goal Not Met)", False, "Failed to generate new mission")
+            return
         
-        if success and response.get("steps") == 7000:
-            self.log_test("Update Steps to 7000", True, f"Steps updated to: {response['steps']}")
-        else:
-            self.log_test("Update Steps to 7000", False, f"Failed to update steps: {response}")
-
-    def test_claim_6000_step_goal(self):
-        """Test claiming 6000 step goal with 7000 steps"""
-        print(f"\n🏆 Testing POST /api/fitness/{self.current_player_id}/claim/6000...")
+        missions = response if isinstance(response, list) else []
+        if not missions:
+            self.log_test("Cannot Complete (Goal Not Met)", False, "No missions generated")
+            return
         
-        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/6000")
+        # Accept the new mission
+        new_mission = missions[0]
+        new_mission_id = new_mission["id"]
         
-        if success:
-            self.log_test("Claim 6000 Step Goal", True, f"Goal claimed successfully: {response}")
-        else:
-            self.log_test("Claim 6000 Step Goal", False, f"Failed to claim goal: {response}")
-
-    def test_error_double_claim_3000(self):
-        """Test error: Try claiming 3000 again - should fail with 'Already claimed'"""
-        print(f"\n🚫 Testing double claim error for 3000 steps...")
+        success, response = self.api_call("POST", f"/missions/{new_mission_id}/accept", 
+                                        params={"player_id": self.current_player_id})
         
-        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/3000")
+        if not success:
+            self.log_test("Cannot Complete (Goal Not Met)", False, f"Failed to accept new mission: {response}")
+            return
+        
+        # Don't update progress (should remain at 0)
+        # Try to complete the mission without meeting the goal
+        success, response = self.api_call("POST", f"/missions/{new_mission_id}/complete", 
+                                        params={"player_id": self.current_player_id})
         
         # This should fail
         if not success:
             error_text = str(response.get("error", "")).lower()
-            if "already" in error_text or "claimed" in error_text:
-                self.log_test("Error: Double Claim 3000", True, f"Correctly rejected: {response}")
+            if "goal not met" in error_text or "not met" in error_text:
+                self.log_test("Cannot Complete (Goal Not Met)", True, f"Correctly rejected: {response}")
             else:
-                self.log_test("Error: Double Claim 3000", False, f"Wrong error message: {response}")
+                self.log_test("Cannot Complete (Goal Not Met)", False, f"Wrong error message: {response}")
         else:
-            self.log_test("Error: Double Claim 3000", False, f"Should have failed but succeeded: {response}")
-
-    def test_error_insufficient_steps_10000(self):
-        """Test error: Try claiming 10000 with only 7000 steps - should fail"""
-        print(f"\n🚫 Testing insufficient steps error for 10000 goal...")
-        
-        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/10000")
-        
-        # This should fail
-        if not success:
-            error_text = str(response.get("error", "")).lower()
-            if ("need" in error_text and "10000" in error_text) or ("insufficient" in error_text):
-                self.log_test("Error: Insufficient Steps 10000", True, f"Correctly rejected: {response}")
-            else:
-                self.log_test("Error: Insufficient Steps 10000", False, f"Wrong error message: {response}")
-        else:
-            self.log_test("Error: Insufficient Steps 10000", False, f"Should have failed but succeeded: {response}")
+            self.log_test("Cannot Complete (Goal Not Met)", False, f"Should have failed but succeeded: {response}")
 
     def run_all_tests(self):
-        """Run all fitness tracker tests"""
-        print("🎮 STARTING COMPREHENSIVE FITNESS TRACKER API TESTING")
-        print("=" * 60)
+        """Run all phone booth mission system tests"""
+        print("📞 STARTING COMPREHENSIVE PHONE BOOTH MISSION SYSTEM TESTING")
+        print("=" * 70)
         
-        # Test fitness tracker functionality
-        self.test_fitness_api_comprehensive()
+        # Test phone booth mission functionality
+        self.test_phone_booth_mission_system()
         
         # Print summary
         self.print_summary()
@@ -288,9 +336,9 @@ class APITester:
 
     def print_summary(self):
         """Print test summary"""
-        print("\n" + "=" * 60)
-        print("🎯 FITNESS TRACKER API TEST SUMMARY")
-        print("=" * 60)
+        print("\n" + "=" * 70)
+        print("🎯 PHONE BOOTH MISSION SYSTEM TEST SUMMARY")
+        print("=" * 70)
         
         total_tests = len(self.test_results)
         passed_tests = len([r for r in self.test_results if r["success"]])
@@ -317,8 +365,8 @@ if __name__ == "__main__":
     success = tester.run_all_tests()
     
     if success:
-        print("\n🎉 ALL FITNESS TRACKER TESTS PASSED!")
+        print("\n🎉 ALL PHONE BOOTH MISSION TESTS PASSED!")
         sys.exit(0)
     else:
-        print("\n💥 SOME FITNESS TRACKER TESTS FAILED!")
+        print("\n💥 SOME PHONE BOOTH MISSION TESTS FAILED!")
         sys.exit(1)

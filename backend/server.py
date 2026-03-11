@@ -1264,6 +1264,14 @@ async def battle_action(battle_id: str, action: BattleAction):
             await db.players.update_one({"id": player["id"]}, {"$set": update_data})
             await db.monsters.delete_one({"id": enemy["id"]})
             
+            # Auto-increment "defeat_monsters" mission progress
+            active_missions = player.get("active_missions", [])
+            if active_missions:
+                for mid in active_missions:
+                    m = await db.missions.find_one({"id": mid, "mission_type": "defeat_monsters", "accepted_by": player["id"]})
+                    if m and m.get("goal_progress", 0) < m.get("goal_target", 999):
+                        await db.missions.update_one({"id": mid}, {"$inc": {"goal_progress": 1}})
+            
         combat_log.append(f"Victory! {battle['enemy_name']} defeated!")
         
         await decrement_player_buffs(battle["player_id"])
@@ -1336,7 +1344,7 @@ async def get_battle(battle_id: str):
 # ============== MISSION ENDPOINTS ==============
 @api_router.get("/missions/generate")
 async def generate_missions(latitude: float, longitude: float, player_level: int = 1):
-    """Generate AI missions near a location"""
+    """Generate phone booth missions near a location with goal-based objectives"""
     position = Position(latitude=latitude, longitude=longitude)
     
     # Clean expired missions
@@ -1349,31 +1357,29 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
     if len(nearby) >= 3:
         return nearby
     
-    # Generate new missions
-    mission_types = ["combat", "delivery", "investigation", "heist"]
+    # Mission templates: defeat monsters, travel distance, walk steps
+    MISSION_TEMPLATES = [
+        {"type": "defeat_monsters", "title": "Street Cleanup", "targets": [3, 5, 7, 10], "desc": "Defeat {n} monsters in the area."},
+        {"type": "defeat_monsters", "title": "Turf War", "targets": [4, 6, 8], "desc": "Take down {n} enemies to prove your strength."},
+        {"type": "defeat_monsters", "title": "Bounty Hunt", "targets": [2, 3, 5], "desc": "Hunt down {n} wanted targets."},
+        {"type": "travel_distance", "title": "Recon Mission", "targets": [500, 1000, 1500, 2000], "desc": "Travel {n}m to scout the area."},
+        {"type": "travel_distance", "title": "Supply Run", "targets": [800, 1200, 2000], "desc": "Cover {n}m to deliver the goods."},
+        {"type": "walk_steps", "title": "Patrol Duty", "targets": [1000, 2000, 3000, 5000], "desc": "Walk {n} steps on patrol."},
+        {"type": "walk_steps", "title": "Cardio Training", "targets": [1500, 2500, 4000], "desc": "Train with {n} steps."},
+    ]
+    
     difficulties = ["easy", "medium", "hard"]
     
     for _ in range(3 - len(nearby)):
-        mission_type = random.choice(mission_types)
+        template = random.choice(MISSION_TEMPLATES)
         difficulty = random.choice(difficulties)
+        target = random.choice(template["targets"])
         
-        # AI-generated content
-        ai_response = await generate_ai_content("mission", {
-            "level": player_level,
-            "type": mission_type,
-            "location": "urban city block"
-        })
+        # Scale targets with difficulty
+        diff_mult = {"easy": 0.7, "medium": 1.0, "hard": 1.5}[difficulty]
+        target = int(target * diff_mult)
         
-        try:
-            import json
-            mission_data = json.loads(ai_response)
-        except:
-            mission_data = {
-                "title": f"Street {mission_type.title()}",
-                "description": "Handle business in the neighborhood.",
-                "dialogue": "I got a job for you.",
-                "objectives": ["Complete the mission", "Return for reward"]
-            }
+        description = template["desc"].format(n=target)
         
         offset_lat = random.uniform(-0.005, 0.005)
         offset_lon = random.uniform(-0.005, 0.005)
@@ -1381,11 +1387,11 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
         reward_mult = {"easy": 1, "medium": 1.5, "hard": 2.5}[difficulty]
         
         mission = Mission(
-            title=mission_data.get("title", "Street Mission"),
-            description=mission_data.get("description", "Complete the mission."),
-            dialogue=mission_data.get("dialogue", "Get it done."),
-            objectives=mission_data.get("objectives", ["Complete the task"]),
-            mission_type=mission_type,
+            title=template["title"],
+            description=description,
+            dialogue=f"Pick up the phone. {description}",
+            objectives=[description],
+            mission_type=template["type"],
             difficulty=difficulty,
             level_requirement=max(1, player_level - 2),
             position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
@@ -1394,13 +1400,63 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
                 "xp": int(40 * player_level * reward_mult),
                 "reputation": int(5 * reward_mult)
             },
+            time_limit_minutes=60,
             expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 2)
         )
         
-        await db.missions.insert_one(mission.dict())
-        nearby.append(serialize_doc(mission.dict()))
+        # Store goal target in the mission doc
+        mission_dict = mission.dict()
+        mission_dict["goal_target"] = target
+        mission_dict["goal_progress"] = 0
+        
+        await db.missions.insert_one(mission_dict)
+        nearby.append(serialize_doc(mission_dict))
     
     return nearby
+
+@api_router.post("/missions/{mission_id}/accept")
+async def accept_mission(mission_id: str, player_id: str):
+    """Accept a phone booth mission and start tracking progress"""
+    mission = await db.missions.find_one({"id": mission_id})
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Set mission as accepted by this player
+    await db.missions.update_one(
+        {"id": mission_id},
+        {"$set": {"accepted_by": player_id, "goal_progress": 0, "accepted_at": datetime.utcnow().isoformat()}}
+    )
+    
+    # Also track in player's active missions
+    active = player.get("active_missions", [])
+    if mission_id not in active:
+        active.append(mission_id)
+        await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active}})
+    
+    return {"message": f"Mission accepted: {mission['title']}", "mission_id": mission_id}
+
+@api_router.put("/missions/{mission_id}/progress")
+async def update_mission_progress(mission_id: str, player_id: str, progress: int):
+    """Update progress on a mission goal"""
+    mission = await db.missions.find_one({"id": mission_id})
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    
+    if mission.get("accepted_by") != player_id:
+        raise HTTPException(status_code=400, detail="Mission not accepted by this player")
+    
+    new_progress = min(progress, mission.get("goal_target", 999))
+    await db.missions.update_one(
+        {"id": mission_id},
+        {"$set": {"goal_progress": new_progress}}
+    )
+    
+    completed = new_progress >= mission.get("goal_target", 999)
+    return {"progress": new_progress, "target": mission.get("goal_target"), "completed": completed}
 
 @api_router.post("/missions/{mission_id}/complete")
 async def complete_mission(mission_id: str, player_id: str):
@@ -1412,6 +1468,10 @@ async def complete_mission(mission_id: str, player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Check if goal is met
+    if mission.get("goal_progress", 0) < mission.get("goal_target", 999):
+        raise HTTPException(status_code=400, detail=f"Goal not met: {mission.get('goal_progress', 0)}/{mission.get('goal_target', 0)}")
     
     rewards = mission["rewards"]
     
@@ -1429,6 +1489,12 @@ async def complete_mission(mission_id: str, player_id: str):
         new_level = player["level"] + 1
         update_data["level"] = new_level
         update_data["xp_to_next"] = calculate_xp_to_level(new_level)
+    
+    # Remove from active missions
+    active = player.get("active_missions", [])
+    if mission_id in active:
+        active.remove(mission_id)
+        update_data["active_missions"] = active
     
     await db.players.update_one({"id": player_id}, {"$set": update_data})
     await db.missions.delete_one({"id": mission_id})
