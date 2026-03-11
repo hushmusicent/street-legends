@@ -1268,9 +1268,15 @@ async def battle_action(battle_id: str, action: BattleAction):
             active_missions = player.get("active_missions", [])
             if active_missions:
                 for mid in active_missions:
-                    m = await db.missions.find_one({"id": mid, "mission_type": "defeat_monsters", "accepted_by": player["id"]})
+                    m = await db.missions.find_one({"id": mid, "accepted_by": player["id"]})
                     if m and m.get("goal_progress", 0) < m.get("goal_target", 999):
-                        await db.missions.update_one({"id": mid}, {"$inc": {"goal_progress": 1}})
+                        if m.get("mission_type") == "defeat_monsters":
+                            await db.missions.update_one({"id": mid}, {"$inc": {"goal_progress": 1}})
+                        elif m.get("mission_type") == "bounty":
+                            # Bounties only count specific enemy types
+                            bounty_enemy = m.get("bounty_enemy", "")
+                            if bounty_enemy and bounty_enemy.lower() in enemy["name"].lower():
+                                await db.missions.update_one({"id": mid}, {"$inc": {"goal_progress": 1}})
             
         combat_log.append(f"Victory! {battle['enemy_name']} defeated!")
         
@@ -1368,49 +1374,104 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
         {"type": "walk_steps", "title": "Cardio Training", "targets": [1500, 2500, 4000], "desc": "Train with {n} steps."},
     ]
     
+    # Bounty missions (dollar sign on map): defeat specific enemy types for cash
+    BOUNTY_TEMPLATES = [
+        {"type": "bounty", "title": "Thug Bounty", "enemy": "Thug", "targets": [3, 5, 8], "desc": "Eliminate {n} Thugs for a cash reward."},
+        {"type": "bounty", "title": "Gangster Hit", "enemy": "Gangster", "targets": [3, 5, 7], "desc": "Take out {n} Gangsters. Dead or alive."},
+        {"type": "bounty", "title": "Criminal Warrant", "enemy": "Criminal", "targets": [2, 4, 6], "desc": "Bring down {n} Criminals in the area."},
+        {"type": "bounty", "title": "Villain Contract", "enemy": "Villain", "targets": [2, 3, 5], "desc": "There's a price on {n} Villains. Collect it."},
+        {"type": "bounty", "title": "Assassin Hunt", "enemy": "Assassin", "targets": [2, 4, 6], "desc": "Hunt down {n} Assassins for big money."},
+        {"type": "bounty", "title": "Mobster Bounty", "enemy": "Mobster", "targets": [3, 5, 7], "desc": "The mob put a bounty on {n} Mobsters."},
+        {"type": "bounty", "title": "Outlaw Contract", "enemy": "Outlaw", "targets": [2, 4, 6], "desc": "Wanted: {n} Outlaws. Reward on completion."},
+        {"type": "bounty", "title": "Bandit Sweep", "enemy": "Bandit", "targets": [3, 5, 8], "desc": "Clear out {n} Bandits for a payday."},
+        {"type": "bounty", "title": "Hooligan Purge", "enemy": "Hooligan", "targets": [4, 6, 8], "desc": "Smash {n} Hooligans and get paid."},
+        {"type": "bounty", "title": "Felon Takedown", "enemy": "Felon", "targets": [2, 4, 5], "desc": "Collect the bounty on {n} Felons."},
+    ]
+    
     difficulties = ["easy", "medium", "hard"]
     
     for _ in range(3 - len(nearby)):
-        template = random.choice(MISSION_TEMPLATES)
-        difficulty = random.choice(difficulties)
-        target = random.choice(template["targets"])
+        # 40% chance to spawn a bounty, 60% regular mission
+        is_bounty = random.random() < 0.4
         
-        # Scale targets with difficulty
-        diff_mult = {"easy": 0.7, "medium": 1.0, "hard": 1.5}[difficulty]
-        target = int(target * diff_mult)
-        
-        description = template["desc"].format(n=target)
-        
-        offset_lat = random.uniform(-0.005, 0.005)
-        offset_lon = random.uniform(-0.005, 0.005)
-        
-        reward_mult = {"easy": 1, "medium": 1.5, "hard": 2.5}[difficulty]
-        
-        mission = Mission(
-            title=template["title"],
-            description=description,
-            dialogue=f"Pick up the phone. {description}",
-            objectives=[description],
-            mission_type=template["type"],
-            difficulty=difficulty,
-            level_requirement=max(1, player_level - 2),
-            position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
-            rewards={
-                "cash": int(50 * player_level * reward_mult),
-                "xp": int(40 * player_level * reward_mult),
-                "reputation": int(5 * reward_mult)
-            },
-            time_limit_minutes=60,
-            expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 2)
-        )
-        
-        # Store goal target in the mission doc
-        mission_dict = mission.dict()
-        mission_dict["goal_target"] = target
-        mission_dict["goal_progress"] = 0
-        
-        await db.missions.insert_one(mission_dict)
-        nearby.append(serialize_doc(mission_dict))
+        if is_bounty:
+            template = random.choice(BOUNTY_TEMPLATES)
+            target = random.choice(template["targets"])
+            difficulty = random.choice(difficulties)
+            diff_mult = {"easy": 0.7, "medium": 1.0, "hard": 1.5}[difficulty]
+            target = int(target * diff_mult)
+            description = template["desc"].format(n=target)
+            
+            offset_lat = random.uniform(-0.005, 0.005)
+            offset_lon = random.uniform(-0.005, 0.005)
+            
+            # Bounties pay 2x cash
+            reward_mult = {"easy": 1.5, "medium": 2.5, "hard": 4.0}[difficulty]
+            
+            mission = Mission(
+                title=template["title"],
+                description=description,
+                dialogue=f"There's money on the table. {description}",
+                objectives=[description],
+                mission_type="bounty",
+                difficulty=difficulty,
+                level_requirement=max(1, player_level - 2),
+                position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
+                rewards={
+                    "cash": int(80 * player_level * reward_mult),
+                    "xp": int(30 * player_level * reward_mult),
+                    "reputation": int(3 * reward_mult)
+                },
+                time_limit_minutes=60,
+                expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 2)
+            )
+            
+            mission_dict = mission.dict()
+            mission_dict["goal_target"] = target
+            mission_dict["goal_progress"] = 0
+            mission_dict["bounty_enemy"] = template["enemy"]
+            
+            await db.missions.insert_one(mission_dict)
+            nearby.append(serialize_doc(mission_dict))
+        else:
+            template = random.choice(MISSION_TEMPLATES)
+            difficulty = random.choice(difficulties)
+            target = random.choice(template["targets"])
+            
+            diff_mult = {"easy": 0.7, "medium": 1.0, "hard": 1.5}[difficulty]
+            target = int(target * diff_mult)
+            
+            description = template["desc"].format(n=target)
+            
+            offset_lat = random.uniform(-0.005, 0.005)
+            offset_lon = random.uniform(-0.005, 0.005)
+            
+            reward_mult = {"easy": 1, "medium": 1.5, "hard": 2.5}[difficulty]
+            
+            mission = Mission(
+                title=template["title"],
+                description=description,
+                dialogue=f"Pick up the phone. {description}",
+                objectives=[description],
+                mission_type=template["type"],
+                difficulty=difficulty,
+                level_requirement=max(1, player_level - 2),
+                position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
+                rewards={
+                    "cash": int(50 * player_level * reward_mult),
+                    "xp": int(40 * player_level * reward_mult),
+                    "reputation": int(5 * reward_mult)
+                },
+                time_limit_minutes=60,
+                expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 2)
+            )
+            
+            mission_dict = mission.dict()
+            mission_dict["goal_target"] = target
+            mission_dict["goal_progress"] = 0
+            
+            await db.missions.insert_one(mission_dict)
+            nearby.append(serialize_doc(mission_dict))
     
     return nearby
 

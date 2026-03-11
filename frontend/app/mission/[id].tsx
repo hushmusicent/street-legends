@@ -23,18 +23,6 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   hard: '#e74c3c',
 };
 
-const MISSION_TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  defeat_monsters: 'skull',
-  travel_distance: 'navigate',
-  walk_steps: 'footsteps',
-};
-
-const MISSION_TYPE_LABELS: Record<string, string> = {
-  defeat_monsters: 'Defeat Monsters',
-  travel_distance: 'Travel Distance',
-  walk_steps: 'Walk Steps',
-};
-
 export default function MissionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { playerId, nearbyMissions, setPlayer, setCurrentMission } = useGameStore();
@@ -124,6 +112,21 @@ export default function MissionScreen() {
     );
   }
 
+  const MISSION_TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+    defeat_monsters: 'skull',
+    travel_distance: 'navigate',
+    walk_steps: 'footsteps',
+    bounty: 'skull',
+  };
+
+  const MISSION_TYPE_LABELS: Record<string, string> = {
+    defeat_monsters: 'Defeat Monsters',
+    travel_distance: 'Travel Distance',
+    walk_steps: 'Walk Steps',
+    bounty: 'Bounty Contract',
+  };
+
+  const isBounty = mission.mission_type === 'bounty';
   const diffColor = DIFFICULTY_COLORS[mission.difficulty] || '#f39c12';
   const typeIcon = MISSION_TYPE_ICONS[mission.mission_type] || 'help-circle';
   const typeLabel = MISSION_TYPE_LABELS[mission.mission_type] || mission.mission_type;
@@ -141,12 +144,14 @@ export default function MissionScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Phone Booth Header */}
+        {/* Header - Phone Booth or Bounty */}
         <View style={styles.phoneBoothHeader}>
-          <View style={styles.phoneIcon}>
-            <Text style={styles.phoneEmoji}>☎️</Text>
+          <View style={[styles.phoneIcon, isBounty && { borderColor: '#4CAF50', backgroundColor: '#0a1a0a' }]}>
+            <Text style={styles.phoneEmoji}>{isBounty ? '💲' : '☎️'}</Text>
           </View>
-          <Text style={styles.phoneLabel}>PHONE BOOTH</Text>
+          <Text style={[styles.phoneLabel, isBounty && { color: '#4CAF50' }]}>
+            {isBounty ? 'BOUNTY CONTRACT' : 'PHONE BOOTH'}
+          </Text>
         </View>
 
         {/* Mission Card */}

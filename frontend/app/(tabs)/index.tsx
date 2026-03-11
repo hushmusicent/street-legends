@@ -61,7 +61,7 @@ export default function MapScreen() {
 
   const [loading, setLoading] = useState(true);
   const [selectedMarker, setSelectedMarker] = useState<{
-    type: 'monster' | 'mission' | 'player' | 'shop';
+    type: 'monster' | 'mission' | 'bounty' | 'player' | 'shop';
     data: any;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -363,7 +363,7 @@ export default function MapScreen() {
     ...nearbyMissions.map((m) => ({
       id: m.id,
       coordinate: m.position,
-      type: 'mission' as const,
+      type: (m.mission_type === 'bounty' ? 'bounty' : 'mission') as 'mission' | 'bounty',
       name: m.title,
     })),
     ...nearbyPlayers.map((p) => ({
@@ -386,7 +386,7 @@ export default function MapScreen() {
     if (marker.type === 'monster') {
       const monster = nearbyMonsters.find((m) => m.id === marker.id);
       if (monster) setSelectedMarker({ type: 'monster', data: monster });
-    } else if (marker.type === 'mission') {
+    } else if (marker.type === 'mission' || marker.type === 'bounty') {
       const mission = nearbyMissions.find((m) => m.id === marker.id);
       if (mission) setSelectedMarker({ type: 'mission', data: mission });
     } else if (marker.type === 'player') {

@@ -18,7 +18,7 @@ interface Position {
 interface MapMarker {
   id: string;
   coordinate: Position;
-  type: 'monster' | 'mission' | 'player' | 'self';
+  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self';
   level?: number;
   name?: string;
 }
@@ -142,8 +142,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', player: '#4285F4', shop: '#FF6F00' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', player: '\\u{1F464}', shop: '\\u{1F3EA}' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}' };
 
     function sendMessage(data) {
       try {
