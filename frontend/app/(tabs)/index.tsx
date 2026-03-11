@@ -16,6 +16,7 @@ import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
+import { THUG_BATTLE_IMAGE } from '../../assets/enemyImages';
 import {
   getPlayer,
   updatePlayerPosition,
@@ -450,7 +451,11 @@ export default function MapScreen() {
           {selectedMarker.type === 'monster' && (
             <View>
               <View style={styles.popupHeader}>
-                <Ionicons name="skull" size={28} color="#EA4335" />
+                {selectedMarker.data.name?.toLowerCase().includes('thug') ? (
+                  <Image source={{ uri: THUG_BATTLE_IMAGE }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                ) : (
+                  <Ionicons name="skull" size={28} color="#EA4335" />
+                )}
                 <View style={styles.popupHeaderText}>
                   <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
                   <Text style={styles.popupSubtitle}>Level {selectedMarker.data.level}</Text>

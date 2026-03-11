@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { THUG_MAP_IMAGE } from '../assets/enemyImages';
 
 // Conditionally import WebView - only available on native
 let WebView: any = null;
@@ -46,7 +47,7 @@ interface GameMapProps {
   onTerritoryPress?: (territory: MapTerritory) => void;
 }
 
-const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
+const generateBaseMapHTML = (initialLat: number, initialLng: number, thugImageUrl: string) => {
   return `
 <!DOCTYPE html>
 <html>
@@ -144,6 +145,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
     var entityMarkers = {};
     var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00' };
     var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}' };
+    var THUG_IMG = '${thugImageUrl}';
 
     function sendMessage(data) {
       try {
@@ -277,11 +279,21 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
             var color = markerColors[m.type] || '#999';
             var icon = markerIcons[m.type] || '?';
             var levelHTML = m.level ? '<span style="position:absolute;bottom:-8px;background:white;padding:0 3px;border-radius:4px;font-size:9px;font-weight:bold;">' + m.level + '</span>' : '';
+            
+            var isThug = m.type === 'monster' && m.name && m.name.toLowerCase().indexOf('thug') !== -1;
+            var markerHTML;
+            if (isThug && THUG_IMG) {
+              markerHTML = '<div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #ff6b35;box-shadow:0 2px 8px rgba(255,107,53,0.5);position:relative;overflow:hidden;background:#1a1a1a;">' +
+                '<img src="' + THUG_IMG + '" style="width:100%;height:100%;object-fit:cover;" />' + levelHTML + '</div>';
+            } else {
+              markerHTML = '<div style="background:' + color + ';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;position:relative;">' + icon + levelHTML + '</div>';
+            }
+            
             var divIcon = L.divIcon({
               className: 'custom-marker',
-              html: '<div style="background:' + color + ';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;position:relative;">' + icon + levelHTML + '</div>',
-              iconSize: [32, 32],
-              iconAnchor: [16, 16]
+              html: markerHTML,
+              iconSize: [isThug ? 38 : 32, isThug ? 38 : 32],
+              iconAnchor: [isThug ? 19 : 16, isThug ? 19 : 16]
             });
             var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);
             marker.on('click', (function(id, type) {
@@ -343,7 +355,7 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
   // Generate HTML only ONCE with initial position - never regenerate
   const initialCenter = useRef(center);
   const mapHTML = useMemo(() => {
-    return generateBaseMapHTML(initialCenter.current.latitude, initialCenter.current.longitude);
+    return generateBaseMapHTML(initialCenter.current.latitude, initialCenter.current.longitude, THUG_MAP_IMAGE);
   }, []); // Empty deps = only once
 
   // --- NATIVE: inject JS for position updates ---

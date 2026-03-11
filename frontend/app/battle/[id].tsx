@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -16,6 +17,7 @@ import { getBattle, battleAction, getPlayerSkills, getPlayer } from '../../servi
 import { HealthBar } from '../../components/HealthBar';
 import { GameButton } from '../../components/GameButton';
 import { Battle, Skill } from '../../types/game';
+import { THUG_BATTLE_IMAGE } from '../../assets/enemyImages';
 
 export default function BattleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -101,6 +103,7 @@ export default function BattleScreen() {
   const isActive = battle.status === 'active';
   const isVictory = battle.status === 'won';
   const isDefeat = battle.status === 'lost';
+  const isThugEnemy = battle.enemy_name?.toLowerCase().includes('thug');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -112,12 +115,16 @@ export default function BattleScreen() {
 
       {/* Enemy Section */}
       <View style={styles.enemySection}>
-        <View style={styles.enemyAvatar}>
-          <Ionicons
-            name={battle.enemy_type === 'monster' ? 'skull' : 'person'}
-            size={48}
-            color="#e74c3c"
-          />
+        <View style={[styles.enemyAvatar, isThugEnemy && styles.enemyAvatarThug]}>
+          {isThugEnemy ? (
+            <Image source={{ uri: THUG_BATTLE_IMAGE }} style={styles.enemyImage} />
+          ) : (
+            <Ionicons
+              name={battle.enemy_type === 'monster' ? 'skull' : 'person'}
+              size={48}
+              color="#e74c3c"
+            />
+          )}
         </View>
         <Text style={styles.enemyName}>{battle.enemy_name}</Text>
         <HealthBar
@@ -326,6 +333,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 3,
     borderColor: '#e74c3c',
+  },
+  enemyAvatarThug: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    borderColor: '#ff6b35',
+    borderWidth: 3,
+  },
+  enemyImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   enemyName: {
     color: '#fff',
