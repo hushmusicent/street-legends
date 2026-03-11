@@ -1892,7 +1892,7 @@ async def get_player_buffs(player_id: str):
 
 # ============== TERRITORY ENDPOINTS ==============
 
-TERRITORY_CELL_SIZE_M = 225  # Equal size for all territories (meters)
+TERRITORY_CELL_SIZE_M = 338  # Equal size for all territories (meters)
 UNCLAIMED_COLOR = "#3d3d3d"  # Dark gray for all unclaimed territories
 CLAIMED_COLORS = [
     "#e74c3c", "#3498db", "#2ecc71", "#9b59b6", "#f39c12",
