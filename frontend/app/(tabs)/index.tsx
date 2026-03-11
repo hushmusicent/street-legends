@@ -230,7 +230,7 @@ export default function MapScreen() {
       // Use allSettled so one failure doesn't block others
       const results = await Promise.allSettled([
         spawnMonsters(currentPosition.latitude, currentPosition.longitude, player.level),
-        generateMissions(currentPosition.latitude, currentPosition.longitude, player.level),
+        generateMissions(currentPosition.latitude, currentPosition.longitude, player.level, playerId),
         getNearbyPlayers(playerId, 500),
         spawnShops(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyTerritories(currentPosition.latitude, currentPosition.longitude, player.level),

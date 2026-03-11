@@ -1264,19 +1264,31 @@ async def battle_action(battle_id: str, action: BattleAction):
             await db.players.update_one({"id": player["id"]}, {"$set": update_data})
             await db.monsters.delete_one({"id": enemy["id"]})
             
-            # Auto-increment "defeat_monsters" mission progress
+            # Auto-increment "defeat_monsters" mission progress (per-player)
             active_missions = player.get("active_missions", [])
             if active_missions:
                 for mid in active_missions:
-                    m = await db.missions.find_one({"id": mid, "accepted_by": player["id"]})
-                    if m and m.get("goal_progress", 0) < m.get("goal_target", 999):
+                    m = await db.missions.find_one({"id": mid})
+                    if not m:
+                        continue
+                    pp = m.get("player_progress", {})
+                    player_data = pp.get(player["id"], {})
+                    current_progress = player_data.get("progress", 0)
+                    goal_target = m.get("goal_target", 999)
+                    
+                    if current_progress < goal_target:
+                        should_increment = False
                         if m.get("mission_type") == "defeat_monsters":
-                            await db.missions.update_one({"id": mid}, {"$inc": {"goal_progress": 1}})
+                            should_increment = True
                         elif m.get("mission_type") == "bounty":
-                            # Bounties only count specific enemy types
                             bounty_enemy = m.get("bounty_enemy", "")
                             if bounty_enemy and bounty_enemy.lower() in enemy["name"].lower():
-                                await db.missions.update_one({"id": mid}, {"$inc": {"goal_progress": 1}})
+                                should_increment = True
+                        
+                        if should_increment:
+                            player_data["progress"] = current_progress + 1
+                            pp[player["id"]] = player_data
+                            await db.missions.update_one({"id": mid}, {"$set": {"player_progress": pp}})
             
         combat_log.append(f"Victory! {battle['enemy_name']} defeated!")
         
@@ -1349,7 +1361,7 @@ async def get_battle(battle_id: str):
 
 # ============== MISSION ENDPOINTS ==============
 @api_router.get("/missions/generate")
-async def generate_missions(latitude: float, longitude: float, player_level: int = 1):
+async def generate_missions(latitude: float, longitude: float, player_level: int = 1, player_id: str = ""):
     """Generate phone booth missions near a location with goal-based objectives"""
     position = Position(latitude=latitude, longitude=longitude)
     
@@ -1358,7 +1370,21 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
     
     # Get existing nearby missions
     existing = await db.missions.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(50)
-    nearby = [serialize_doc(m) for m in existing if calculate_distance(position, Position(**m["position"])) < 1000]
+    nearby_raw = [m for m in existing if calculate_distance(position, Position(**m["position"])) < 1000]
+    
+    # Serialize with player-specific progress
+    nearby = []
+    for m in nearby_raw:
+        doc = serialize_doc(m)
+        if player_id:
+            pp = m.get("player_progress", {})
+            if player_id in pp:
+                doc["accepted_by"] = player_id
+                doc["goal_progress"] = pp[player_id].get("progress", 0)
+            else:
+                doc["accepted_by"] = None
+                doc["goal_progress"] = 0
+        nearby.append(doc)
     
     if len(nearby) >= 3:
         return nearby
@@ -1477,7 +1503,7 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
 
 @api_router.get("/missions/active/{player_id}")
 async def get_active_missions(player_id: str):
-    """Get all active/accepted missions for a player"""
+    """Get all active/accepted missions for a player with per-player progress"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -1487,23 +1513,30 @@ async def get_active_missions(player_id: str):
         return []
     
     missions = []
+    stale = False
+    clean_ids = list(active_ids)
     for mid in active_ids:
         m = await db.missions.find_one({"id": mid})
         if m:
-            missions.append(serialize_doc(m))
+            doc = serialize_doc(m)
+            # Inject this player's specific progress
+            pp = m.get("player_progress", {})
+            player_data = pp.get(player_id, {})
+            doc["goal_progress"] = player_data.get("progress", 0)
+            doc["accepted_by"] = player_id  # For frontend compatibility
+            missions.append(doc)
         else:
-            # Clean up stale mission ids
-            active_ids.remove(mid)
+            clean_ids.remove(mid)
+            stale = True
     
-    # Update player if we cleaned up stale ids
-    if len(active_ids) != len(player.get("active_missions", [])):
-        await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active_ids}})
+    if stale:
+        await db.players.update_one({"id": player_id}, {"$set": {"active_missions": clean_ids}})
     
     return missions
 
 @api_router.post("/missions/{mission_id}/accept")
 async def accept_mission(mission_id: str, player_id: str):
-    """Accept a phone booth mission and start tracking progress"""
+    """Accept a mission - multiple players can accept the same mission"""
     mission = await db.missions.find_one({"id": mission_id})
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
@@ -1512,25 +1545,26 @@ async def accept_mission(mission_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    # Prevent re-acceptance: check if mission is already accepted by anyone
-    if mission.get("accepted_by"):
-        if mission["accepted_by"] == player_id:
-            raise HTTPException(status_code=400, detail="You already accepted this mission")
-        else:
-            raise HTTPException(status_code=400, detail="Mission already taken by another player")
-    
-    # Check if player already has this mission in their active list
+    # Prevent same player from re-accepting
     active = player.get("active_missions", [])
     if mission_id in active:
         raise HTTPException(status_code=400, detail="You already accepted this mission")
     
-    # Set mission as accepted by this player
+    pp = mission.get("player_progress", {})
+    if player_id in pp:
+        raise HTTPException(status_code=400, detail="You already accepted this mission")
+    
+    # Add this player's progress entry to the mission
+    pp[player_id] = {"progress": 0, "accepted_at": datetime.utcnow().isoformat()}
     await db.missions.update_one(
         {"id": mission_id},
-        {"$set": {"accepted_by": player_id, "goal_progress": 0, "accepted_at": datetime.utcnow().isoformat()}}
+        {"$set": {
+            "player_progress": pp,
+            "accepted_by": player_id,  # Keep for backward compat
+        }}
     )
     
-    # Also track in player's active missions
+    # Track in player's active missions
     active.append(mission_id)
     await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active}})
     
@@ -1538,18 +1572,24 @@ async def accept_mission(mission_id: str, player_id: str):
 
 @api_router.put("/missions/{mission_id}/progress")
 async def update_mission_progress(mission_id: str, player_id: str, progress: int):
-    """Update progress on a mission goal"""
+    """Update progress on a mission goal for a specific player"""
     mission = await db.missions.find_one({"id": mission_id})
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
     
-    if mission.get("accepted_by") != player_id:
-        raise HTTPException(status_code=400, detail="Mission not accepted by this player")
+    pp = mission.get("player_progress", {})
+    if player_id not in pp:
+        # Backward compat: check old accepted_by field
+        if mission.get("accepted_by") != player_id:
+            raise HTTPException(status_code=400, detail="Mission not accepted by this player")
     
     new_progress = min(progress, mission.get("goal_target", 999))
+    pp[player_id] = pp.get(player_id, {})
+    pp[player_id]["progress"] = new_progress
+    
     await db.missions.update_one(
         {"id": mission_id},
-        {"$set": {"goal_progress": new_progress}}
+        {"$set": {"player_progress": pp}}
     )
     
     completed = new_progress >= mission.get("goal_target", 999)
@@ -1557,7 +1597,7 @@ async def update_mission_progress(mission_id: str, player_id: str, progress: int
 
 @api_router.post("/missions/{mission_id}/complete")
 async def complete_mission(mission_id: str, player_id: str):
-    """Complete a mission and claim rewards"""
+    """Complete a mission and claim rewards for a specific player"""
     mission = await db.missions.find_one({"id": mission_id})
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
@@ -1566,9 +1606,13 @@ async def complete_mission(mission_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    # Check if goal is met
-    if mission.get("goal_progress", 0) < mission.get("goal_target", 999):
-        raise HTTPException(status_code=400, detail=f"Goal not met: {mission.get('goal_progress', 0)}/{mission.get('goal_target', 0)}")
+    # Get this player's progress
+    pp = mission.get("player_progress", {})
+    player_progress = pp.get(player_id, {}).get("progress", mission.get("goal_progress", 0))
+    goal_target = mission.get("goal_target", 999)
+    
+    if player_progress < goal_target:
+        raise HTTPException(status_code=400, detail=f"Goal not met: {player_progress}/{goal_target}")
     
     rewards = mission["rewards"]
     
@@ -1587,14 +1631,22 @@ async def complete_mission(mission_id: str, player_id: str):
         update_data["level"] = new_level
         update_data["xp_to_next"] = calculate_xp_to_level(new_level)
     
-    # Remove from active missions
+    # Remove from player's active missions
     active = player.get("active_missions", [])
     if mission_id in active:
         active.remove(mission_id)
         update_data["active_missions"] = active
     
     await db.players.update_one({"id": player_id}, {"$set": update_data})
-    await db.missions.delete_one({"id": mission_id})
+    
+    # Remove this player from mission's player_progress
+    if player_id in pp:
+        del pp[player_id]
+        await db.missions.update_one({"id": mission_id}, {"$set": {"player_progress": pp}})
+    
+    # Only delete mission if no other players are tracking it
+    if not pp:
+        await db.missions.delete_one({"id": mission_id})
     
     return {
         "message": "Mission completed!",

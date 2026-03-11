@@ -69,8 +69,10 @@ export const getBattle = async (battleId: string): Promise<Battle> => {
 };
 
 // Mission APIs
-export const generateMissions = async (latitude: number, longitude: number, playerLevel: number): Promise<Mission[]> => {
-  const response = await api.get(`/missions/generate?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+export const generateMissions = async (latitude: number, longitude: number, playerLevel: number, playerId?: string): Promise<Mission[]> => {
+  let url = `/missions/generate?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`;
+  if (playerId) url += `&player_id=${playerId}`;
+  const response = await api.get(url);
   return response.data;
 };
 
