@@ -3,144 +3,136 @@
 <original_problem_statement>
 The user wants to build a Grand Theft Auto (GTA) style GPS RPG game.
 
-**PRODUCT REQUIREMENTS:**
+**PRODUCT REQUIREMENTS (from initial state and this session):**
 - **Core Gameplay:** Monster battles and missions triggered by GPS location.
 - **Map & Theme:** A real-world map (using OpenStreetMap) that shows the player's location, enemies, missions, and dynamic shops.
 - **GPS Movement:** The player's character on the map must move in real-time as the player moves in the real world.
-- **Character System:** A character screen showing stats, skills, inventory, and equipable items. Players should be able to upload a custom profile picture.
+- **Character System:** A character screen showing stats, skills, inventory, and equipable items. Players should be able to upload a custom profile picture, sell/delete items, and view their owned territories.
 - **Authentication:** Players must be able to create an account (login/password) to save their character, inventory, and game progress.
 - **Economy:** An item shop, item drops from battles, and dynamic, location-based gun shops on the map.
-- **Multiplayer:** PvP, Guilds, Leaderboards, and Territory control.
+- **Multiplayer & Territories:** PvP, Guilds, Leaderboards, and a Territory control system.
+    - Territories should be a grid of equal-sized squares that can be captured. They start as one color and change to the owner's color.
+    - Player profile pictures should be displayed on owned territories, on the leaderboard, and next to the player's name.
+- **Progression & Content:**
+    - A 10-tier enemy system, where players only encounter enemies from their current and previous tiers.
+    - A passive health regeneration system (25% every 15 minutes).
+    - A fitness tracker page for steps, calories, and distance, with rewards for hitting goals.
+    - A revamped mission system:
+        - Phone Booth missions with goals like defeating monsters, walking steps, or traveling distance.
+        - Bounty missions (dollar sign icon) for defeating specific types of monsters.
+- **UI/UX:**
+    - Defeated monsters and completed missions must disappear from the map.
+    - The list of nearby entities at the bottom of the map screen should be removed.
 </original_problem_statement>
 
 **User's preferred language**: English
 
 **what currently exists?**
-A feature-rich full-stack application with a FastAPI backend and an Expo (React Native) frontend. The game is highly functional.
-- **Backend ():** A comprehensive API server managing users, players, items, shops, battles, and a full territory control system. It connects to a MongoDB database and includes logic for temporary buffs, daily income from territories, and game balance calculations.
-- **Frontend (Expo):** A multi-tab application.
-    - **Authentication:** Full login/signup flow with session persistence. A bug with non-functional text inputs on the login screen has been fixed.
-    - **Map:** A real-time map ( with OpenStreetMap) showing the player's live position. The player's marker now uses their profile picture. The map also displays enemies, missions, dynamic shops, and interactive territory circles.
-    - **Character:** A detailed character screen. The profile picture upload feature has been significantly improved with image resizing/compression to handle large files from phone cameras, and the updated picture now instantly syncs to the map icon via a global Zustand store.
-    - **Shop:** A dedicated Shop tab for purchasing consumables (health/energy recharges) and temporary stat boosts (e.g., +Max HP for 5 battles).
-    - **Territories:** A fully implemented territory control system. Players can see colored, non-overlapping territory circles on the map, click them to view details (owner, daily cash income, boss stats) in a modal, and fight a boss to capture the territory.
-    - **Re-balancing:** Shop prices and monster difficulty have been increased twice based on user feedback.
+A feature-rich full-stack application with a FastAPI backend and an Expo (React Native) frontend. The game has undergone several major architectural changes in this session.
+- **Backend ():** The backend now features three completely new, sophisticated systems:
+    1.  **Tiled Territory System:** Instead of random circles, territories are now a uniform grid of equal-sized squares. The system generates them based on a grid system, assigns a neutral color, and changes the color upon capture. Territory names are procedurally generated from a list of 1000+ combinations.
+    2.  **Tiered Enemy System:** A 10-tier enemy progression system is fully implemented. The  function now only spawns enemies from the player's current and previous tiers, based on their level.
+    3.  **Goal-Based Mission System:** The old mission system was replaced. New Phone Booth missions have objectives like defeat 10 monsters or walk 5000 steps. There is also a new Bounty mission type for hunting specific enemies. The backend tracks progress towards these goals.
+    - Additionally, the backend supports passive health regen, item selling/deleting, and a fitness data sync endpoint.
+- **Frontend (Expo):**
+    - **Map:** The map now renders a grid of square territories. It also renders two types of mission icons: a '☎️' for phone booth missions and a '💲' for bounties. The list of entities at the bottom of the map has been removed.
+    - **Character:** The character screen now includes a MY TERRITORIES section listing owned territories and their income. The inventory tab has Sell and Delete buttons for each item.
+    - **Leaderboard:** Now correctly displays player profile pictures on the podium and in the list.
+    - **Missions:** The mission screen UI has been completely rewritten to support the new goal-based system (Accept -> Track Progress -> Complete).
+    - **Fitness Tracker:** A new Fitness tab has been added, which uses the device's pedometer to track steps and syncs with the backend to claim rewards.
 
 **Last working item**:
-- **Last item agent was working**: Implementing the user's request to display player profile pictures in more locations: on owned territories, on the leaderboard, and next to the player's name wherever it appears.
-    - The agent successfully updated the backend API endpoints (, ) to include the owner's profile picture URL.
-    - The agent then began the frontend implementation, starting with  to modify the territory map labels. This work is incomplete.
-- **Status**: IN PROGRESS
-- **Agent Testing Done**: N
-- **Which testing method agent to use?**: Frontend testing agent or screenshot tool. The agent needs to log in, capture a territory (or use a pre-captured one), and then verify the profile picture appears on the territory label on the map, in the territory modal, and on the leaderboard screen.
+- **Last item agent was working**: Implementing Bounty Missions. This involved adding a new mission type to the backend for hunting specific monsters, and updating the frontend to render a dollar sign '💲' icon for these missions on the map. The mission screen was also updated to show a '💲' header for bounties.
+- **Status**: USER VERIFICATION PENDING
+- **Agent Testing Done**: N (Code was written, DB was cleared, and services were about to be restarted for visual verification).
+- **Which testing method agent to use?**: Manual testing. Log in, move around the map, and look for the new '💲' icons. Accept a bounty mission and verify the mission screen shows the correct header and goal. Defeat the required monster type and check if the progress updates.
 - **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
-- **Issue 1: (P0)** Complete the implementation of showing profile pictures across the UI.
-
-**Issues Detail**:
-- **Issue 1:** Show Player Profile Pictures on Territories and Leaderboards
-    - **Attempted fixes**: The backend part is complete. API responses for territories and leaderboards now contain the  URL. The frontend work was started in  but was not finished.
-    - **Next debug checklist**:
-        1.  **Territory Map Labels**: Resume work in . Modify the Leaflet marker for territory labels to include a small circular image if the territory is owned ( is present).
-        2.  **Territory Modal**: Modify . When the territory modal is displayed for an owned territory, show the owner's profile picture next to their name.
-        3.  **Leaderboard Screen**: Modify . Update the UI for the podium and the list view to display the profile picture next to each player's name.
-        4.  **Data Flow**: Ensure the profile picture URL fetched from the API is correctly passed to these components.
-    - **Why fix this issue and what will be achieved with the fix?**: This will enhance social presence and personalization, making territory ownership and leaderboard rankings more visually engaging, as requested by the user.
-    - **Status**: IN PROGRESS
-    - **Is recurring issue?**: N
-    - **Should Test frontend/backend/both after fix?**: Frontend
-    - **Blocked on other issue**: None
+- There are no outstanding issues. All user requests from this session have been implemented. The last item is pending user verification.
 
 **In progress Task List**:
 - None.
 
 **Upcoming and Future Tasks**
 - **Future Tasks**:
-    - **(P1) Performance Optimization**: User requested to Make everything load faster. Caching API data with a library like  could significantly improve performance.
+    - **(P1) Performance Optimization**: User requested to Make everything load faster in a previous session. Caching API data with a library like  could significantly improve performance, especially with the growing complexity.
     - **(P2) AI-powered Dynamic Content**: The original product requirements mentioned using AI for dynamic missions or items, which has not been implemented.
     - **(P3) Refine Multiplayer Features**: The Guilds and PvP screens are functional placeholders and could be built out with more features like guild chat, detailed PvP history, etc.
 
 **Completed work in this session**
-- **Feature: Consumable Shop**:
-    - Implemented a new Shop tab from scratch ().
-    - Added backend logic and endpoints for selling consumable items (health/energy) in .
-- **Feature: Temporary Buffs**:
-    - Modified the shop to sell items that grant temporary stat boosts (e.g., for 5 battles).
-    - Updated the backend to track active buffs on a player and decrement them after each battle.
-- **Feature: Territory Control System**:
-    - Created a complete territory capture system (, ).
-    - Territories are visible as non-overlapping circles on the map.
-    - Implemented a modal for territory interaction, showing info and allowing a boss battle to capture it.
-    - Rewards are now daily cash income.
-- **Feature: Profile Picture on Map**:
-    - The player's main map icon is now their uploaded profile picture.
-    - Implemented state synchronization using Zustand () so uploading a picture on the Character screen instantly updates the map icon.
-- **Bug Fix & Refinement: Profile Picture Upload**:
-    - Fixed a critical bug where uploading large images from a phone camera would fail. Implemented image resizing and compression on the client-side using  before upload ().
-- **Bug Fix: Login Screen Inputs**:
-    - Fixed an issue on the login screen where text inputs were not focusable on the web preview by replacing a  with a  ().
-- **Game Re-balancing**:
-    - Adjusted all shop item prices and monster stat formulas in  twice based on user requests for increased difficulty and cost.
+- **Feature: Tiered Enemy System**: Implemented a 10-tier enemy progression system in .
+- **Feature: Tiled Grid Territory System**: Completely refactored territories into a uniform grid of squares with capture-based color changes (, ). Also increased territory size twice.
+- **Feature: Goal-Based Mission System**: Overhauled missions into Phone Booth (step/travel/defeat goals) and Bounty (hunt specific monster) types (, ).
+- **Feature: Fitness Tracker**: Added a new Fitness tab with step/distance/calorie tracking and rewards, using  (, ).
+- **Feature: Item Selling & Deleting**: Added backend endpoints and frontend UI in the character screen to allow players to sell or delete inventory items (, ).
+- **Feature: Owned Territories on Character Page**: Added a section to the character screen to display a list of territories the player owns ().
+- **Feature: Passive Health Regen**: Implemented a lazy-calculation system for players to regenerate 25% of their health every 15 minutes ().
+- **Feature: Profile Pictures on Leaderboard/Territories**: Finished implementation to show profile pictures on the leaderboard and as large icons on captured territories.
+- **Bug Fix: Entities Disappear on Completion**: Updated the frontend state management () to remove monsters/missions from the map after they are completed.
+- **UI/UX Cleanup**:
+    - Reduced the number of dynamic shops that spawn nearby.
+    - Removed the list of entities from the bottom of the map screen.
 
 **Earlier issues found/mentioned but not fixed**
-- None. All issues raised during the session were addressed.
+- None.
 
 **Known issue recurrence from previous fork**
-- None. The previous fork's major issues (map compatibility, session persistence) were resolved and have remained stable.
+- None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Frontend**: Expo, React Native, Expo Router, Zustand (for global state), , , .
-- **Backend**: FastAPI, Python, MongoDB (),  ().
-- **Architecture**: Monorepo structure. API-driven communication. The map is a  rendering Leaflet.js, updated via  and . A global Zustand store is used for reactive UI updates across screens (e.g., profile picture).
+- **Frontend**: Expo, React Native, Expo Router, Zustand, , .
+- **Backend**: FastAPI, Python, MongoDB ().
+- **Architecture**: The backend architecture has become significantly more complex with the introduction of the tiled grid system for territories and the tiered progression for monsters. These systems are now core to the game's content generation.
 
 **key DB schema**
-- **users**: 
 - **players**: 
-- **territories**: 
+- **territories**:  (Schema changed to a grid system).
+- **missions**:  (Schema completely changed for goal-based quests).
 
 **changes in tech stack**
--  was added to handle client-side image resizing.
--  was integrated for global state management.
+-  was installed and used for the new Fitness Tracker feature.
 
 **All files of reference**
 - **Created**:
-    - : The new screen for the consumable item shop.
-    - : The global Zustand store.
+    - : The new screen for the fitness tracker.
 - **Updated Heavily**:
-    - : Major changes for the shop, temporary buffs, a full territory system, and game re-balancing. API responses were updated to include profile pictures.
-    - : Major changes to add territory rendering, the interaction modal, and the boss battle flow.
-    - : The profile picture upload logic was completely rewritten to include image resizing and sync with the global store.
-    - : Updated to render the player's profile picture as their map icon and to support rendering territory circles. Was being modified for territory owner pictures.
-    - : Added new functions for the shop and territory APIs.
-    - : Updated to add the Shop tab.
-    - : Fixed a bug with text inputs.
+    - : Underwent three major refactors for the territory, enemy, and mission systems. Also added endpoints for health regen, fitness, and item management.
+    - : Major UI changes to add the owned territories list and item sell/delete buttons.
+    - : Major changes to remove the bottom entity list and pass the correct data for rendering square territories and new mission types.
+    - : Completely rewritten to support the new goal-based mission flow (accept, progress, complete).
+    - : Rewritten to render territories as rectangles and to support multiple custom icons for missions ('☎️', '💲').
 
 **Critical Info for New Agent**
-- The immediate task is to finish the UI work for showing player profile pictures. The backend already provides the necessary data. You need to modify  (for territory labels),  (for the territory modal), and .
-- The territory generation logic in  was specifically rewritten to prevent overlaps. Do not change it unless necessary.
-- The profile picture upload flow now includes client-side resizing in , which fixed a major bug. This is a critical piece of the user experience.
-- Global state is managed by Zustand in . Use this store for any state that needs to be shared or synced instantly between the Map and Character tabs.
+- **Three Core System Refactors:** Be aware that the territory, enemy, and mission generation systems in  have been completely rewritten in this session.
+    - **Territories are a grid:** Do not look for radius-based logic. It's all based on  and  tiles.
+    - **Enemies are tiered:** Monster spawning is tied to player level via the .
+    - **Missions are goal-based:** Missions now have a  and . Progress is updated by other actions in the game (e.g., defeating a monster).
+- **Immediate Task:** The last thing done was the implementation of Bounty missions. Your first step should be to manually verify this feature on the frontend. Log in and look for dollar sign icons on the map.
+- **Database Clears:** The agent frequently cleared the  and  collections in the database after making structural changes. If you modify these systems, you will likely need to do the same to see your changes take effect.
+
+**documents created in this job**
+- None.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**: Profile picture should be on the territory they own, on the leaderboard and next to where ever they name is - **Status: IN PROGRESS**. Agent started implementation.
-2.  **User**: Raise the shop prices by 50% and raise the monsters difficulties by 35% - **Status: DONE**.
-3.  **User**: Raise the shop prices by 15% and make the monsters difficulty by 15% - **Status: DONE**.
-4.  **User**: Make the territories separate and not overlay. And make the territory rewards daily and only cash - **Status: DONE**.
-5.  **User**: Make the territories separate and not overlay - **Status: DONE**.
-6.  **User**: Make different territory circles that players can take over and fight for to take over - **Status: DONE**.
-7.  **User**: My profile picture is supposed to load up as my character icon - **Status: DONE**.
-8.  **User**: My profile picture wont upload from my drive or when I take a picture it doesn't work - **Status: DONE**.
-9.  **User**: Make the character profile picture also the character icon on the map - **Status: DONE**.
-10. **User**: Make the heart implants and energy boosters in the shop tap temporary - **Status: DONE**.
+1.  **User**: Make a dollar signs icon mission where you gotta defeat certain monsters goals - **Status: IN PROGRESS (Just completed, pending verification)**
+2.  **User**: Turn the missions into phone booths. And change the mission quests into defeat different amount of monsters goal and travel so many distance or walk so many step goals - **Status: DONE**
+3.  **User**: Add another page with a step, calorie and distance tracker. Also add 3 step goals of 3000, 6000 and 10000. Win experience, boosts or items when hit goals - **Status: DONE**
+4.  **User**: Take away the monster, mission and shop buttons at the bottom of the map - **Status: DONE**
+5.  **User**: Only make a few stores pop up when walking into a new radius - **Status: DONE**
+6.  **User**: Make a delete items option on each item and also let player be able to sell items in shop - **Status: DONE**
+7.  **User**: Show territories that the player own in the character page - **Status: DONE**
+8.  **User**: Make the territories 50% more bigger - **Status: DONE**
+9.  **User**: Make the territories equal sizes. Don't overlap make them next to each other and make them all same color then change color once taken over. - **Status: DONE**
+10. **User**: Make the territories equilateral squares and make over 1000 different territory names - **Status: DONE**
 
 **Project Health Check:**
-- **Broken**: None. The core application is stable.
-- **Mocked**: None. All features are live and use the backend.
-- **In Progress**: The feature to display profile pictures on leaderboards and owned territories is half-implemented.
+- **Broken**: None.
+- **Mocked**: None.
+- **In Progress**: The new Bounty Mission feature is implemented but has not been visually verified by the user or agent.
 
 **3rd Party Integrations**
 - ****: For GPS tracking.
@@ -148,6 +140,7 @@ A feature-rich full-stack application with a FastAPI backend and an Expo (React 
 - ****: For camera/gallery access.
 - ****: For client-side image resizing and compression.
 - ****: For global state management.
+- ****: For pedometer functionality in the new Fitness tab.
 
 **Testing status**
 - **Testing agent used after significant changes**: NO
@@ -155,7 +148,10 @@ A feature-rich full-stack application with a FastAPI backend and an Expo (React 
 - **Test files created**: []
 - **Known regressions**: None.
 
+**Credentials to test flow:**
+- No specific credentials. The agent has been signing up with new users like , , etc. to test functionality.
+
 **What agent forgot to execute**
-- The agent was in the middle of implementing the profile picture everywhere feature when the session ended. The frontend part for the leaderboard and territory UI is the main piece left to do.
+- The agent did not perform a final visual verification of the last implemented feature (Bounty Missions) before the session ended. The code is complete, but it's unknown if it renders correctly on the map.
 
 </analysis>

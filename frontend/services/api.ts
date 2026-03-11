@@ -79,6 +79,11 @@ export const completeMission = async (missionId: string, playerId: string): Prom
   return response.data;
 };
 
+export const getActiveMissions = async (playerId: string): Promise<any[]> => {
+  const response = await api.get(`/missions/active/${playerId}`);
+  return response.data;
+};
+
 // Guild APIs
 export const createGuild = async (name: string, tag: string, description: string, leaderId: string): Promise<Guild> => {
   const response = await api.post(`/guilds?leader_id=${leaderId}`, { name, tag, description });

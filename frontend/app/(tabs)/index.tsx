@@ -491,9 +491,19 @@ export default function MapScreen() {
                   <Text style={styles.rewardText}>{selectedMarker.data.rewards.xp} XP</Text>
                 </View>
               </View>
-              <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#FBBC04'}]} onPress={() => handleStartMission(selectedMarker.data)}>
-                <Text style={styles.actionButtonText}>START</Text>
-              </TouchableOpacity>
+              {selectedMarker.data.accepted_by === playerId ? (
+                <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#4caf50'}]} onPress={() => handleStartMission(selectedMarker.data)}>
+                  <Text style={styles.actionButtonText}>VIEW PROGRESS</Text>
+                </TouchableOpacity>
+              ) : selectedMarker.data.accepted_by ? (
+                <View style={[styles.actionButton, {backgroundColor: '#555', opacity: 0.6}]}>
+                  <Text style={styles.actionButtonText}>TAKEN</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#FBBC04'}]} onPress={() => handleStartMission(selectedMarker.data)}>
+                  <Text style={styles.actionButtonText}>VIEW MISSION</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 

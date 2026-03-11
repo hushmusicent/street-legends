@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
-import { completeMission, getPlayer } from '../../services/api';
+import { completeMission, getPlayer, getActiveMissions } from '../../services/api';
 import api from '../../services/api';
 import { GameButton } from '../../components/GameButton';
 import { Mission } from '../../types/game';
@@ -39,16 +39,39 @@ export default function MissionScreen() {
   const [target, setTarget] = useState(0);
 
   useEffect(() => {
-    const found = nearbyMissions.find((m) => m.id === id);
-    if (found) {
-      setMission(found);
-      setCurrentMission(found);
-      setProgress(found.goal_progress || 0);
-      setTarget(found.goal_target || 0);
-      setAccepted(!!found.accepted_by);
-    }
-    setLoading(false);
-  }, [id, nearbyMissions]);
+    const loadMission = async () => {
+      // First try from nearby missions (map context)
+      const found = nearbyMissions.find((m) => m.id === id);
+      if (found) {
+        setMission(found);
+        setCurrentMission(found);
+        setProgress(found.goal_progress || 0);
+        setTarget(found.goal_target || 0);
+        setAccepted(!!found.accepted_by);
+        setLoading(false);
+        return;
+      }
+
+      // If not found locally, fetch from active missions (tracker context)
+      if (playerId) {
+        try {
+          const activeMissions = await getActiveMissions(playerId);
+          const active = activeMissions.find((m: any) => m.id === id);
+          if (active) {
+            setMission(active);
+            setCurrentMission(active);
+            setProgress(active.goal_progress || 0);
+            setTarget(active.goal_target || 0);
+            setAccepted(!!active.accepted_by);
+          }
+        } catch (err) {
+          console.error('Failed to fetch active missions:', err);
+        }
+      }
+      setLoading(false);
+    };
+    loadMission();
+  }, [id, nearbyMissions, playerId]);
 
   const handleAccept = async () => {
     if (!id || !playerId) return;
@@ -56,7 +79,7 @@ export default function MissionScreen() {
     try {
       await api.post(`/missions/${id}/accept?player_id=${playerId}`);
       setAccepted(true);
-      Alert.alert('Mission Accepted!', 'Go out and complete the objective!');
+      Alert.alert('Mission Accepted!', 'Track your progress in the Missions tab!');
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.detail || 'Failed to accept mission');
     } finally {

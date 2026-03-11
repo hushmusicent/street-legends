@@ -1475,6 +1475,32 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
     
     return nearby
 
+@api_router.get("/missions/active/{player_id}")
+async def get_active_missions(player_id: str):
+    """Get all active/accepted missions for a player"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    active_ids = player.get("active_missions", [])
+    if not active_ids:
+        return []
+    
+    missions = []
+    for mid in active_ids:
+        m = await db.missions.find_one({"id": mid})
+        if m:
+            missions.append(serialize_doc(m))
+        else:
+            # Clean up stale mission ids
+            active_ids.remove(mid)
+    
+    # Update player if we cleaned up stale ids
+    if len(active_ids) != len(player.get("active_missions", [])):
+        await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active_ids}})
+    
+    return missions
+
 @api_router.post("/missions/{mission_id}/accept")
 async def accept_mission(mission_id: str, player_id: str):
     """Accept a phone booth mission and start tracking progress"""
@@ -1486,6 +1512,18 @@ async def accept_mission(mission_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
+    # Prevent re-acceptance: check if mission is already accepted by anyone
+    if mission.get("accepted_by"):
+        if mission["accepted_by"] == player_id:
+            raise HTTPException(status_code=400, detail="You already accepted this mission")
+        else:
+            raise HTTPException(status_code=400, detail="Mission already taken by another player")
+    
+    # Check if player already has this mission in their active list
+    active = player.get("active_missions", [])
+    if mission_id in active:
+        raise HTTPException(status_code=400, detail="You already accepted this mission")
+    
     # Set mission as accepted by this player
     await db.missions.update_one(
         {"id": mission_id},
@@ -1493,10 +1531,8 @@ async def accept_mission(mission_id: str, player_id: str):
     )
     
     # Also track in player's active missions
-    active = player.get("active_missions", [])
-    if mission_id not in active:
-        active.append(mission_id)
-        await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active}})
+    active.append(mission_id)
+    await db.players.update_one({"id": player_id}, {"$set": {"active_missions": active}})
     
     return {"message": f"Mission accepted: {mission['title']}", "mission_id": mission_id}
 
