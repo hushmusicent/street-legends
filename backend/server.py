@@ -1401,18 +1401,31 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
     ]
     
     # Bounty missions (dollar sign on map): defeat specific enemy types for cash
-    BOUNTY_TEMPLATES = [
-        {"type": "bounty", "title": "Thug Bounty", "enemy": "Thug", "targets": [3, 5, 8], "desc": "Eliminate {n} Thugs for a cash reward."},
-        {"type": "bounty", "title": "Gangster Hit", "enemy": "Gangster", "targets": [3, 5, 7], "desc": "Take out {n} Gangsters. Dead or alive."},
-        {"type": "bounty", "title": "Criminal Warrant", "enemy": "Criminal", "targets": [2, 4, 6], "desc": "Bring down {n} Criminals in the area."},
-        {"type": "bounty", "title": "Villain Contract", "enemy": "Villain", "targets": [2, 3, 5], "desc": "There's a price on {n} Villains. Collect it."},
-        {"type": "bounty", "title": "Assassin Hunt", "enemy": "Assassin", "targets": [2, 4, 6], "desc": "Hunt down {n} Assassins for big money."},
-        {"type": "bounty", "title": "Mobster Bounty", "enemy": "Mobster", "targets": [3, 5, 7], "desc": "The mob put a bounty on {n} Mobsters."},
-        {"type": "bounty", "title": "Outlaw Contract", "enemy": "Outlaw", "targets": [2, 4, 6], "desc": "Wanted: {n} Outlaws. Reward on completion."},
-        {"type": "bounty", "title": "Bandit Sweep", "enemy": "Bandit", "targets": [3, 5, 8], "desc": "Clear out {n} Bandits for a payday."},
-        {"type": "bounty", "title": "Hooligan Purge", "enemy": "Hooligan", "targets": [4, 6, 8], "desc": "Smash {n} Hooligans and get paid."},
-        {"type": "bounty", "title": "Felon Takedown", "enemy": "Felon", "targets": [2, 4, 5], "desc": "Collect the bounty on {n} Felons."},
-    ]
+    # Dynamically generate bounties from the player's current and previous tiers only
+    player_tier = get_player_tier(player_level)
+    tier_enemies = [e for e in ENEMY_TIERS if e["tier"] <= player_tier and not e["is_boss"]]
+    
+    BOUNTY_TEMPLATES = []
+    bounty_titles = {
+        "Thug": "Thug Bounty", "Gangster": "Gangster Hit", "Criminal": "Criminal Warrant",
+        "Villain": "Villain Contract", "Bandit": "Bandit Sweep", "Assassin": "Assassin Hunt",
+        "Mobster": "Mobster Bounty", "Hooligan": "Hooligan Purge", "Thief": "Thief Hunt",
+        "Hoodlum": "Hoodlum Purge", "Pirate": "Pirate Raid", "Bully": "Bully Beatdown",
+        "Offender": "Offender Takedown", "Hood": "Hood Cleanup", "Goon": "Goon Smash",
+        "Ruffian": "Ruffian Roundup", "Punk": "Punk Patrol", "Rough Neck": "Rough Neck Rush",
+        "Tough Guy": "Tough Guy Takedown", "Gang Banger": "Gang Banger Bust", "Gorilla": "Gorilla Hunt",
+        "Felon": "Felon Takedown", "Outlaw": "Outlaw Contract",
+    }
+    for enemy in tier_enemies:
+        name = enemy["name"]
+        title = bounty_titles.get(name, f"{name} Bounty")
+        BOUNTY_TEMPLATES.append({
+            "type": "bounty",
+            "title": title,
+            "enemy": name,
+            "targets": [3, 5, 8],
+            "desc": f"Eliminate {{n}} {name}s for a cash reward.",
+        })
     
     difficulties = ["easy", "medium", "hard"]
     
