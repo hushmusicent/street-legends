@@ -17,7 +17,7 @@ import { getBattle, battleAction, getPlayerSkills, getPlayer } from '../../servi
 import { HealthBar } from '../../components/HealthBar';
 import { GameButton } from '../../components/GameButton';
 import { Battle, Skill } from '../../types/game';
-import { THUG_BATTLE_IMAGE } from '../../assets/enemyImages';
+import { getEnemyBattleImage } from '../../assets/enemyImages';
 
 export default function BattleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -103,7 +103,7 @@ export default function BattleScreen() {
   const isActive = battle.status === 'active';
   const isVictory = battle.status === 'won';
   const isDefeat = battle.status === 'lost';
-  const isThugEnemy = battle.enemy_name?.toLowerCase().includes('thug');
+  const enemyImage = getEnemyBattleImage(battle.enemy_name || '');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -115,9 +115,9 @@ export default function BattleScreen() {
 
       {/* Enemy Section */}
       <View style={styles.enemySection}>
-        <View style={[styles.enemyAvatar, isThugEnemy && styles.enemyAvatarThug]}>
-          {isThugEnemy ? (
-            <Image source={{ uri: THUG_BATTLE_IMAGE }} style={styles.enemyImage} />
+        <View style={[styles.enemyAvatar, enemyImage && styles.enemyAvatarThug]}>
+          {enemyImage ? (
+            <Image source={{ uri: enemyImage }} style={styles.enemyImage} />
           ) : (
             <Ionicons
               name={battle.enemy_type === 'monster' ? 'skull' : 'person'}
