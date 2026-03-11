@@ -440,44 +440,6 @@ export default function MapScreen() {
         </View>
       </SafeAreaView>
 
-      {/* Quick action cards */}
-      <View style={styles.entityList}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {nearbyMonsters.slice(0, 3).map((monster) => (
-            <TouchableOpacity
-              key={monster.id}
-              style={[styles.entityCard, styles.monsterCard]}
-              onPress={() => setSelectedMarker({ type: 'monster', data: monster })}
-            >
-              <Ionicons name="skull" size={18} color="#EA4335" />
-              <Text style={styles.entityName}>{monster.name}</Text>
-              <Text style={styles.entityLevel}>Lv.{monster.level}</Text>
-            </TouchableOpacity>
-          ))}
-          {nearbyMissions.slice(0, 2).map((mission) => (
-            <TouchableOpacity
-              key={mission.id}
-              style={[styles.entityCard, styles.missionCard]}
-              onPress={() => setSelectedMarker({ type: 'mission', data: mission })}
-            >
-              <Ionicons name="briefcase" size={18} color="#FBBC04" />
-              <Text style={styles.entityName} numberOfLines={1}>{mission.title}</Text>
-            </TouchableOpacity>
-          ))}
-          {nearbyShops.slice(0, 3).map((shop) => (
-            <TouchableOpacity
-              key={shop.id}
-              style={[styles.entityCard, { borderLeftColor: '#FF6F00' }]}
-              onPress={() => setSelectedMarker({ type: 'shop', data: shop })}
-            >
-              <Ionicons name="storefront" size={18} color="#FF6F00" />
-              <Text style={styles.entityName} numberOfLines={1}>{shop.name}</Text>
-              <Text style={styles.entityLevel}>{shop.stock?.length || 0} items</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
       {/* Popup */}
       {selectedMarker && (
         <View style={styles.popup}>
