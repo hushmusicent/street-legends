@@ -498,21 +498,52 @@ SKILLS = {
 }
 
 # ============== TERRITORY SYSTEM ==============
-TERRITORY_NAMES = [
-    "Northside Turf", "Downtown Block", "The Docks", "Eastside Plaza", "Westend Corner",
-    "Central Park Zone", "Old Factory Row", "Market Square", "Riverside Strip", "The Underpass",
-    "Southgate Junction", "Warehouse District", "Rail Yard Outpost", "Harbor Heights", "Canal Street Turf",
-    "Hilltop Lookout", "Bridge Crossing", "Neon Alley", "Freeway Overpass", "Dead End Zone",
+# Generate 1000+ unique territory names from combinations
+_TERR_PREFIXES = [
+    "North", "South", "East", "West", "Central", "Upper", "Lower", "Old", "New", "Dark",
+    "Iron", "Steel", "Golden", "Silver", "Crimson", "Shadow", "Broken", "Lost", "Dead", "Red",
+    "Black", "White", "Gray", "Blue", "Green", "Rust", "Ash", "Stone", "Frost", "Storm",
+    "Thunder", "Silent", "Hidden", "Fallen", "Burning", "Hollow", "Forgotten", "Bloody", "Wild", "Lone",
 ]
+_TERR_MIDS = [
+    "side", "gate", "ridge", "hill", "vale", "creek", "water", "field", "wood", "stone",
+    "cross", "bridge", "port", "haven", "cliff", "peak", "bay", "lake", "river", "pine",
+    "oak", "elm", "palm", "vine", "thorn", "fang", "skull", "bone", "crown", "tower",
+    "wall", "forge", "mill", "yard", "well", "spring", "marsh", "grove", "dale", "moor",
+]
+_TERR_SUFFIXES = [
+    "Turf", "Block", "Zone", "Strip", "Row", "Corner", "Plaza", "District", "Junction", "Alley",
+    "Heights", "Crossing", "Square", "Outpost", "Quarters", "Grounds", "Yard", "Court", "Lane", "Run",
+    "Point", "Stretch", "Flats", "Terrace", "Precinct", "Sector", "Ward", "Patch", "Lot", "Pit",
+]
+
+def _generate_territory_names():
+    """Generate 1000+ unique territory names"""
+    names = []
+    # Pattern 1: Prefix + Mid + Suffix (40 * 40 * 30 = 48,000 combos, pick a diverse set)
+    for p in _TERR_PREFIXES:
+        for m in _TERR_MIDS:
+            name = f"{p}{m} {_TERR_SUFFIXES[hash(p + m) % len(_TERR_SUFFIXES)]}"
+            names.append(name)
+    # Shuffle deterministically for variety
+    rng = random.Random(42)
+    rng.shuffle(names)
+    return names
+
+TERRITORY_NAMES = _generate_territory_names()  # 1600 unique names
 
 TERRITORY_BOSS_NAMES = [
     "Turf Guardian", "Block Captain", "Dock Warden", "Plaza Enforcer", "Corner King",
     "Zone Protector", "Factory Foreman", "Market Boss", "Strip Lord", "Underpass Phantom",
+    "Ridge Sentinel", "Heights Watcher", "Quarter Master", "Sector Chief", "Ward Keeper",
+    "District Baron", "Junction Brawler", "Court Ruler", "Lane Prowler", "Point Defender",
 ]
 
 TERRITORY_COLORS = [
     "#e74c3c", "#3498db", "#2ecc71", "#9b59b6", "#f39c12",
     "#1abc9c", "#e91e63", "#ff5722", "#607d8b", "#795548",
+    "#00bcd4", "#8bc34a", "#ff9800", "#673ab7", "#009688",
+    "#c62828", "#1565c0", "#2e7d32", "#6a1b9a", "#ef6c00",
 ]
 
 # ============== MODELS ==============
@@ -1862,7 +1893,7 @@ async def get_player_buffs(player_id: str):
 # ============== TERRITORY ENDPOINTS ==============
 
 def generate_territories_for_location(lat: float, lng: float, player_level: int = 1):
-    """Generate 3-5 non-overlapping territories for a given area, cash-only daily rewards"""
+    """Generate 3-5 non-overlapping SQUARE territories for a given area, cash-only daily rewards"""
     import math
     grid_lat = round(lat / 0.005) * 0.005
     grid_lng = round(lng / 0.005) * 0.005
@@ -1871,18 +1902,25 @@ def generate_territories_for_location(lat: float, lng: float, player_level: int 
     
     count = rng.randint(3, 5)
     territories = []
-    placed = []  # list of (lat, lng, radius_deg) for overlap checking
+    placed = []  # list of (lat, lng, half_size_lat, half_size_lng) for overlap checking
     
-    # 1 degree latitude ≈ 111,000 m, 1 degree longitude ≈ 85,000 m (at ~40° lat)
+    # 1 degree latitude ≈ 111,000 m, 1 degree longitude ≈ cos(lat) * 111,000 m
     LAT_M = 111000.0
-    LNG_M = 85000.0
+    LNG_M = math.cos(math.radians(lat)) * 111000.0
     
-    def overlaps(t_lat, t_lng, t_radius_m):
+    def squares_overlap(lat1, lng1, hs_lat1, hs_lng1, lat2, lng2, hs_lat2, hs_lng2):
+        """Check if two axis-aligned squares overlap (with 30m buffer)"""
+        buffer_lat = 30.0 / LAT_M
+        buffer_lng = 30.0 / LNG_M
+        return not (lat1 + hs_lat1 + buffer_lat < lat2 - hs_lat2 or
+                    lat2 + hs_lat2 + buffer_lat < lat1 - hs_lat1 or
+                    lng1 + hs_lng1 + buffer_lng < lng2 - hs_lng2 or
+                    lng2 + hs_lng2 + buffer_lng < lng1 - hs_lng1)
+    
+    def overlaps(t_lat, t_lng, hs_lat, hs_lng):
         """Check if a new territory overlaps any existing one"""
-        for (p_lat, p_lng, p_radius_m) in placed:
-            dist_m = math.sqrt(((t_lat - p_lat) * LAT_M) ** 2 + ((t_lng - p_lng) * LNG_M) ** 2)
-            min_gap = t_radius_m + p_radius_m + 50  # 50m buffer between territories
-            if dist_m < min_gap:
+        for (p_lat, p_lng, p_hs_lat, p_hs_lng) in placed:
+            if squares_overlap(t_lat, t_lng, hs_lat, hs_lng, p_lat, p_lng, p_hs_lat, p_hs_lng):
                 return True
         return False
     
@@ -1896,21 +1934,24 @@ def generate_territories_for_location(lat: float, lng: float, player_level: int 
         boss_idx = (seed + i) % len(TERRITORY_BOSS_NAMES)
         color_idx = (seed + i) % len(TERRITORY_COLORS)
         
-        radius_m = rng.randint(150, 250)
+        # Square side length in meters (150-250m), half-size for bounds
+        side_m = rng.randint(150, 250)
+        half_size_lat = (side_m / 2.0) / LAT_M  # in degrees
+        half_size_lng = (side_m / 2.0) / LNG_M  # in degrees (adjusted for longitude)
         
         # Place using angular spread to avoid overlaps
         for attempt in range(10):
             dist = rng.uniform(0.001, 0.003)  # ~110-330m from center
             if attempt > 0:
-                dist += attempt * 0.0005  # push further out on retries
+                dist += attempt * 0.0005
             angle = angles[i] if i < len(angles) else rng.uniform(0, 2 * math.pi)
             t_lat = grid_lat + dist * math.sin(angle)
             t_lng = grid_lng + dist * math.cos(angle)
             
-            if not overlaps(t_lat, t_lng, radius_m):
+            if not overlaps(t_lat, t_lng, half_size_lat, half_size_lng):
                 break
         
-        placed.append((t_lat, t_lng, radius_m))
+        placed.append((t_lat, t_lng, half_size_lat, half_size_lng))
         
         # Boss scales with zone difficulty
         zone_level = max(1, player_level + rng.randint(-2, 3))
@@ -1926,7 +1967,13 @@ def generate_territories_for_location(lat: float, lng: float, player_level: int 
             "id": territory_id,
             "name": TERRITORY_NAMES[idx],
             "location": {"latitude": round(t_lat, 6), "longitude": round(t_lng, 6)},
-            "radius": radius_m,
+            "size": side_m,  # square side length in meters
+            "bounds": {
+                "south": round(t_lat - half_size_lat, 6),
+                "north": round(t_lat + half_size_lat, 6),
+                "west": round(t_lng - half_size_lng, 6),
+                "east": round(t_lng + half_size_lng, 6),
+            },
             "color": TERRITORY_COLORS[color_idx],
             "boss": {
                 "name": TERRITORY_BOSS_NAMES[boss_idx],

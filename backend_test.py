@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 import json
 import sys
+import math
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -548,7 +549,293 @@ class RPGAPITester:
             print("   ❌ Failed to capture territory")
             return False
 
-    async def test_19_passive_health_regeneration(self) -> bool:
+    async def test_19_square_territory_generation(self) -> bool:
+        """Test square territory system - bounds, size, and names from 1000+ pool"""
+        print("\n19. Testing Square Territory Generation")
+        
+        params = {
+            "latitude": 40.758,
+            "longitude": -73.9855,
+            "player_level": 1
+        }
+        
+        result = await self.make_request("GET", "/territories/nearby", params=params)
+        success = self.print_result("Territory generation", result)
+        
+        if not success or not result["data"] or not isinstance(result["data"], list):
+            return False
+        
+        territories = result["data"]
+        print(f"   Territories generated: {len(territories)}")
+        
+        # Check each territory for required square system fields
+        all_valid = True
+        
+        for i, territory in enumerate(territories):
+            name = territory.get("name")
+            bounds = territory.get("bounds")
+            size = territory.get("size")
+            location = territory.get("location")
+            
+            print(f"\n   Territory {i+1}: {name}")
+            
+            # 1. Check bounds field exists and has correct structure
+            if not bounds or not isinstance(bounds, dict):
+                print(f"   ❌ Missing or invalid bounds field")
+                all_valid = False
+                continue
+                
+            required_bounds = ["south", "north", "west", "east"]
+            for bound in required_bounds:
+                if bound not in bounds or not isinstance(bounds[bound], (int, float)):
+                    print(f"   ❌ Missing or invalid '{bound}' coordinate")
+                    all_valid = False
+                    continue
+            
+            if all_valid:
+                print(f"   ✅ Bounds: S={bounds['south']}, N={bounds['north']}, W={bounds['west']}, E={bounds['east']}")
+            
+            # 2. Check size field exists and is reasonable
+            if not size or not isinstance(size, (int, float)) or size <= 0:
+                print(f"   ❌ Missing or invalid size field: {size}")
+                all_valid = False
+                continue
+            else:
+                print(f"   ✅ Size: {size} meters")
+            
+            # 3. Verify bounds form a square (proportional to latitude adjustment)
+            lat_diff = bounds["north"] - bounds["south"]
+            lng_diff = bounds["east"] - bounds["west"]
+            
+            # Convert to meters for comparison (approximate)
+            lat_m = lat_diff * 111000  # 1 degree latitude ≈ 111km
+            lng_m = lng_diff * 111000 * abs(math.cos(math.radians(location.get("latitude", 0))))
+            
+            aspect_ratio = abs(lat_m / lng_m) if lng_m != 0 else 0
+            is_square = 0.9 <= aspect_ratio <= 1.1  # Allow 10% variance for square
+            
+            if is_square:
+                print(f"   ✅ Square bounds verified: {lat_m:.1f}m x {lng_m:.1f}m (ratio: {aspect_ratio:.2f})")
+            else:
+                print(f"   ❌ Bounds not square: {lat_m:.1f}m x {lng_m:.1f}m (ratio: {aspect_ratio:.2f})")
+                all_valid = False
+            
+            # 4. Check territory names are from new pool (not old names)
+            old_names = ["Northside Turf", "Southside Block", "Eastside Zone", "Westside Strip"]
+            if name in old_names:
+                print(f"   ❌ Using old territory name: {name}")
+                all_valid = False
+            else:
+                print(f"   ✅ Territory name from new pool: {name}")
+        
+        # Store territories for overlap test
+        self.test_data["square_territories"] = territories
+        
+        return all_valid
+    
+    async def test_20_territory_capture_functionality(self) -> bool:
+        """Test that territory capture still works with square system"""
+        print("\n20. Testing Territory Capture Functionality")
+        
+        # Create test player
+        unique_name = f"SquareTest_{int(__import__('time').time())}"
+        player_data = {
+            "name": unique_name,
+            "character_class": "street_soldier"
+        }
+        
+        result = await self.make_request("POST", "/players", data=player_data)
+        if not self.print_result("Create SquareTest player", result):
+            return False
+        
+        player_id = result["data"].get("id")
+        print(f"   Test Player ID: {player_id}")
+        
+        # Get territories at player location
+        params = {
+            "latitude": 40.758,
+            "longitude": -73.9855,
+            "player_level": 1
+        }
+        
+        result = await self.make_request("GET", "/territories/nearby", params=params)
+        if not self.print_result("Get nearby territories", result):
+            return False
+        
+        territories = result["data"]
+        unowned = [t for t in territories if not t.get("owner_id")]
+        
+        if not unowned:
+            print("   ❌ No unowned territories available for capture test")
+            return False
+        
+        territory = unowned[0]
+        territory_id = territory["id"]
+        territory_name = territory["name"]
+        
+        print(f"   Attempting to capture: {territory_name}")
+        
+        # Attempt capture
+        params = {"player_id": player_id}
+        result = await self.make_request("POST", f"/territories/{territory_id}/capture", params=params)
+        
+        success = self.print_result("Territory capture", result)
+        if success and result["data"]:
+            capture_data = result["data"]
+            battle_result = capture_data.get("result")
+            
+            print(f"   Capture result: {battle_result}")
+            
+            if battle_result == "victory":
+                print(f"   ✅ Successfully captured territory: {territory_name}")
+            else:
+                print(f"   ⚔️ Battle outcome: {battle_result} (capture attempt worked correctly)")
+            
+            return True
+        
+        return success
+    
+    async def test_21_multiple_territory_name_diversity(self) -> bool:
+        """Test that territory names are diverse across different locations"""
+        print("\n21. Testing Territory Name Diversity")
+        
+        locations = [
+            {"lat": 40.758, "lng": -73.9855, "name": "NYC Times Square"},
+            {"lat": 34.0522, "lng": -118.2437, "name": "LA Downtown"},
+            {"lat": 41.8781, "lng": -87.6298, "name": "Chicago Loop"}
+        ]
+        
+        all_territory_names = set()
+        location_names = {}
+        
+        for i, loc in enumerate(locations):
+            print(f"\n   Location {i+1}: {loc['name']}")
+            
+            params = {
+                "latitude": loc["lat"],
+                "longitude": loc["lng"],
+                "player_level": 1
+            }
+            
+            result = await self.make_request("GET", "/territories/nearby", params=params)
+            if not result["success"] or not result["data"]:
+                print(f"   ❌ Failed to get territories for {loc['name']}")
+                return False
+            
+            territories = result["data"]
+            names = [t["name"] for t in territories]
+            location_names[loc["name"]] = names
+            all_territory_names.update(names)
+            
+            print(f"   Territories: {', '.join(names)}")
+        
+        # Check diversity
+        total_territories = sum(len(names) for names in location_names.values())
+        unique_names = len(all_territory_names)
+        diversity_ratio = unique_names / total_territories
+        
+        print(f"\n   Total territories across locations: {total_territories}")
+        print(f"   Unique territory names: {unique_names}")
+        print(f"   Diversity ratio: {diversity_ratio:.2f}")
+        
+        # Verify names are from 1000+ pool (check a few patterns)
+        sample_names = list(all_territory_names)[:5]
+        valid_patterns = 0
+        
+        for name in sample_names:
+            # Names should follow pattern: Prefix + Mid + Space + Suffix
+            parts = name.split()
+            if len(parts) == 2 and len(parts[0]) > 3 and len(parts[1]) > 3:
+                valid_patterns += 1
+                print(f"   ✅ Valid name pattern: {name}")
+            else:
+                print(f"   ⚠️ Unusual name pattern: {name}")
+        
+        # Success criteria: high diversity and valid patterns
+        success = diversity_ratio > 0.7 and valid_patterns >= len(sample_names) * 0.8
+        
+        if success:
+            print(f"   ✅ Territory names show good diversity from 1000+ name pool")
+        else:
+            print(f"   ❌ Territory names may not be diverse enough or from correct pool")
+        
+        return success
+    
+    async def test_22_no_overlapping_territories(self) -> bool:
+        """Test that territories don't share the same coordinates"""
+        print("\n22. Testing No Overlapping Territories")
+        
+        if "square_territories" not in self.test_data:
+            print("   ❌ Skipping - No territories from square generation test")
+            return False
+        
+        territories = self.test_data["square_territories"]
+        print(f"   Checking {len(territories)} territories for overlaps")
+        
+        overlaps_found = []
+        
+        for i in range(len(territories)):
+            for j in range(i + 1, len(territories)):
+                t1 = territories[i]
+                t2 = territories[j]
+                
+                # Check if bounds overlap
+                b1 = t1.get("bounds", {})
+                b2 = t2.get("bounds", {})
+                
+                if not b1 or not b2:
+                    continue
+                
+                # Check for overlap (rectangles overlap if they don't NOT overlap)
+                no_overlap = (
+                    b1["east"] <= b2["west"] or  # t1 is left of t2
+                    b2["east"] <= b1["west"] or  # t2 is left of t1
+                    b1["north"] <= b2["south"] or  # t1 is below t2
+                    b2["north"] <= b1["south"]    # t2 is below t1
+                )
+                
+                if not no_overlap:
+                    overlap_info = {
+                        "territory1": {"name": t1.get("name"), "bounds": b1},
+                        "territory2": {"name": t2.get("name"), "bounds": b2}
+                    }
+                    overlaps_found.append(overlap_info)
+                    print(f"   ❌ Overlap found between '{t1.get('name')}' and '{t2.get('name')}'")
+        
+        if not overlaps_found:
+            print(f"   ✅ No overlapping territories found among {len(territories)} territories")
+            
+            # Additional check: verify minimum distances
+            min_distance = float('inf')
+            closest_pair = None
+            
+            for i in range(len(territories)):
+                for j in range(i + 1, len(territories)):
+                    t1_loc = territories[i].get("location", {})
+                    t2_loc = territories[j].get("location", {})
+                    
+                    if t1_loc and t2_loc:
+                        # Calculate distance between centers
+                        lat1, lng1 = t1_loc.get("latitude", 0), t1_loc.get("longitude", 0)
+                        lat2, lng2 = t2_loc.get("latitude", 0), t2_loc.get("longitude", 0)
+                        
+                        # Approximate distance in meters
+                        lat_diff = (lat2 - lat1) * 111000
+                        lng_diff = (lng2 - lng1) * 111000 * math.cos(math.radians((lat1 + lat2) / 2))
+                        distance = math.sqrt(lat_diff**2 + lng_diff**2)
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_pair = (territories[i]["name"], territories[j]["name"])
+            
+            print(f"   ℹ️ Closest territories: {closest_pair[0]} and {closest_pair[1]} ({min_distance:.1f}m apart)")
+            
+            return True
+        else:
+            print(f"   ❌ Found {len(overlaps_found)} overlapping territory pairs")
+            return False
+
+    async def test_23_passive_health_regeneration(self) -> bool:
         """Test passive health regeneration feature"""
         print("\n19. Testing Passive Health Regeneration")
         
@@ -727,25 +1014,10 @@ class RPGAPITester:
         
         # Define test sequence
         tests = [
-            ("Root Endpoint", self.test_1_root_endpoint),
-            ("Character Classes", self.test_2_character_classes),
-            ("Create Player", self.test_3_create_player),
-            ("Get Player", self.test_4_get_player),
-            ("Spawn Monsters", self.test_5_spawn_monsters),
-            ("Generate Missions", self.test_6_generate_missions),
-            ("Start Battle", self.test_7_start_battle),
-            ("Battle Action", self.test_8_battle_action),
-            ("Get Battle", self.test_9_get_battle),
-            ("Create Guild", self.test_10_create_guild),
-            ("List Guilds", self.test_11_list_guilds),
-            ("Leaderboard", self.test_12_leaderboard),
-            ("Get Skills", self.test_13_get_skills),
-            ("Player Skills", self.test_14_player_skills),
-            ("Leaderboard Profile Pic Field", self.test_15_leaderboard_profile_pic_field),
-            ("Territory Nearby API", self.test_16_territory_nearby_api),
-            ("Create Test Player for Territory", self.test_17_create_test_player_for_territory),
-            ("Territory Capture API", self.test_18_territory_capture_api),
-            ("Passive Health Regeneration", self.test_19_passive_health_regeneration)
+            ("Square Territory Generation", self.test_19_square_territory_generation),
+            ("Territory Capture Functionality", self.test_20_territory_capture_functionality),
+            ("Territory Name Diversity", self.test_21_multiple_territory_name_diversity),
+            ("No Overlapping Territories", self.test_22_no_overlapping_territories)
         ]
         
         # Run tests

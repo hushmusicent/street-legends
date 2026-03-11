@@ -28,6 +28,8 @@ interface MapTerritory {
   name: string;
   location: Position;
   radius: number;
+  size?: number;
+  bounds?: { south: number; north: number; west: number; east: number };
   color: string;
   owner_id: string | null;
   owner_name: string | null;
@@ -174,7 +176,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
       }
     };
 
-    // API: Update territories (circles on map)
+    // API: Update territories (squares on map)
     var territoryLayers = [];
     window.updateTerritories = function(territories) {
       // Remove old territory layers
@@ -186,20 +188,33 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number) => {
         var isOwned = !!t.owner_id;
         var ownerPic = t.owner_pic || '';
         
-        // Circle zone
-        var circle = L.circle([t.location.latitude, t.location.longitude], {
-          radius: t.radius,
+        // Square territory zone using bounds or fallback calculation
+        var bounds;
+        if (t.bounds) {
+          bounds = [[t.bounds.south, t.bounds.west], [t.bounds.north, t.bounds.east]];
+        } else {
+          // Fallback: calculate from center + size (or radius)
+          var sizeM = t.size || t.radius || 200;
+          var halfLat = (sizeM / 2) / 111000;
+          var halfLng = (sizeM / 2) / (111000 * Math.cos(t.location.latitude * Math.PI / 180));
+          bounds = [
+            [t.location.latitude - halfLat, t.location.longitude - halfLng],
+            [t.location.latitude + halfLat, t.location.longitude + halfLng]
+          ];
+        }
+        
+        var rect = L.rectangle(bounds, {
           color: color,
           fillColor: color,
           fillOpacity: isOwned ? 0.35 : 0.2,
           weight: 3,
           dashArray: isOwned ? null : '8, 10',
         });
-        circle.on('click', function() {
+        rect.on('click', function() {
           sendMessage({ type: 'territory', id: t.id });
         });
-        circle.addTo(map);
-        territoryLayers.push(circle);
+        rect.addTo(map);
+        territoryLayers.push(rect);
         
         // Owner profile picture marker (large, prominent)
         if (isOwned && ownerPic) {

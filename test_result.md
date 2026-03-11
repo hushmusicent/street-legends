@@ -406,9 +406,21 @@ metadata:
   test_sequence: 1
   run_ui: false
 
+  - task: "Square Territory System"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ SQUARE TERRITORY SYSTEM FULLY VERIFIED: All 4 specialized tests PASSED (100% success rate). Key findings: 1) Territory generation returns territories with proper 'bounds' field (south, north, west, east coordinates) and 'size' field (side length in meters), 2) Bounds form proper squares with aspect ratio ~1.00 (verified mathematically), 3) Territory names use NEW 1000+ name pool with patterns like 'Whiteport Crossing', 'Upperbridge Outpost' - NO old names detected, 4) Territory capture functionality works correctly with square system, 5) Territory names show 100% diversity across different locations (12 unique names from 12 territories), 6) No overlapping territories found among generated territories (closest pair 235.8m apart). Square territory system working exactly as specified in review request."
+
 test_plan:
   current_focus:
-    - "10-Tier Enemy System fully tested and verified working"
+    - "Square Territory System fully tested and verified working"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
@@ -424,3 +436,5 @@ agent_communication:
     -message: "🎉 PASSIVE HEALTH REGENERATION TESTING COMPLETE: Feature fully implemented and working correctly. Key findings: 1) Regenerates 25% of max_health every 15 minutes lazily on GET /players/{id}, 2) Health properly capped at maximum, 3) Battle system correctly separates temporary battle HP from persistent player HP, 4) Uses created_at/last_active as baseline for first regeneration, 5) Sets last_health_regen timestamp after regeneration occurs. Mathematical calculations verified correct. All requirements from review request satisfied."
     -agent: "testing"
     -message: "🎯 10-TIER ENEMY SYSTEM TESTING COMPLETE: All 6 specialized tests PASSED with 100% success rate. Comprehensive verification completed: ✅ Level 1 players (Tier 1 only - Thug, Gangster, Criminal, Villain, Bandit, NO bosses), ✅ Level 5 players (still Tier 1 only), ✅ Level 15 players (Tier 1+2 - includes Assassin, Thief, Hoodlum, Pirate, Bully), ✅ Level 25 players (Tier 1+2+3 - includes Offender, Hood, Mobster, Hooligan), ✅ Monster names verified (new tier system confirmed, NO old names like 'Street Thug'), ✅ Boss spawning rules (Super Thug, Super Bully only for level 11+). Enemy tier distribution working exactly as specified in review request. System ready for production use."
+    -agent: "testing"
+    -message: "🏙️ SQUARE TERRITORY SYSTEM TESTING COMPLETE: All 4 specialized tests PASSED with 100% success rate. Comprehensive verification completed: ✅ Territory generation includes required 'bounds' and 'size' fields, ✅ Bounds form mathematically verified squares (aspect ratio ~1.00), ✅ Territory names from NEW 1000+ name pool (no old names detected), ✅ Territory capture functionality works with square system, ✅ 100% name diversity across different locations (12 unique names from 12 territories), ✅ No overlapping territories found. Square territory system working exactly as specified in review request and ready for production use."
