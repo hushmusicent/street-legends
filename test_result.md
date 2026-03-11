@@ -400,12 +400,6 @@ frontend:
         -agent: "main"
         -comment: "✅ Login and signup flows verified working. Session persists and redirects to map after login."
 
-metadata:
-  created_by: "testing_agent"
-  version: "1.0"
-  test_sequence: 1
-  run_ui: false
-
   - task: "Square Territory System"
     implemented: true
     working: true
@@ -417,6 +411,24 @@ metadata:
         -working: true
         -agent: "testing"
         -comment: "✅ SQUARE TERRITORY SYSTEM FULLY VERIFIED: All 4 specialized tests PASSED (100% success rate). Key findings: 1) Territory generation returns territories with proper 'bounds' field (south, north, west, east coordinates) and 'size' field (side length in meters), 2) Bounds form proper squares with aspect ratio ~1.00 (verified mathematically), 3) Territory names use NEW 1000+ name pool with patterns like 'Whiteport Crossing', 'Upperbridge Outpost' - NO old names detected, 4) Territory capture functionality works correctly with square system, 5) Territory names show 100% diversity across different locations (12 unique names from 12 territories), 6) No overlapping territories found among generated territories (closest pair 235.8m apart). Square territory system working exactly as specified in review request."
+
+  - task: "Tiled Territory Grid System"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TILED TERRITORY GRID SYSTEM FULLY VERIFIED: All 4 comprehensive tests PASSED (100% success rate). Key verification: 1) Equal-sized tiled grid: Returns exactly 25 territories (5x5 grid) with ALL territories having same size value (150m), ALL have proper bounds (south, north, west, east), territories tile perfectly with no gaps/overlaps, 2) Unclaimed color consistency: ALL 25 unclaimed territories have exact color '#3d3d3d' (dark gray), 3) Color change on capture: Territory color successfully changes from '#3d3d3d' to bright color '#e74c3c' after capture, remaining territories stay unclaimed color, 4) Unique territory names: All 25 territories have different names from 1600+ name pool (patterns: Hollowvine Outpost, Thunderport Terrace, Thunderridge Patch, etc). Mathematical verification shows perfect aspect ratio ~1.321 for rectangular grid cells. Tiled territory grid system working exactly as specified in review request and ready for production."
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
 
 test_plan:
   current_focus:
@@ -438,3 +450,5 @@ agent_communication:
     -message: "🎯 10-TIER ENEMY SYSTEM TESTING COMPLETE: All 6 specialized tests PASSED with 100% success rate. Comprehensive verification completed: ✅ Level 1 players (Tier 1 only - Thug, Gangster, Criminal, Villain, Bandit, NO bosses), ✅ Level 5 players (still Tier 1 only), ✅ Level 15 players (Tier 1+2 - includes Assassin, Thief, Hoodlum, Pirate, Bully), ✅ Level 25 players (Tier 1+2+3 - includes Offender, Hood, Mobster, Hooligan), ✅ Monster names verified (new tier system confirmed, NO old names like 'Street Thug'), ✅ Boss spawning rules (Super Thug, Super Bully only for level 11+). Enemy tier distribution working exactly as specified in review request. System ready for production use."
     -agent: "testing"
     -message: "🏙️ SQUARE TERRITORY SYSTEM TESTING COMPLETE: All 4 specialized tests PASSED with 100% success rate. Comprehensive verification completed: ✅ Territory generation includes required 'bounds' and 'size' fields, ✅ Bounds form mathematically verified squares (aspect ratio ~1.00), ✅ Territory names from NEW 1000+ name pool (no old names detected), ✅ Territory capture functionality works with square system, ✅ 100% name diversity across different locations (12 unique names from 12 territories), ✅ No overlapping territories found. Square territory system working exactly as specified in review request and ready for production use."
+    -agent: "testing"
+    -message: "🔥 TILED TERRITORY GRID SYSTEM TESTING COMPLETE: All 4 comprehensive tests PASSED with 100% success rate. Comprehensive verification at Times Square NYC (40.758, -73.9855) completed: ✅ Equal-sized tiled grid: Exactly 25 territories (5x5 grid) with ALL having same size (150m) and proper bounds, territories tile perfectly with no gaps/overlaps, ✅ Unclaimed color consistency: ALL 25 unclaimed territories have exact color '#3d3d3d' (dark gray), ✅ Color change on capture: Successfully created GridTestPlayer, captured territory, color changed from '#3d3d3d' to bright '#e74c3c', remaining territories stay unclaimed, ✅ Unique territory names: All 25 territories have different names from 1600+ pool (Hollowvine Outpost, Thunderport Terrace, etc.). Mathematical verification shows perfect rectangular grid cells aspect ratio ~1.321. Tiled territory grid system working EXACTLY as specified in review request and ready for production use."

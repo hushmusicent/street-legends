@@ -1892,127 +1892,125 @@ async def get_player_buffs(player_id: str):
 
 # ============== TERRITORY ENDPOINTS ==============
 
-def generate_territories_for_location(lat: float, lng: float, player_level: int = 1):
-    """Generate 3-5 non-overlapping SQUARE territories for a given area, cash-only daily rewards"""
+TERRITORY_CELL_SIZE_M = 150  # Equal size for all territories (meters)
+UNCLAIMED_COLOR = "#3d3d3d"  # Dark gray for all unclaimed territories
+CLAIMED_COLORS = [
+    "#e74c3c", "#3498db", "#2ecc71", "#9b59b6", "#f39c12",
+    "#1abc9c", "#e91e63", "#ff5722", "#00bcd4", "#8bc34a",
+    "#ff9800", "#673ab7", "#009688", "#c62828", "#1565c0",
+    "#2e7d32", "#6a1b9a", "#ef6c00", "#795548", "#607d8b",
+]
+
+def get_owner_color(player_id: str) -> str:
+    """Assign a consistent bright color to a player for their territories"""
+    return CLAIMED_COLORS[hash(player_id) % len(CLAIMED_COLORS)]
+
+def generate_territory_cell(row: int, col: int, cell_lat: float, cell_lng: float, player_level: int = 1):
+    """Generate a single territory for a grid cell"""
     import math
-    grid_lat = round(lat / 0.005) * 0.005
-    grid_lng = round(lng / 0.005) * 0.005
-    seed = int(abs(grid_lat * 1000000 + grid_lng * 1000000)) % 2147483647
+    
+    # Deterministic seed from grid position
+    seed = abs(row * 100003 + col * 200017) % 2147483647
     rng = random.Random(seed)
     
-    count = rng.randint(3, 5)
-    territories = []
-    placed = []  # list of (lat, lng, half_size_lat, half_size_lng) for overlap checking
+    # Territory bounds (tiles perfectly, no gaps, no overlaps)
+    south = row * cell_lat
+    north = (row + 1) * cell_lat
+    west = col * cell_lng
+    east = (col + 1) * cell_lng
     
-    # 1 degree latitude ≈ 111,000 m, 1 degree longitude ≈ cos(lat) * 111,000 m
-    LAT_M = 111000.0
-    LNG_M = math.cos(math.radians(lat)) * 111000.0
+    # Center point
+    t_lat = (south + north) / 2
+    t_lng = (west + east) / 2
     
-    def squares_overlap(lat1, lng1, hs_lat1, hs_lng1, lat2, lng2, hs_lat2, hs_lng2):
-        """Check if two axis-aligned squares overlap (with 30m buffer)"""
-        buffer_lat = 30.0 / LAT_M
-        buffer_lng = 30.0 / LNG_M
-        return not (lat1 + hs_lat1 + buffer_lat < lat2 - hs_lat2 or
-                    lat2 + hs_lat2 + buffer_lat < lat1 - hs_lat1 or
-                    lng1 + hs_lng1 + buffer_lng < lng2 - hs_lng2 or
-                    lng2 + hs_lng2 + buffer_lng < lng1 - hs_lng1)
+    # Name and boss from seed
+    name_idx = seed % len(TERRITORY_NAMES)
+    boss_idx = seed % len(TERRITORY_BOSS_NAMES)
     
-    def overlaps(t_lat, t_lng, hs_lat, hs_lng):
-        """Check if a new territory overlaps any existing one"""
-        for (p_lat, p_lng, p_hs_lat, p_hs_lng) in placed:
-            if squares_overlap(t_lat, t_lng, hs_lat, hs_lng, p_lat, p_lng, p_hs_lat, p_hs_lng):
-                return True
-        return False
+    # Boss scales with zone difficulty
+    zone_level = max(1, player_level + rng.randint(-2, 3))
+    boss_hp = 60 + zone_level * 15
+    boss_atk = 8 + zone_level * 3
+    boss_def = 5 + zone_level * 2
+    daily_income = 20 + zone_level * 10
     
-    # Place territories in a spread pattern around grid center
-    angles = [rng.uniform(0, 2 * math.pi)]
-    for _ in range(count - 1):
-        angles.append(angles[-1] + (2 * math.pi / count) + rng.uniform(-0.3, 0.3))
-    
-    for i in range(count):
-        idx = (seed + i) % len(TERRITORY_NAMES)
-        boss_idx = (seed + i) % len(TERRITORY_BOSS_NAMES)
-        color_idx = (seed + i) % len(TERRITORY_COLORS)
-        
-        # Square side length in meters (150-250m), half-size for bounds
-        side_m = rng.randint(150, 250)
-        half_size_lat = (side_m / 2.0) / LAT_M  # in degrees
-        half_size_lng = (side_m / 2.0) / LNG_M  # in degrees (adjusted for longitude)
-        
-        # Place using angular spread to avoid overlaps
-        for attempt in range(10):
-            dist = rng.uniform(0.001, 0.003)  # ~110-330m from center
-            if attempt > 0:
-                dist += attempt * 0.0005
-            angle = angles[i] if i < len(angles) else rng.uniform(0, 2 * math.pi)
-            t_lat = grid_lat + dist * math.sin(angle)
-            t_lng = grid_lng + dist * math.cos(angle)
-            
-            if not overlaps(t_lat, t_lng, half_size_lat, half_size_lng):
-                break
-        
-        placed.append((t_lat, t_lng, half_size_lat, half_size_lng))
-        
-        # Boss scales with zone difficulty
-        zone_level = max(1, player_level + rng.randint(-2, 3))
-        boss_hp = 60 + zone_level * 15
-        boss_atk = 8 + zone_level * 3
-        boss_def = 5 + zone_level * 2
-        
-        # Daily cash reward only
-        daily_income = 20 + zone_level * 10
-        
-        territory_id = f"territory_{grid_lat:.3f}_{grid_lng:.3f}_{i}"
-        territories.append({
-            "id": territory_id,
-            "name": TERRITORY_NAMES[idx],
-            "location": {"latitude": round(t_lat, 6), "longitude": round(t_lng, 6)},
-            "size": side_m,  # square side length in meters
-            "bounds": {
-                "south": round(t_lat - half_size_lat, 6),
-                "north": round(t_lat + half_size_lat, 6),
-                "west": round(t_lng - half_size_lng, 6),
-                "east": round(t_lng + half_size_lng, 6),
-            },
-            "color": TERRITORY_COLORS[color_idx],
-            "boss": {
-                "name": TERRITORY_BOSS_NAMES[boss_idx],
-                "level": zone_level,
-                "health": boss_hp,
-                "max_health": boss_hp,
-                "attack": boss_atk,
-                "defense": boss_def,
-            },
-            "rewards": {
-                "passive_income": daily_income,
-            },
-            "owner_id": None,
-            "owner_name": None,
-        })
-    return territories
+    territory_id = f"terr_{row}_{col}"
+    return {
+        "id": territory_id,
+        "grid_row": row,
+        "grid_col": col,
+        "name": TERRITORY_NAMES[name_idx],
+        "location": {"latitude": round(t_lat, 6), "longitude": round(t_lng, 6)},
+        "size": TERRITORY_CELL_SIZE_M,
+        "bounds": {
+            "south": round(south, 6),
+            "north": round(north, 6),
+            "west": round(west, 6),
+            "east": round(east, 6),
+        },
+        "color": UNCLAIMED_COLOR,
+        "boss": {
+            "name": TERRITORY_BOSS_NAMES[boss_idx],
+            "level": zone_level,
+            "health": boss_hp,
+            "max_health": boss_hp,
+            "attack": boss_atk,
+            "defense": boss_def,
+        },
+        "rewards": {
+            "passive_income": daily_income,
+        },
+        "owner_id": None,
+        "owner_name": None,
+    }
 
 @api_router.get("/territories/nearby")
 async def get_nearby_territories(latitude: float, longitude: float, player_level: int = 1):
-    """Get or create territories near a location"""
-    grid_lat = round(latitude / 0.005) * 0.005
-    grid_lng = round(longitude / 0.005) * 0.005
-    grid_key = f"{grid_lat:.3f}_{grid_lng:.3f}"
+    """Get or create territories near a location as a tiled grid of equal squares"""
+    import math
+    LAT_M = 111000.0
+    LNG_M = math.cos(math.radians(latitude)) * 111000.0
     
-    # Check if territories already exist in DB for this grid
-    existing = await db.territories.find({"grid_key": grid_key}).to_list(length=10)
-    if existing:
-        return [serialize_doc(t) for t in existing]
+    cell_lat = TERRITORY_CELL_SIZE_M / LAT_M
+    cell_lng = TERRITORY_CELL_SIZE_M / LNG_M
     
-    # Generate new territories and store them
-    territories = generate_territories_for_location(latitude, longitude, player_level)
-    for t in territories:
-        t["grid_key"] = grid_key
-        t["created_at"] = datetime.utcnow().isoformat()
-        t["last_income_collected"] = None
-    await db.territories.insert_many(territories)
+    # Find the grid cell the player is in
+    center_row = int(latitude / cell_lat)
+    center_col = int(longitude / cell_lng)
+    # Handle negative coordinates
+    if longitude < 0:
+        center_col -= 1
     
-    stored = await db.territories.find({"grid_key": grid_key}).to_list(length=10)
-    return [serialize_doc(t) for t in stored]
+    # Generate 5x5 grid of territory IDs around player
+    territory_ids = []
+    cell_map = {}
+    for dr in range(-2, 3):
+        for dc in range(-2, 3):
+            row = center_row + dr
+            col = center_col + dc
+            tid = f"terr_{row}_{col}"
+            territory_ids.append(tid)
+            cell_map[tid] = (row, col)
+    
+    # Fetch existing territories from DB
+    existing = await db.territories.find({"id": {"$in": territory_ids}}).to_list(length=25)
+    existing_ids = {t["id"] for t in existing}
+    
+    # Generate missing territories
+    new_territories = []
+    for tid, (row, col) in cell_map.items():
+        if tid not in existing_ids:
+            t = generate_territory_cell(row, col, cell_lat, cell_lng, player_level)
+            t["created_at"] = datetime.utcnow().isoformat()
+            t["last_income_collected"] = None
+            new_territories.append(t)
+    
+    if new_territories:
+        await db.territories.insert_many(new_territories)
+    
+    # Fetch all territories for this area
+    all_terrs = await db.territories.find({"id": {"$in": territory_ids}}).to_list(length=25)
+    return [serialize_doc(t) for t in all_terrs]
 
 @api_router.post("/territories/{territory_id}/capture")
 async def capture_territory(territory_id: str, player_id: str):
@@ -2074,13 +2072,15 @@ async def capture_territory(territory_id: str, player_id: str):
     
     if won:
         combat_log.append(f"🏆 Victory! You defeated {boss['name']} and claimed {territory['name']}!")
-        # Transfer ownership
+        # Transfer ownership and change color
+        owner_color = get_owner_color(player_id)
         await db.territories.update_one(
             {"id": territory_id},
             {"$set": {
                 "owner_id": player_id,
                 "owner_name": player["name"],
                 "owner_pic": player.get("profile_pic", None),
+                "color": owner_color,
                 "last_income_collected": datetime.utcnow().isoformat(),
             }}
         )
@@ -2114,7 +2114,7 @@ async def challenge_territory_owner(territory: dict, challenger: dict):
         # Owner no longer exists, reset territory
         await db.territories.update_one(
             {"id": territory["id"]},
-            {"$set": {"owner_id": None, "owner_name": None}}
+            {"$set": {"owner_id": None, "owner_name": None, "owner_pic": None, "color": UNCLAIMED_COLOR}}
         )
         raise HTTPException(status_code=400, detail="Territory owner not found. Territory has been reset.")
     
@@ -2155,12 +2155,14 @@ async def challenge_territory_owner(territory: dict, challenger: dict):
     
     if won:
         combat_log.append(f"🏆 Victory! You defeated {owner['name']} and took over {territory['name']}!")
+        challenger_color = get_owner_color(challenger["id"])
         await db.territories.update_one(
             {"id": territory["id"]},
             {"$set": {
                 "owner_id": challenger["id"],
                 "owner_name": challenger["name"],
                 "owner_pic": challenger.get("profile_pic", None),
+                "color": challenger_color,
                 "last_income_collected": datetime.utcnow().isoformat(),
             }}
         )
