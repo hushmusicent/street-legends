@@ -1529,7 +1529,7 @@ async def list_guilds(limit: int = 20):
 async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
     """Spawn random shops near a location"""
     shops = []
-    num_shops = random.randint(3, 6)
+    num_shops = random.randint(1, 2)
     
     for i in range(num_shops):
         # Random offset within ~500m
