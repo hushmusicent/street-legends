@@ -51,37 +51,56 @@ export default function FitnessScreen() {
     let sub: any = null;
 
     const setup = async () => {
-      const available = await Pedometer.isAvailableAsync();
-      setPedometerAvailable(available);
-
-      if (available) {
-        // Get steps since midnight
-        const now = new Date();
-        const midnight = new Date(now);
-        midnight.setHours(0, 0, 0, 0);
-
-        try {
-          const result = await Pedometer.getStepCountAsync(midnight, now);
-          if (result) {
-            setSteps(result.steps);
-            baseStepsRef.current = result.steps;
-            if (playerId) {
-              await updateSteps(playerId, result.steps);
-            }
-          }
-        } catch (e) {
-          console.log('Pedometer history not available:', e);
+      try {
+        // MUST request permissions first (especially on Android)
+        const { status } = await Pedometer.requestPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('Pedometer permission denied:', status);
+          setPedometerAvailable(false);
+          // Still load backend data
+          await loadFitnessData();
+          return;
         }
 
-        // Watch for new steps
-        sub = Pedometer.watchStepCount((result) => {
-          const newSteps = baseStepsRef.current + result.steps;
-          setSteps(newSteps);
-          if (playerId) {
-            updateSteps(playerId, newSteps).catch(() => {});
+        const available = await Pedometer.isAvailableAsync();
+        setPedometerAvailable(available);
+
+        if (available) {
+          // Get steps since midnight
+          const now = new Date();
+          const midnight = new Date(now);
+          midnight.setHours(0, 0, 0, 0);
+
+          try {
+            const result = await Pedometer.getStepCountAsync(midnight, now);
+            if (result && result.steps > 0) {
+              setSteps(result.steps);
+              baseStepsRef.current = result.steps;
+              if (playerId) {
+                await updateSteps(playerId, result.steps);
+              }
+            }
+          } catch (e) {
+            console.log('Pedometer history not available:', e);
           }
-        });
-        subscriptionRef.current = sub;
+
+          // Watch for new steps in real time
+          sub = Pedometer.watchStepCount((result) => {
+            const newSteps = baseStepsRef.current + result.steps;
+            setSteps(newSteps);
+            if (playerId) {
+              updateSteps(playerId, newSteps).catch(() => {});
+            }
+          });
+          subscriptionRef.current = sub;
+        } else {
+          // Pedometer not available, load from backend
+          await loadFitnessData();
+        }
+      } catch (err) {
+        console.log('Pedometer setup error:', err);
+        setPedometerAvailable(false);
+        await loadFitnessData();
       }
     };
 
@@ -150,13 +169,13 @@ export default function FitnessScreen() {
           {!pedometerAvailable && Platform.OS !== 'web' && (
             <View style={styles.pedWarning}>
               <Ionicons name="warning" size={14} color="#f39c12" />
-              <Text style={styles.pedWarningText}>Pedometer not available on this device</Text>
+              <Text style={styles.pedWarningText}>Step tracking needs Physical Activity permission. Check your device Settings &gt; Apps &gt; Permissions &gt; Physical Activity.</Text>
             </View>
           )}
           {Platform.OS === 'web' && (
             <View style={styles.pedWarning}>
               <Ionicons name="phone-portrait" size={14} color="#3498db" />
-              <Text style={styles.pedWarningText}>Open on your phone to track real steps</Text>
+              <Text style={styles.pedWarningText}>Open on your phone via Expo Go to track real steps</Text>
             </View>
           )}
         </View>

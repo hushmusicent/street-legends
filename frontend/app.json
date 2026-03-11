@@ -29,7 +29,7 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "READ_MEDIA_IMAGES",
-        "ACTIVITY_RECOGNITION"
+        "android.permission.ACTIVITY_RECOGNITION"
       ]
     },
     "web": {
