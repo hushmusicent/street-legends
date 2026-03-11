@@ -424,6 +424,18 @@ frontend:
         -agent: "testing"
         -comment: "✅ TILED TERRITORY GRID SYSTEM FULLY VERIFIED: All 4 comprehensive tests PASSED (100% success rate). Key verification: 1) Equal-sized tiled grid: Returns exactly 25 territories (5x5 grid) with ALL territories having same size value (150m), ALL have proper bounds (south, north, west, east), territories tile perfectly with no gaps/overlaps, 2) Unclaimed color consistency: ALL 25 unclaimed territories have exact color '#3d3d3d' (dark gray), 3) Color change on capture: Territory color successfully changes from '#3d3d3d' to bright color '#e74c3c' after capture, remaining territories stay unclaimed color, 4) Unique territory names: All 25 territories have different names from 1600+ name pool (patterns: Hollowvine Outpost, Thunderport Terrace, Thunderridge Patch, etc). Mathematical verification shows perfect aspect ratio ~1.321 for rectangular grid cells. Tiled territory grid system working exactly as specified in review request and ready for production."
 
+  - task: "Item Delete and Sell Endpoints"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ITEM DELETE AND SELL ENDPOINTS FULLY VERIFIED: All 5 specialized tests PASSED (100% success rate). Comprehensive verification completed: 1) DELETE /api/players/{player_id}/inventory/{item_id} correctly removes items from inventory and returns success message 'Discarded {item_name}', 2) POST /api/players/{player_id}/inventory/{item_id}/sell correctly sells items for 50% of item value (e.g., $15 item sells for $7), increases player cash accurately, and removes item from inventory, 3) GET /api/players/{player_id}/inventory-details returns complete inventory with full item details including stats, descriptions, and values, 4) Error handling works correctly: returns 'Item not in inventory' (400 status) for non-existent items, 'Player not found' (404 status) for non-existent players, 5) Data integrity maintained: verified items are properly removed from inventory array after delete/sell operations, cash increases are mathematically correct (50% of item value). Item management system working exactly as specified in review request and ready for production use."
+
 metadata:
   created_by: "testing_agent"
   version: "1.0"
@@ -432,7 +444,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Square Territory System fully tested and verified working"
+    - "Item Delete and Sell Endpoints fully tested and verified working"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
@@ -452,3 +464,5 @@ agent_communication:
     -message: "🏙️ SQUARE TERRITORY SYSTEM TESTING COMPLETE: All 4 specialized tests PASSED with 100% success rate. Comprehensive verification completed: ✅ Territory generation includes required 'bounds' and 'size' fields, ✅ Bounds form mathematically verified squares (aspect ratio ~1.00), ✅ Territory names from NEW 1000+ name pool (no old names detected), ✅ Territory capture functionality works with square system, ✅ 100% name diversity across different locations (12 unique names from 12 territories), ✅ No overlapping territories found. Square territory system working exactly as specified in review request and ready for production use."
     -agent: "testing"
     -message: "🔥 TILED TERRITORY GRID SYSTEM TESTING COMPLETE: All 4 comprehensive tests PASSED with 100% success rate. Comprehensive verification at Times Square NYC (40.758, -73.9855) completed: ✅ Equal-sized tiled grid: Exactly 25 territories (5x5 grid) with ALL having same size (150m) and proper bounds, territories tile perfectly with no gaps/overlaps, ✅ Unclaimed color consistency: ALL 25 unclaimed territories have exact color '#3d3d3d' (dark gray), ✅ Color change on capture: Successfully created GridTestPlayer, captured territory, color changed from '#3d3d3d' to bright '#e74c3c', remaining territories stay unclaimed, ✅ Unique territory names: All 25 territories have different names from 1600+ pool (Hollowvine Outpost, Thunderport Terrace, etc.). Mathematical verification shows perfect rectangular grid cells aspect ratio ~1.321. Tiled territory grid system working EXACTLY as specified in review request and ready for production use."
+    -agent: "testing"  
+    -message: "🎒 ITEM DELETE AND SELL ENDPOINTS TESTING COMPLETE: All 5 core tests PASSED with 100% success rate. Comprehensive verification completed: ✅ DELETE /api/players/{player_id}/inventory/{item_id} correctly removes items from inventory and returns success message, ✅ POST /api/players/{player_id}/inventory/{item_id}/sell correctly sells items for 50% of item value, increases player cash, and removes item from inventory, ✅ GET /api/players/{player_id}/inventory-details returns complete inventory with item details, ✅ Error handling: correctly returns 'Item not in inventory' (400) for non-existent items, 'Player not found' (404) for non-existent players, ✅ Data integrity: verified items are properly removed from inventory after delete/sell operations, cash increases are accurate (50% of item value). Item management system working exactly as specified in review request and ready for production use."

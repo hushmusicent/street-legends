@@ -1,373 +1,314 @@
 #!/usr/bin/env python3
 """
-Backend Testing Script for GTA GPS RPG Game
-Tests the redesigned tiled territory grid system
+Backend Test for GTA GPS RPG Item Delete and Sell Endpoints
+Testing: DELETE /api/players/{player_id}/inventory/{item_id} and POST /api/players/{player_id}/inventory/{item_id}/sell
 """
+
 import requests
 import json
 import sys
-from typing import Dict, List, Any
+from typing import Dict, Any
 
-# Backend URL from environment
+# Get backend URL from environment
 BACKEND_URL = "https://real-world-raid-game.preview.emergentagent.com/api"
 
-# Test coordinates - Times Square NYC
-TEST_LATITUDE = 40.758
-TEST_LONGITUDE = -73.9855
+def make_request(method: str, endpoint: str, data: Dict[str, Any] = None, params: Dict[str, str] = None) -> requests.Response:
+    """Make HTTP request with proper error handling"""
+    url = f"{BACKEND_URL}{endpoint}"
+    try:
+        if method.upper() == "GET":
+            response = requests.get(url, params=params, timeout=30)
+        elif method.upper() == "POST":
+            if params:
+                # For endpoints that expect query parameters instead of JSON body
+                response = requests.post(url, params=params, timeout=30)
+            else:
+                response = requests.post(url, json=data, timeout=30)
+        elif method.upper() == "DELETE":
+            response = requests.delete(url, timeout=30)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+        return response
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error for {method} {url}: {e}")
+        return None
 
-class TerritoryGridTester:
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json'
-        })
-        
-    def test_equal_sized_tiled_grid(self) -> Dict[str, Any]:
-        """Test that nearby territories return exactly 25 territories with same size (150)"""
-        print("🔍 Testing equal-sized tiled grid...")
-        
-        url = f"{BACKEND_URL}/territories/nearby"
-        params = {
-            "latitude": TEST_LATITUDE,
-            "longitude": TEST_LONGITUDE,
-            "player_level": 1
-        }
-        
-        try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            territories = response.json()
-            
-            # Check territory count
-            territory_count = len(territories)
-            if territory_count != 25:
-                return {
-                    "success": False,
-                    "error": f"Expected 25 territories, got {territory_count}"
-                }
-            
-            # Check all territories have the same size (150)
-            sizes = [t.get("size") for t in territories]
-            unique_sizes = set(sizes)
-            if len(unique_sizes) != 1 or 150 not in unique_sizes:
-                return {
-                    "success": False,
-                    "error": f"Expected all territories to have size 150, got sizes: {unique_sizes}"
-                }
-                
-            # Check all territories have bounds
-            missing_bounds = []
-            for i, t in enumerate(territories):
-                bounds = t.get("bounds")
-                if not bounds:
-                    missing_bounds.append(f"Territory {i+1}")
-                    continue
-                required_keys = ["south", "north", "west", "east"]
-                missing_keys = [k for k in required_keys if k not in bounds]
-                if missing_keys:
-                    missing_bounds.append(f"Territory {i+1} missing: {missing_keys}")
-            
-            if missing_bounds:
-                return {
-                    "success": False,
-                    "error": f"Territories missing bounds: {missing_bounds[:5]}..."  # Show first 5
-                }
-            
-            # Check tiling - adjacent territories should connect perfectly
-            tiling_errors = []
-            for i, t1 in enumerate(territories):
-                for j, t2 in enumerate(territories[i+1:], i+1):
-                    b1, b2 = t1["bounds"], t2["bounds"]
-                    # Check if territories are adjacent (share a border)
-                    if (abs(b1["north"] - b2["south"]) < 1e-6 or  # t1 north = t2 south
-                        abs(b1["south"] - b2["north"]) < 1e-6 or  # t1 south = t2 north
-                        abs(b1["east"] - b2["west"]) < 1e-6 or    # t1 east = t2 west
-                        abs(b1["west"] - b2["east"]) < 1e-6):     # t1 west = t2 east
-                        # They are adjacent - check no overlap
-                        pass  # This is good - they tile perfectly
-                        
-            return {
-                "success": True,
-                "territory_count": territory_count,
-                "sizes": unique_sizes,
-                "sample_bounds": territories[0]["bounds"] if territories else None
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Request failed: {str(e)}"
-            }
-    
-    def test_unclaimed_color(self) -> Dict[str, Any]:
-        """Test that all unclaimed territories have color #3d3d3d"""
-        print("🎨 Testing unclaimed territory colors...")
-        
-        url = f"{BACKEND_URL}/territories/nearby"
-        params = {
-            "latitude": TEST_LATITUDE,
-            "longitude": TEST_LONGITUDE,
-            "player_level": 1
-        }
-        
-        try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            territories = response.json()
-            
-            # Check colors of unclaimed territories
-            wrong_colors = []
-            for i, territory in enumerate(territories):
-                if territory.get("owner_id") is None:  # Unclaimed
-                    color = territory.get("color")
-                    if color != "#3d3d3d":
-                        wrong_colors.append({
-                            "territory": territory.get("name", f"Territory {i+1}"),
-                            "expected": "#3d3d3d",
-                            "actual": color
-                        })
-            
-            if wrong_colors:
-                return {
-                    "success": False,
-                    "error": f"Found {len(wrong_colors)} territories with wrong colors",
-                    "wrong_colors": wrong_colors[:5]  # Show first 5
-                }
-            
-            unclaimed_count = len([t for t in territories if t.get("owner_id") is None])
-            
-            return {
-                "success": True,
-                "unclaimed_count": unclaimed_count,
-                "all_have_correct_color": True
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Request failed: {str(e)}"
-            }
-    
-    def test_color_change_on_capture(self) -> Dict[str, Any]:
-        """Test that territory color changes when captured"""
-        print("⚔️  Testing color change on capture...")
-        
-        try:
-            # Step 1: Create a test player
-            player_data = {
-                "name": "GridTestPlayer",
-                "character_class": "street_soldier"
-            }
-            
-            create_response = self.session.post(f"{BACKEND_URL}/players", json=player_data)
-            create_response.raise_for_status()
-            player = create_response.json()
-            player_id = player["id"]
-            
-            # Step 2: Get nearby territories
-            territories_response = self.session.get(
-                f"{BACKEND_URL}/territories/nearby",
-                params={"latitude": TEST_LATITUDE, "longitude": TEST_LONGITUDE, "player_level": 1}
-            )
-            territories_response.raise_for_status()
-            territories = territories_response.json()
-            
-            # Find an unclaimed territory
-            unclaimed_territory = None
-            for territory in territories:
-                if territory.get("owner_id") is None:
-                    unclaimed_territory = territory
-                    break
-            
-            if not unclaimed_territory:
-                return {
-                    "success": False,
-                    "error": "No unclaimed territories found to test capture"
-                }
-            
-            territory_id = unclaimed_territory["id"]
-            original_color = unclaimed_territory.get("color")
-            
-            # Step 3: Capture the territory
-            capture_response = self.session.post(
-                f"{BACKEND_URL}/territories/{territory_id}/capture",
-                params={"player_id": player_id}
-            )
-            capture_response.raise_for_status()
-            capture_result = capture_response.json()
-            
-            if capture_result.get("result") != "victory":
-                return {
-                    "success": False,
-                    "error": f"Territory capture failed: {capture_result.get('result', 'unknown')}"
-                }
-            
-            # Step 4: Check that color changed
-            captured_territory = capture_result.get("territory")
-            if not captured_territory:
-                return {
-                    "success": False,
-                    "error": "No territory data returned after capture"
-                }
-            
-            new_color = captured_territory.get("color")
-            if new_color == "#3d3d3d":
-                return {
-                    "success": False,
-                    "error": f"Territory color didn't change from unclaimed color after capture. Still: {new_color}"
-                }
-            
-            if new_color == original_color:
-                return {
-                    "success": False,
-                    "error": f"Territory color didn't change after capture. Still: {new_color}"
-                }
-            
-            # Step 5: Verify other territories are still unclaimed color
-            updated_territories_response = self.session.get(
-                f"{BACKEND_URL}/territories/nearby",
-                params={"latitude": TEST_LATITUDE, "longitude": TEST_LONGITUDE, "player_level": 1}
-            )
-            updated_territories_response.raise_for_status()
-            updated_territories = updated_territories_response.json()
-            
-            still_unclaimed = [t for t in updated_territories if t.get("owner_id") is None]
-            wrong_unclaimed_colors = [t for t in still_unclaimed if t.get("color") != "#3d3d3d"]
-            
-            if wrong_unclaimed_colors:
-                return {
-                    "success": False,
-                    "error": f"Found {len(wrong_unclaimed_colors)} unclaimed territories with wrong colors after capture"
-                }
-            
-            return {
-                "success": True,
-                "original_color": original_color,
-                "new_color": new_color,
-                "captured_territory": captured_territory.get("name"),
-                "remaining_unclaimed": len(still_unclaimed)
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Request failed: {str(e)}"
-            }
-    
-    def test_unique_territory_names(self) -> Dict[str, Any]:
-        """Test that all 25 territories have unique names"""
-        print("📝 Testing unique territory names...")
-        
-        url = f"{BACKEND_URL}/territories/nearby"
-        params = {
-            "latitude": TEST_LATITUDE,
-            "longitude": TEST_LONGITUDE,
-            "player_level": 1
-        }
-        
-        try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            territories = response.json()
-            
-            # Check name uniqueness
-            names = [t.get("name") for t in territories if t.get("name")]
-            unique_names = set(names)
-            
-            if len(names) != len(unique_names):
-                duplicates = {}
-                for name in names:
-                    duplicates[name] = duplicates.get(name, 0) + 1
-                duplicate_names = {name: count for name, count in duplicates.items() if count > 1}
-                
-                return {
-                    "success": False,
-                    "error": f"Found duplicate territory names: {duplicate_names}",
-                    "total_names": len(names),
-                    "unique_names": len(unique_names)
-                }
-            
-            # Check that names come from the 1600+ name pool (should have certain patterns)
-            valid_patterns = ["side", "gate", "ridge", "hill", "vale", "creek", "water", "field", "wood", "stone",
-                            "cross", "bridge", "port", "haven", "cliff", "peak", "bay", "lake", "river", "pine",
-                            "Turf", "Block", "Zone", "Strip", "Row", "Corner", "Plaza", "District", "Junction", "Alley"]
-            
-            pattern_matches = 0
-            sample_names = []
-            for name in names[:5]:  # Sample first 5 names
-                sample_names.append(name)
-                for pattern in valid_patterns:
-                    if pattern in name:
-                        pattern_matches += 1
-                        break
-            
-            return {
-                "success": True,
-                "total_territories": len(territories),
-                "unique_names": len(unique_names),
-                "all_names_unique": True,
-                "sample_names": sample_names,
-                "pattern_matches": pattern_matches
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Request failed: {str(e)}"
-            }
-
-def run_all_tests():
-    """Run all territory grid system tests"""
-    print("🏙️ Starting Tiled Territory Grid System Tests")
+def test_item_delete_and_sell_endpoints():
+    """Test item delete and sell functionality for GTA GPS RPG backend"""
+    print("🔧 TESTING ITEM DELETE AND SELL ENDPOINTS")
     print("=" * 60)
     
-    tester = TerritoryGridTester()
-    tests = [
-        ("Equal-sized tiled grid", tester.test_equal_sized_tiled_grid),
-        ("Unclaimed color consistency", tester.test_unclaimed_color),
-        ("Color change on capture", tester.test_color_change_on_capture),
-        ("Unique territory names", tester.test_unique_territory_names),
+    test_results = {
+        "create_player": False,
+        "buy_item_for_testing": False,
+        "get_inventory": False,
+        "delete_item": False,
+        "sell_item": False,
+        "error_cases": False
+    }
+    
+    # Test 1: Create a test player
+    print("\n1️⃣ Creating test player...")
+    import time
+    unique_suffix = str(int(time.time()))[-6:]  # Use timestamp suffix for uniqueness
+    player_data = {
+        "name": f"ItemTestPlayer{unique_suffix}",
+        "character_class": "street_soldier"
+    }
+    
+    response = make_request("POST", "/players", data=player_data)
+    if not response or response.status_code != 200:
+        print(f"❌ Failed to create player: {response.status_code if response else 'Network error'}")
+        if response:
+            print(f"Response: {response.text}")
+        return test_results
+    
+    player = response.json()
+    player_id = player["id"]
+    print(f"✅ Created test player: {player['name']} (ID: {player_id})")
+    print(f"   Starting cash: ${player['cash']}")
+    print(f"   Starting inventory: {player['inventory']}")
+    test_results["create_player"] = True
+    
+    # Test 2: Use existing inventory items and buy additional items for testing
+    print(f"\n2️⃣ Preparing items for testing...")
+    
+    # Get all available items for reference
+    response = make_request("GET", "/items")
+    if not response or response.status_code != 200:
+        print(f"❌ Failed to get items list: {response.status_code if response else 'Network error'}")
+        return test_results
+    
+    all_items = response.json()
+    
+    # Use existing inventory items
+    existing_items = []
+    for item_id in player['inventory']:
+        if item_id in all_items:
+            existing_items.append((item_id, all_items[item_id]))
+    
+    print(f"✅ Using existing inventory items:")
+    for item_id, item in existing_items:
+        print(f"   - {item['name']} (ID: {item_id}, Value: ${item.get('value', 'N/A')})")
+    
+    # Try to buy one additional item for more comprehensive testing
+    bought_items = []
+    affordable_items = [
+        (item_id, item) for item_id, item in all_items.items()
+        if item.get("value", 0) <= 50 and item.get("level_requirement", 1) <= 1
+        and item_id not in player['inventory']  # Don't buy duplicates
     ]
     
-    results = {}
-    overall_success = True
-    
-    for test_name, test_func in tests:
-        print(f"\n🧪 {test_name}")
-        print("-" * 40)
-        
-        result = test_func()
-        results[test_name] = result
-        
-        if result["success"]:
-            print(f"✅ PASSED")
-            if "territory_count" in result:
-                print(f"   Territory count: {result['territory_count']}")
-            if "sizes" in result:
-                print(f"   Territory sizes: {result['sizes']}")
-            if "unclaimed_count" in result:
-                print(f"   Unclaimed territories: {result['unclaimed_count']}")
-            if "new_color" in result:
-                print(f"   Color changed from {result['original_color']} to {result['new_color']}")
-            if "unique_names" in result:
-                print(f"   All {result['unique_names']} names are unique")
-            if "sample_names" in result:
-                print(f"   Sample names: {', '.join(result['sample_names'][:3])}")
+    if affordable_items:
+        item_id, item = affordable_items[0]  # Buy the first affordable item
+        response = make_request("POST", f"/players/{player_id}/buy-item", params={"item_id": item_id})
+        if response and response.status_code == 200:
+            bought_items.append((item_id, item))
+            print(f"✅ Bought additional item: {item['name']} (ID: {item_id}) for ${item['value']}")
         else:
-            print(f"❌ FAILED: {result['error']}")
-            overall_success = False
+            print(f"⚠️  Could not buy additional item: {response.status_code if response else 'Network error'}")
     
-    print("\n" + "=" * 60)
-    print(f"🏁 Overall Result: {'✅ ALL TESTS PASSED' if overall_success else '❌ SOME TESTS FAILED'}")
+    # Combine existing and newly bought items for testing
+    test_items = existing_items + bought_items
     
-    # Print summary
-    print(f"\n📊 Test Summary:")
-    for test_name, result in results.items():
-        status = "✅ PASS" if result["success"] else "❌ FAIL"
-        print(f"   {status} {test_name}")
+    if len(test_items) == 0:
+        print("❌ No items available for testing")
+        return test_results
     
-    return overall_success, results
+    print(f"✅ Total items available for testing: {len(test_items)}")
+    test_results["buy_item_for_testing"] = True
+    
+    # Test 3: Get player inventory details
+    print(f"\n3️⃣ Getting player inventory details...")
+    response = make_request("GET", f"/players/{player_id}/inventory-details")
+    if not response or response.status_code != 200:
+        print(f"❌ Failed to get inventory details: {response.status_code if response else 'Network error'}")
+        return test_results
+    
+    inventory_details = response.json()
+    print(f"✅ Retrieved inventory with {len(inventory_details)} items:")
+    for item in inventory_details:
+        print(f"   - {item['name']} (ID: {item['id']}, Value: ${item.get('value', 'N/A')})")
+    
+    test_results["get_inventory"] = True
+    
+    # Get updated player cash before testing
+    response = make_request("GET", f"/players/{player_id}")
+    if response and response.status_code == 200:
+        player_data = response.json()
+        current_cash = player_data["cash"]
+        current_inventory = player_data["inventory"]
+        print(f"   Current cash: ${current_cash}")
+        print(f"   Current inventory count: {len(current_inventory)}")
+    
+    # Test 4: Delete/Drop an item
+    print(f"\n4️⃣ Testing item deletion (drop)...")
+    if test_items:
+        item_to_delete = test_items[0][0]  # Use first test item
+        item_name = test_items[0][1]["name"]
+        
+        print(f"   Deleting item: {item_name} (ID: {item_to_delete})")
+        response = make_request("DELETE", f"/players/{player_id}/inventory/{item_to_delete}")
+        
+        if not response:
+            print("❌ Network error during item deletion")
+            return test_results
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Item deleted successfully: {result['message']}")
+            
+            # Verify item was removed from inventory
+            response = make_request("GET", f"/players/{player_id}/inventory-details")
+            if response and response.status_code == 200:
+                updated_inventory = response.json()
+                item_still_exists = any(item["id"] == item_to_delete for item in updated_inventory)
+                if not item_still_exists:
+                    print(f"✅ Verified: Item {item_name} removed from inventory")
+                    test_results["delete_item"] = True
+                else:
+                    print(f"❌ Error: Item {item_name} still in inventory after deletion")
+            
+        else:
+            print(f"❌ Failed to delete item: {response.status_code}")
+            print(f"Response: {response.text}")
+    
+    # Test 5: Sell an item
+    print(f"\n5️⃣ Testing item selling...")
+    if len(test_items) > 1:
+        item_to_sell = test_items[1][0]  # Use second test item
+        item_data = test_items[1][1]
+        item_name = item_data["name"]
+        item_value = item_data.get("value", 0)
+        expected_sell_price = max(1, item_value // 2)  # 50% of item value
+        
+        print(f"   Selling item: {item_name} (ID: {item_to_sell})")
+        print(f"   Item value: ${item_value}, Expected sell price: ${expected_sell_price}")
+        
+        response = make_request("POST", f"/players/{player_id}/inventory/{item_to_sell}/sell")
+        
+        if not response:
+            print("❌ Network error during item selling")
+            return test_results
+        
+        if response.status_code == 200:
+            result = response.json()
+            actual_sell_price = result.get("sell_price", 0)
+            print(f"✅ Item sold successfully: {result['message']}")
+            print(f"   Actual sell price: ${actual_sell_price}")
+            
+            # Verify the sell price calculation
+            if actual_sell_price == expected_sell_price:
+                print(f"✅ Sell price calculation correct (50% of item value)")
+            else:
+                print(f"⚠️  Sell price mismatch: expected ${expected_sell_price}, got ${actual_sell_price}")
+            
+            # Verify item was removed and cash increased
+            response = make_request("GET", f"/players/{player_id}")
+            if response and response.status_code == 200:
+                updated_player = response.json()
+                new_cash = updated_player["cash"]
+                new_inventory = updated_player["inventory"]
+                
+                print(f"   Cash after sale: ${new_cash} (increased by ${new_cash - current_cash})")
+                
+                # Check if item was removed from inventory
+                if item_to_sell not in new_inventory:
+                    print(f"✅ Verified: Item {item_name} removed from inventory")
+                    test_results["sell_item"] = True
+                else:
+                    print(f"❌ Error: Item {item_name} still in inventory after sale")
+            
+        else:
+            print(f"❌ Failed to sell item: {response.status_code}")
+            print(f"Response: {response.text}")
+    
+    # Test 6: Error cases
+    print(f"\n6️⃣ Testing error cases...")
+    
+    # Test 6a: Try to delete an item that doesn't exist in inventory
+    print("   6a. Testing delete non-existent item...")
+    fake_item_id = "non_existent_item_12345"
+    response = make_request("DELETE", f"/players/{player_id}/inventory/{fake_item_id}")
+    
+    if response and response.status_code == 400:
+        result = response.json()
+        print(f"✅ Correctly rejected deletion of non-existent item: {result.get('detail', 'Error message')}")
+    elif response:
+        print(f"⚠️  Unexpected response for non-existent item deletion: {response.status_code}")
+    else:
+        print("❌ Network error during error case testing")
+    
+    # Test 6b: Try to sell an item that doesn't exist in inventory
+    print("   6b. Testing sell non-existent item...")
+    response = make_request("POST", f"/players/{player_id}/inventory/{fake_item_id}/sell")
+    
+    if response and response.status_code == 400:
+        result = response.json()
+        print(f"✅ Correctly rejected sale of non-existent item: {result.get('detail', 'Error message')}")
+    elif response:
+        print(f"⚠️  Unexpected response for non-existent item sale: {response.status_code}")
+    else:
+        print("❌ Network error during error case testing")
+    
+    # Test 6c: Try operations with non-existent player
+    print("   6c. Testing operations with non-existent player...")
+    fake_player_id = "fake_player_12345"
+    if test_items:
+        test_item_id = test_items[0][0]  # Use any valid item ID
+        
+        # Test delete with fake player
+        response = make_request("DELETE", f"/players/{fake_player_id}/inventory/{test_item_id}")
+        if response and response.status_code == 404:
+            print(f"✅ Correctly rejected delete for non-existent player")
+        elif response:
+            print(f"⚠️  Unexpected response for non-existent player delete: {response.status_code}")
+        
+        # Test sell with fake player  
+        response = make_request("POST", f"/players/{fake_player_id}/inventory/{test_item_id}/sell")
+        if response and response.status_code == 404:
+            print(f"✅ Correctly rejected sell for non-existent player")
+            test_results["error_cases"] = True
+        elif response:
+            print(f"⚠️  Unexpected response for non-existent player sell: {response.status_code}")
+    
+    return test_results
+
+def main():
+    """Main test function"""
+    print("🎮 GTA GPS RPG - Item Delete and Sell Endpoints Test")
+    print(f"🔗 Testing backend at: {BACKEND_URL}")
+    print("=" * 80)
+    
+    try:
+        results = test_item_delete_and_sell_endpoints()
+        
+        # Summary
+        print(f"\n" + "=" * 60)
+        print("📊 TEST SUMMARY")
+        print("=" * 60)
+        
+        total_tests = len(results)
+        passed_tests = sum(1 for passed in results.values() if passed)
+        
+        for test_name, passed in results.items():
+            status = "✅ PASS" if passed else "❌ FAIL"
+            print(f"{status} {test_name.replace('_', ' ').title()}")
+        
+        print(f"\n📈 Results: {passed_tests}/{total_tests} tests passed")
+        
+        if passed_tests == total_tests:
+            print("🎉 ALL TESTS PASSED! Item delete and sell endpoints working correctly.")
+            return 0
+        else:
+            print(f"⚠️  {total_tests - passed_tests} test(s) failed. Review results above.")
+            return 1
+            
+    except Exception as e:
+        print(f"💥 Test execution failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 if __name__ == "__main__":
-    success, results = run_all_tests()
-    sys.exit(0 if success else 1)
+    sys.exit(main())

@@ -1645,6 +1645,52 @@ async def get_player_equipment_details(player_id: str):
             equipped[slot] = None
     return equipped
 
+@api_router.delete("/players/{player_id}/inventory/{item_id}")
+async def delete_item(player_id: str, item_id: str):
+    """Delete/discard an item from player's inventory"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    inv = player.get("inventory", [])
+    if item_id not in inv:
+        raise HTTPException(status_code=400, detail="Item not in inventory")
+    
+    inv.remove(item_id)
+    await db.players.update_one({"id": player_id}, {"$set": {"inventory": inv}})
+    
+    item = ALL_ITEMS.get(item_id, {})
+    return {"message": f"Discarded {item.get('name', 'item')}"}
+
+@api_router.post("/players/{player_id}/inventory/{item_id}/sell")
+async def sell_item(player_id: str, item_id: str):
+    """Sell an item from player's inventory for cash (50% of item value)"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    inv = player.get("inventory", [])
+    if item_id not in inv:
+        raise HTTPException(status_code=400, detail="Item not in inventory")
+    
+    item = ALL_ITEMS.get(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item data not found")
+    
+    sell_price = max(1, item.get("value", 10) // 2)
+    
+    inv.remove(item_id)
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"inventory": inv}, "$inc": {"cash": sell_price}}
+    )
+    
+    return {
+        "message": f"Sold {item['name']} for ${sell_price}",
+        "sell_price": sell_price,
+        "item_name": item["name"],
+    }
+
 @api_router.post("/players/{player_id}/unequip")
 async def unequip_item(player_id: str, slot: str):
     """Unequip an item from a slot"""

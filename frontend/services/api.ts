@@ -228,4 +228,15 @@ export const getChatMessages = async (channel: string, limit: number = 50): Prom
   return response.data;
 };
 
+// Item Management APIs
+export const deleteItem = async (playerId: string, itemId: string) => {
+  const response = await api.delete(`/players/${playerId}/inventory/${itemId}`);
+  return response.data;
+};
+
+export const sellItem = async (playerId: string, itemId: string) => {
+  const response = await api.post(`/players/${playerId}/inventory/${itemId}/sell`);
+  return response.data;
+};
+
 export default api;

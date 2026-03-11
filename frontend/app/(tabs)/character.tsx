@@ -29,6 +29,8 @@ import {
   uploadProfilePic,
   getProfilePic,
   getOwnedTerritories,
+  deleteItem,
+  sellItem,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -160,6 +162,46 @@ export default function CharacterScreen() {
     } catch (error: any) {
       Alert.alert('Error', error?.response?.data?.detail || 'Failed to unequip item');
     }
+  };
+
+  const handleDeleteItem = (item: EquipmentItem) => {
+    Alert.alert('Drop Item', `Are you sure you want to drop "${item.name}"? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Drop',
+        style: 'destructive',
+        onPress: async () => {
+          if (!playerId) return;
+          try {
+            await deleteItem(playerId, item.id);
+            await loadAllData();
+            Alert.alert('Dropped', `${item.name} has been discarded.`);
+          } catch (error: any) {
+            Alert.alert('Error', error?.response?.data?.detail || 'Failed to drop item');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSellItem = (item: EquipmentItem) => {
+    const sellPrice = Math.max(1, Math.floor((item as any).value / 2 || 5));
+    Alert.alert('Sell Item', `Sell "${item.name}" for $${sellPrice}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: `Sell for $${sellPrice}`,
+        onPress: async () => {
+          if (!playerId) return;
+          try {
+            const result = await sellItem(playerId, item.id);
+            await loadAllData();
+            Alert.alert('Sold!', result.message);
+          } catch (error: any) {
+            Alert.alert('Error', error?.response?.data?.detail || 'Failed to sell item');
+          }
+        },
+      },
+    ]);
   };
 
   const handleLogout = () => {
@@ -355,6 +397,8 @@ export default function CharacterScreen() {
             inventory={inventory}
             classColor={classColor}
             onEquip={handleEquip}
+            onDelete={handleDeleteItem}
+            onSell={handleSellItem}
             playerLevel={player.level}
           />
         )}
@@ -623,11 +667,15 @@ function ItemsTab({
   inventory,
   classColor,
   onEquip,
+  onDelete,
+  onSell,
   playerLevel,
 }: {
   inventory: EquipmentItem[];
   classColor: string;
   onEquip: (item: EquipmentItem) => void;
+  onDelete: (item: EquipmentItem) => void;
+  onSell: (item: EquipmentItem) => void;
   playerLevel: number;
 }) {
   if (inventory.length === 0) {
@@ -648,6 +696,7 @@ function ItemsTab({
       {inventory.map((item, index) => {
         const rarityColor = RARITY_COLORS[item.rarity] || '#9e9e9e';
         const canEquip = playerLevel >= item.level_requirement;
+        const sellPrice = Math.max(1, Math.floor((item as any).value / 2 || 5));
 
         return (
           <View key={`${item.id}-${index}`} style={[styles.itemCard, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
@@ -675,16 +724,32 @@ function ItemsTab({
               {!canEquip && (
                 <Text style={styles.levelReqText}>Requires Lv.{item.level_requirement}</Text>
               )}
+              {/* Action buttons row */}
+              <View style={styles.itemActions}>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.equipActionBtn, !canEquip && styles.equipBtnDisabled]}
+                  onPress={() => canEquip && onEquip(item)}
+                  disabled={!canEquip}
+                >
+                  <Ionicons name="checkmark-circle" size={14} color={canEquip ? '#fff' : '#555'} />
+                  <Text style={[styles.itemActionText, !canEquip && { color: '#555' }]}>EQUIP</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.sellActionBtn]}
+                  onPress={() => onSell(item)}
+                >
+                  <Ionicons name="cash" size={14} color="#f39c12" />
+                  <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL ${sellPrice}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.deleteActionBtn]}
+                  onPress={() => onDelete(item)}
+                >
+                  <Ionicons name="trash" size={14} color="#e74c3c" />
+                  <Text style={[styles.itemActionText, { color: '#e74c3c' }]}>DROP</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <TouchableOpacity
-              style={[styles.equipBtn, !canEquip && styles.equipBtnDisabled]}
-              onPress={() => canEquip && onEquip(item)}
-              disabled={!canEquip}
-            >
-              <Text style={[styles.equipBtnText, !canEquip && styles.equipBtnTextDisabled]}>
-                EQUIP
-              </Text>
-            </TouchableOpacity>
           </View>
         );
       })}
@@ -955,6 +1020,33 @@ const styles = StyleSheet.create({
   rarityBadge: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
   itemDesc: { color: '#666', fontSize: 11, marginTop: 2 },
   levelReqText: { color: '#f44336', fontSize: 10, fontWeight: '600', marginTop: 3 },
+  itemActions: {
+    flexDirection: 'row' as const,
+    gap: 6,
+    marginTop: 8,
+  },
+  itemActionBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 4,
+  },
+  equipActionBtn: {
+    backgroundColor: '#1a3a1a',
+  },
+  sellActionBtn: {
+    backgroundColor: '#3a2a0a',
+  },
+  deleteActionBtn: {
+    backgroundColor: '#3a1a1a',
+  },
+  itemActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800' as const,
+  },
   equipBtn: {
     backgroundColor: '#e74c3c',
     paddingHorizontal: 14,
