@@ -2272,6 +2272,128 @@ async def get_owned_territories(player_id: str):
     territories = await db.territories.find({"owner_id": player_id}).to_list(length=50)
     return [serialize_doc(t) for t in territories]
 
+# ============== FITNESS TRACKER ==============
+
+STEP_GOALS = [
+    {"goal": 3000, "reward_type": "xp", "reward_value": 200, "label": "Walker", "description": "Earn 200 XP"},
+    {"goal": 6000, "reward_type": "xp", "reward_value": 500, "label": "Jogger", "description": "Earn 500 XP"},
+    {"goal": 10000, "reward_type": "xp_and_buff", "reward_value": 1000, "label": "Runner", "description": "Earn 1000 XP + Attack Boost"},
+]
+
+@api_router.get("/fitness/{player_id}")
+async def get_fitness_data(player_id: str):
+    """Get today's fitness data for a player"""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    data = await db.fitness.find_one({"player_id": player_id, "date": today})
+    if not data:
+        data = {
+            "player_id": player_id,
+            "date": today,
+            "steps": 0,
+            "claimed_goals": [],
+        }
+        await db.fitness.insert_one(data)
+    
+    return {
+        "steps": data.get("steps", 0),
+        "calories": round(data.get("steps", 0) * 0.04, 1),
+        "distance_km": round(data.get("steps", 0) * 0.00078, 2),
+        "claimed_goals": data.get("claimed_goals", []),
+        "goals": STEP_GOALS,
+        "date": today,
+    }
+
+@api_router.put("/fitness/{player_id}/steps")
+async def update_steps(player_id: str, steps: int):
+    """Update step count for today"""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    await db.fitness.update_one(
+        {"player_id": player_id, "date": today},
+        {"$set": {"steps": steps}},
+        upsert=True,
+    )
+    return {"steps": steps}
+
+@api_router.post("/fitness/{player_id}/claim/{goal_steps}")
+async def claim_step_goal(player_id: str, goal_steps: int):
+    """Claim a step goal reward"""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    
+    # Validate goal exists
+    goal = next((g for g in STEP_GOALS if g["goal"] == goal_steps), None)
+    if not goal:
+        raise HTTPException(status_code=400, detail="Invalid goal")
+    
+    # Check fitness data
+    data = await db.fitness.find_one({"player_id": player_id, "date": today})
+    if not data:
+        raise HTTPException(status_code=400, detail="No fitness data for today")
+    
+    if data.get("steps", 0) < goal_steps:
+        raise HTTPException(status_code=400, detail=f"Need {goal_steps} steps. You have {data.get('steps', 0)}.")
+    
+    claimed = data.get("claimed_goals", [])
+    if goal_steps in claimed:
+        raise HTTPException(status_code=400, detail="Already claimed this goal today")
+    
+    # Give rewards
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    updates = {}
+    reward_msg = ""
+    
+    if goal["reward_type"] == "xp":
+        updates["$inc"] = {"xp": goal["reward_value"]}
+        reward_msg = f"+{goal['reward_value']} XP!"
+    elif goal["reward_type"] == "xp_and_buff":
+        updates["$inc"] = {"xp": goal["reward_value"]}
+        # Add a temporary attack buff (5 battles)
+        buff = {"type": "attack", "value": 10, "remaining": 5}
+        updates["$push"] = {"buffs": buff}
+        reward_msg = f"+{goal['reward_value']} XP and +10 Attack for 5 battles!"
+    
+    if updates:
+        await db.players.update_one({"id": player_id}, updates)
+    
+    # Check for level up
+    player = await db.players.find_one({"id": player_id})
+    current_xp = player.get("xp", 0)
+    current_level = player.get("level", 1)
+    xp_needed = current_level * 100
+    leveled_up = False
+    while current_xp >= xp_needed:
+        current_level += 1
+        current_xp -= xp_needed
+        xp_needed = current_level * 100
+        leveled_up = True
+    if leveled_up:
+        stat_boost = 2
+        await db.players.update_one(
+            {"id": player_id},
+            {"$set": {
+                "level": current_level,
+                "xp": current_xp,
+            }, "$inc": {
+                "stats.max_health": stat_boost * 5,
+                "stats.health": stat_boost * 5,
+                "stats.attack": stat_boost,
+                "stats.defense": stat_boost,
+                "stats.max_energy": stat_boost * 2,
+                "stats.energy": stat_boost * 2,
+            }}
+        )
+        reward_msg += f" LEVEL UP to {current_level}!"
+    
+    # Mark goal as claimed
+    await db.fitness.update_one(
+        {"player_id": player_id, "date": today},
+        {"$push": {"claimed_goals": goal_steps}}
+    )
+    
+    return {"message": reward_msg, "goal": goal_steps, "reward_type": goal["reward_type"]}
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -2282,6 +2404,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

@@ -436,6 +436,21 @@ frontend:
         -agent: "testing"
         -comment: "✅ ITEM DELETE AND SELL ENDPOINTS FULLY VERIFIED: All 5 specialized tests PASSED (100% success rate). Comprehensive verification completed: 1) DELETE /api/players/{player_id}/inventory/{item_id} correctly removes items from inventory and returns success message 'Discarded {item_name}', 2) POST /api/players/{player_id}/inventory/{item_id}/sell correctly sells items for 50% of item value (e.g., $15 item sells for $7), increases player cash accurately, and removes item from inventory, 3) GET /api/players/{player_id}/inventory-details returns complete inventory with full item details including stats, descriptions, and values, 4) Error handling works correctly: returns 'Item not in inventory' (400 status) for non-existent items, 'Player not found' (404 status) for non-existent players, 5) Data integrity maintained: verified items are properly removed from inventory array after delete/sell operations, cash increases are mathematically correct (50% of item value). Item management system working exactly as specified in review request and ready for production use."
 
+  - task: "Fitness Tracker API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: false
+        -agent: "testing"
+        -comment: "CRITICAL ISSUE FOUND: Fitness tracker endpoints (GET /api/fitness/{player_id}, PUT /api/fitness/{player_id}/steps, POST /api/fitness/{player_id}/claim/{goal_steps}) were returning 404 errors because they were defined AFTER the router inclusion in the main app. This is a structural code issue."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ FITNESS TRACKER API FULLY VERIFIED: All 10 comprehensive tests PASSED (100% success rate). FIXED: Moved fitness endpoints before router inclusion to resolve 404 errors. Key verification completed: 1) GET /api/fitness/{player_id} correctly returns initial data (steps=0, calories=0.0, distance_km=0.0, claimed_goals=[], goals array with 3 goals), 2) PUT /api/fitness/{player_id}/steps?steps=5000 successfully updates step count, 3) GET verifies steps=5000 with correct calculations (calories=200.0, distance=3.9km), 4) POST /api/fitness/{player_id}/claim/3000 successfully claims goal and gives XP reward (+200 XP, level up to 2), 5) GET verifies 3000 is in claimed_goals array, 6) PUT updates steps to 7000, 7) POST claims 6000 goal successfully (+500 XP, level up to 4), 8) Error handling: double claim 3000 correctly fails with 'Already claimed this goal today', 9) Error handling: claiming 10000 with only 7000 steps correctly fails with 'Need 10000 steps. You have 7000.' All fitness tracker functionality working exactly as specified in review request and ready for production use."
+
 metadata:
   created_by: "testing_agent"
   version: "1.0"
@@ -444,7 +459,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Item Delete and Sell Endpoints fully tested and verified working"
+    - "Fitness Tracker API fully tested and verified working"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
@@ -466,3 +481,5 @@ agent_communication:
     -message: "🔥 TILED TERRITORY GRID SYSTEM TESTING COMPLETE: All 4 comprehensive tests PASSED with 100% success rate. Comprehensive verification at Times Square NYC (40.758, -73.9855) completed: ✅ Equal-sized tiled grid: Exactly 25 territories (5x5 grid) with ALL having same size (150m) and proper bounds, territories tile perfectly with no gaps/overlaps, ✅ Unclaimed color consistency: ALL 25 unclaimed territories have exact color '#3d3d3d' (dark gray), ✅ Color change on capture: Successfully created GridTestPlayer, captured territory, color changed from '#3d3d3d' to bright '#e74c3c', remaining territories stay unclaimed, ✅ Unique territory names: All 25 territories have different names from 1600+ pool (Hollowvine Outpost, Thunderport Terrace, etc.). Mathematical verification shows perfect rectangular grid cells aspect ratio ~1.321. Tiled territory grid system working EXACTLY as specified in review request and ready for production use."
     -agent: "testing"  
     -message: "🎒 ITEM DELETE AND SELL ENDPOINTS TESTING COMPLETE: All 5 core tests PASSED with 100% success rate. Comprehensive verification completed: ✅ DELETE /api/players/{player_id}/inventory/{item_id} correctly removes items from inventory and returns success message, ✅ POST /api/players/{player_id}/inventory/{item_id}/sell correctly sells items for 50% of item value, increases player cash, and removes item from inventory, ✅ GET /api/players/{player_id}/inventory-details returns complete inventory with item details, ✅ Error handling: correctly returns 'Item not in inventory' (400) for non-existent items, 'Player not found' (404) for non-existent players, ✅ Data integrity: verified items are properly removed from inventory after delete/sell operations, cash increases are accurate (50% of item value). Item management system working exactly as specified in review request and ready for production use."
+    -agent: "testing"
+    -message: "🏃 FITNESS TRACKER API TESTING COMPLETE: All 10 comprehensive tests PASSED with 100% success rate. FIXED CRITICAL ISSUE: Fitness endpoints were returning 404 errors because they were defined AFTER router inclusion - moved endpoints before router inclusion to resolve. Key verification completed: ✅ GET /api/fitness/{player_id} returns initial data (steps=0, calories=0.0, distance_km=0.0, claimed_goals=[], 3 goals), ✅ PUT /api/fitness/{player_id}/steps successfully updates step count, ✅ Calculations verified (5000 steps = 200.0 calories, 3.9km distance), ✅ POST /api/fitness/{player_id}/claim/3000 successfully claims goal and gives XP reward (+200 XP, level up), ✅ 3000 appears in claimed_goals array, ✅ 6000 goal claim works with 7000 steps (+500 XP, level up), ✅ Error handling: double claim correctly fails with 'Already claimed this goal today', ✅ Insufficient steps correctly fails with 'Need 10000 steps. You have 7000.' Fitness tracker functionality working exactly as specified in review request and ready for production use."

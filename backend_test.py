@@ -1,314 +1,324 @@
 #!/usr/bin/env python3
 """
-Backend Test for GTA GPS RPG Item Delete and Sell Endpoints
-Testing: DELETE /api/players/{player_id}/inventory/{item_id} and POST /api/players/{player_id}/inventory/{item_id}/sell
+Comprehensive Backend API Testing for GTA GPS RPG Game
+Focuses on Fitness Tracker API functionality
 """
 
 import requests
 import json
+import uuid
+import time
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-# Get backend URL from environment
-BACKEND_URL = "https://real-world-raid-game.preview.emergentagent.com/api"
+# Configuration
+BASE_URL = "https://real-world-raid-game.preview.emergentagent.com/api"
 
-def make_request(method: str, endpoint: str, data: Dict[str, Any] = None, params: Dict[str, str] = None) -> requests.Response:
-    """Make HTTP request with proper error handling"""
-    url = f"{BACKEND_URL}{endpoint}"
-    try:
-        if method.upper() == "GET":
-            response = requests.get(url, params=params, timeout=30)
-        elif method.upper() == "POST":
-            if params:
-                # For endpoints that expect query parameters instead of JSON body
-                response = requests.post(url, params=params, timeout=30)
-            else:
-                response = requests.post(url, json=data, timeout=30)
-        elif method.upper() == "DELETE":
-            response = requests.delete(url, timeout=30)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
-        return response
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error for {method} {url}: {e}")
-        return None
-
-def test_item_delete_and_sell_endpoints():
-    """Test item delete and sell functionality for GTA GPS RPG backend"""
-    print("🔧 TESTING ITEM DELETE AND SELL ENDPOINTS")
-    print("=" * 60)
-    
-    test_results = {
-        "create_player": False,
-        "buy_item_for_testing": False,
-        "get_inventory": False,
-        "delete_item": False,
-        "sell_item": False,
-        "error_cases": False
-    }
-    
-    # Test 1: Create a test player
-    print("\n1️⃣ Creating test player...")
-    import time
-    unique_suffix = str(int(time.time()))[-6:]  # Use timestamp suffix for uniqueness
-    player_data = {
-        "name": f"ItemTestPlayer{unique_suffix}",
-        "character_class": "street_soldier"
-    }
-    
-    response = make_request("POST", "/players", data=player_data)
-    if not response or response.status_code != 200:
-        print(f"❌ Failed to create player: {response.status_code if response else 'Network error'}")
-        if response:
-            print(f"Response: {response.text}")
-        return test_results
-    
-    player = response.json()
-    player_id = player["id"]
-    print(f"✅ Created test player: {player['name']} (ID: {player_id})")
-    print(f"   Starting cash: ${player['cash']}")
-    print(f"   Starting inventory: {player['inventory']}")
-    test_results["create_player"] = True
-    
-    # Test 2: Use existing inventory items and buy additional items for testing
-    print(f"\n2️⃣ Preparing items for testing...")
-    
-    # Get all available items for reference
-    response = make_request("GET", "/items")
-    if not response or response.status_code != 200:
-        print(f"❌ Failed to get items list: {response.status_code if response else 'Network error'}")
-        return test_results
-    
-    all_items = response.json()
-    
-    # Use existing inventory items
-    existing_items = []
-    for item_id in player['inventory']:
-        if item_id in all_items:
-            existing_items.append((item_id, all_items[item_id]))
-    
-    print(f"✅ Using existing inventory items:")
-    for item_id, item in existing_items:
-        print(f"   - {item['name']} (ID: {item_id}, Value: ${item.get('value', 'N/A')})")
-    
-    # Try to buy one additional item for more comprehensive testing
-    bought_items = []
-    affordable_items = [
-        (item_id, item) for item_id, item in all_items.items()
-        if item.get("value", 0) <= 50 and item.get("level_requirement", 1) <= 1
-        and item_id not in player['inventory']  # Don't buy duplicates
-    ]
-    
-    if affordable_items:
-        item_id, item = affordable_items[0]  # Buy the first affordable item
-        response = make_request("POST", f"/players/{player_id}/buy-item", params={"item_id": item_id})
-        if response and response.status_code == 200:
-            bought_items.append((item_id, item))
-            print(f"✅ Bought additional item: {item['name']} (ID: {item_id}) for ${item['value']}")
-        else:
-            print(f"⚠️  Could not buy additional item: {response.status_code if response else 'Network error'}")
-    
-    # Combine existing and newly bought items for testing
-    test_items = existing_items + bought_items
-    
-    if len(test_items) == 0:
-        print("❌ No items available for testing")
-        return test_results
-    
-    print(f"✅ Total items available for testing: {len(test_items)}")
-    test_results["buy_item_for_testing"] = True
-    
-    # Test 3: Get player inventory details
-    print(f"\n3️⃣ Getting player inventory details...")
-    response = make_request("GET", f"/players/{player_id}/inventory-details")
-    if not response or response.status_code != 200:
-        print(f"❌ Failed to get inventory details: {response.status_code if response else 'Network error'}")
-        return test_results
-    
-    inventory_details = response.json()
-    print(f"✅ Retrieved inventory with {len(inventory_details)} items:")
-    for item in inventory_details:
-        print(f"   - {item['name']} (ID: {item['id']}, Value: ${item.get('value', 'N/A')})")
-    
-    test_results["get_inventory"] = True
-    
-    # Get updated player cash before testing
-    response = make_request("GET", f"/players/{player_id}")
-    if response and response.status_code == 200:
-        player_data = response.json()
-        current_cash = player_data["cash"]
-        current_inventory = player_data["inventory"]
-        print(f"   Current cash: ${current_cash}")
-        print(f"   Current inventory count: {len(current_inventory)}")
-    
-    # Test 4: Delete/Drop an item
-    print(f"\n4️⃣ Testing item deletion (drop)...")
-    if test_items:
-        item_to_delete = test_items[0][0]  # Use first test item
-        item_name = test_items[0][1]["name"]
+class APITester:
+    def __init__(self):
+        self.session = requests.Session()
+        self.test_results = []
+        self.current_player_id = None
         
-        print(f"   Deleting item: {item_name} (ID: {item_to_delete})")
-        response = make_request("DELETE", f"/players/{player_id}/inventory/{item_to_delete}")
+    def log_test(self, test_name: str, success: bool, details: str = ""):
+        """Log test results"""
+        status = "✅ PASS" if success else "❌ FAIL"
+        result = f"{status}: {test_name}"
+        if details:
+            result += f" - {details}"
+        print(result)
+        self.test_results.append({
+            "test": test_name,
+            "success": success,
+            "details": details
+        })
         
-        if not response:
-            print("❌ Network error during item deletion")
-            return test_results
-        
-        if response.status_code == 200:
-            result = response.json()
-            print(f"✅ Item deleted successfully: {result['message']}")
+    def api_call(self, method: str, endpoint: str, **kwargs) -> tuple[bool, Dict[Any, Any]]:
+        """Make API call and return success status and response data"""
+        try:
+            url = f"{BASE_URL}{endpoint}"
+            print(f"Making {method} request to: {url}")
             
-            # Verify item was removed from inventory
-            response = make_request("GET", f"/players/{player_id}/inventory-details")
-            if response and response.status_code == 200:
-                updated_inventory = response.json()
-                item_still_exists = any(item["id"] == item_to_delete for item in updated_inventory)
-                if not item_still_exists:
-                    print(f"✅ Verified: Item {item_name} removed from inventory")
-                    test_results["delete_item"] = True
-                else:
-                    print(f"❌ Error: Item {item_name} still in inventory after deletion")
+            response = self.session.request(method, url, **kwargs)
             
-        else:
-            print(f"❌ Failed to delete item: {response.status_code}")
-            print(f"Response: {response.text}")
-    
-    # Test 5: Sell an item
-    print(f"\n5️⃣ Testing item selling...")
-    if len(test_items) > 1:
-        item_to_sell = test_items[1][0]  # Use second test item
-        item_data = test_items[1][1]
-        item_name = item_data["name"]
-        item_value = item_data.get("value", 0)
-        expected_sell_price = max(1, item_value // 2)  # 50% of item value
-        
-        print(f"   Selling item: {item_name} (ID: {item_to_sell})")
-        print(f"   Item value: ${item_value}, Expected sell price: ${expected_sell_price}")
-        
-        response = make_request("POST", f"/players/{player_id}/inventory/{item_to_sell}/sell")
-        
-        if not response:
-            print("❌ Network error during item selling")
-            return test_results
-        
-        if response.status_code == 200:
-            result = response.json()
-            actual_sell_price = result.get("sell_price", 0)
-            print(f"✅ Item sold successfully: {result['message']}")
-            print(f"   Actual sell price: ${actual_sell_price}")
+            print(f"Response Status: {response.status_code}")
+            if response.text:
+                print(f"Response Body: {response.text[:500]}...")
             
-            # Verify the sell price calculation
-            if actual_sell_price == expected_sell_price:
-                print(f"✅ Sell price calculation correct (50% of item value)")
-            else:
-                print(f"⚠️  Sell price mismatch: expected ${expected_sell_price}, got ${actual_sell_price}")
-            
-            # Verify item was removed and cash increased
-            response = make_request("GET", f"/players/{player_id}")
-            if response and response.status_code == 200:
-                updated_player = response.json()
-                new_cash = updated_player["cash"]
-                new_inventory = updated_player["inventory"]
+            if response.status_code >= 400:
+                return False, {"error": response.text, "status_code": response.status_code}
                 
-                print(f"   Cash after sale: ${new_cash} (increased by ${new_cash - current_cash})")
+            try:
+                data = response.json() if response.text else {}
+                return True, data
+            except json.JSONDecodeError:
+                return True, {"text": response.text}
                 
-                # Check if item was removed from inventory
-                if item_to_sell not in new_inventory:
-                    print(f"✅ Verified: Item {item_name} removed from inventory")
-                    test_results["sell_item"] = True
-                else:
-                    print(f"❌ Error: Item {item_name} still in inventory after sale")
-            
-        else:
-            print(f"❌ Failed to sell item: {response.status_code}")
-            print(f"Response: {response.text}")
-    
-    # Test 6: Error cases
-    print(f"\n6️⃣ Testing error cases...")
-    
-    # Test 6a: Try to delete an item that doesn't exist in inventory
-    print("   6a. Testing delete non-existent item...")
-    fake_item_id = "non_existent_item_12345"
-    response = make_request("DELETE", f"/players/{player_id}/inventory/{fake_item_id}")
-    
-    if response and response.status_code == 400:
-        result = response.json()
-        print(f"✅ Correctly rejected deletion of non-existent item: {result.get('detail', 'Error message')}")
-    elif response:
-        print(f"⚠️  Unexpected response for non-existent item deletion: {response.status_code}")
-    else:
-        print("❌ Network error during error case testing")
-    
-    # Test 6b: Try to sell an item that doesn't exist in inventory
-    print("   6b. Testing sell non-existent item...")
-    response = make_request("POST", f"/players/{player_id}/inventory/{fake_item_id}/sell")
-    
-    if response and response.status_code == 400:
-        result = response.json()
-        print(f"✅ Correctly rejected sale of non-existent item: {result.get('detail', 'Error message')}")
-    elif response:
-        print(f"⚠️  Unexpected response for non-existent item sale: {response.status_code}")
-    else:
-        print("❌ Network error during error case testing")
-    
-    # Test 6c: Try operations with non-existent player
-    print("   6c. Testing operations with non-existent player...")
-    fake_player_id = "fake_player_12345"
-    if test_items:
-        test_item_id = test_items[0][0]  # Use any valid item ID
-        
-        # Test delete with fake player
-        response = make_request("DELETE", f"/players/{fake_player_id}/inventory/{test_item_id}")
-        if response and response.status_code == 404:
-            print(f"✅ Correctly rejected delete for non-existent player")
-        elif response:
-            print(f"⚠️  Unexpected response for non-existent player delete: {response.status_code}")
-        
-        # Test sell with fake player  
-        response = make_request("POST", f"/players/{fake_player_id}/inventory/{test_item_id}/sell")
-        if response and response.status_code == 404:
-            print(f"✅ Correctly rejected sell for non-existent player")
-            test_results["error_cases"] = True
-        elif response:
-            print(f"⚠️  Unexpected response for non-existent player sell: {response.status_code}")
-    
-    return test_results
+        except Exception as e:
+            print(f"Error making API call: {e}")
+            return False, {"error": str(e)}
 
-def main():
-    """Main test function"""
-    print("🎮 GTA GPS RPG - Item Delete and Sell Endpoints Test")
-    print(f"🔗 Testing backend at: {BACKEND_URL}")
-    print("=" * 80)
-    
-    try:
-        results = test_item_delete_and_sell_endpoints()
+    def test_fitness_api_comprehensive(self):
+        """Test the complete fitness tracker API as specified in review request"""
+        print("\n🏃 TESTING FITNESS TRACKER API")
+        print("=" * 50)
         
-        # Summary
-        print(f"\n" + "=" * 60)
-        print("📊 TEST SUMMARY")
+        # Step 1: Create a player first
+        self.test_create_player_for_fitness()
+        
+        if not self.current_player_id:
+            self.log_test("Fitness API Testing", False, "Could not create test player")
+            return False
+            
+        # Step 2: Get initial fitness data
+        self.test_get_initial_fitness_data()
+        
+        # Step 3: Update steps to 5000
+        self.test_update_steps_5000()
+        
+        # Step 4: Verify steps=5000 and calculations
+        self.test_verify_steps_5000()
+        
+        # Step 5: Claim 3000 step goal
+        self.test_claim_3000_step_goal()
+        
+        # Step 6: Verify 3000 is in claimed_goals
+        self.test_verify_3000_claimed()
+        
+        # Step 7: Set steps to 7000 for 6000 goal test
+        self.test_update_steps_7000()
+        
+        # Step 8: Claim 6000 step goal
+        self.test_claim_6000_step_goal()
+        
+        # Step 9: Test error - double claim 3000
+        self.test_error_double_claim_3000()
+        
+        # Step 10: Test error - claim 10000 with only 7000 steps
+        self.test_error_insufficient_steps_10000()
+        
+        return True
+
+    def test_create_player_for_fitness(self):
+        """Create a test player for fitness testing"""
+        print("\n📝 Creating test player for fitness testing...")
+        
+        # Generate unique name with timestamp
+        import time
+        unique_name = f"FitTest_{int(time.time())}"
+        
+        player_data = {
+            "name": unique_name,
+            "character_class": "street_soldier"
+        }
+        
+        success, response = self.api_call("POST", "/players", json=player_data)
+        
+        if success and response.get("id"):
+            self.current_player_id = response["id"]
+            self.log_test("Create Player for Fitness", True, f"Player ID: {self.current_player_id}")
+        else:
+            self.log_test("Create Player for Fitness", False, f"Failed to create player: {response}")
+
+    def test_get_initial_fitness_data(self):
+        """Test GET /api/fitness/{player_id} - should return initial data"""
+        print(f"\n📊 Testing GET /api/fitness/{self.current_player_id}...")
+        
+        success, response = self.api_call("GET", f"/fitness/{self.current_player_id}")
+        
+        if success:
+            # Verify initial data structure
+            expected_fields = ["steps", "calories", "distance_km", "claimed_goals", "goals"]
+            missing_fields = [field for field in expected_fields if field not in response]
+            
+            if missing_fields:
+                self.log_test("Get Initial Fitness Data", False, f"Missing fields: {missing_fields}")
+                return
+                
+            # Verify initial values
+            if (response.get("steps") == 0 and
+                isinstance(response.get("calories"), (int, float)) and
+                isinstance(response.get("distance_km"), (int, float)) and
+                response.get("claimed_goals") == [] and
+                len(response.get("goals", [])) == 3):
+                
+                self.log_test("Get Initial Fitness Data", True, 
+                            f"Steps: {response['steps']}, Goals: {len(response['goals'])}")
+            else:
+                self.log_test("Get Initial Fitness Data", False, 
+                            f"Invalid initial data: {response}")
+        else:
+            self.log_test("Get Initial Fitness Data", False, f"API call failed: {response}")
+
+    def test_update_steps_5000(self):
+        """Test PUT /api/fitness/{player_id}/steps?steps=5000"""
+        print(f"\n🚶 Testing PUT /api/fitness/{self.current_player_id}/steps?steps=5000...")
+        
+        success, response = self.api_call("PUT", f"/fitness/{self.current_player_id}/steps", 
+                                        params={"steps": 5000})
+        
+        if success and response.get("steps") == 5000:
+            self.log_test("Update Steps to 5000", True, f"Steps updated to: {response['steps']}")
+        else:
+            self.log_test("Update Steps to 5000", False, f"Failed to update steps: {response}")
+
+    def test_verify_steps_5000(self):
+        """Verify steps=5000 and that calories/distance are calculated correctly"""
+        print(f"\n🔍 Verifying steps=5000 and calculations...")
+        
+        success, response = self.api_call("GET", f"/fitness/{self.current_player_id}")
+        
+        if success:
+            steps = response.get("steps", 0)
+            calories = response.get("calories", 0)
+            distance_km = response.get("distance_km", 0)
+            
+            if steps == 5000:
+                # Check if calories and distance are reasonable (non-zero)
+                if calories > 0 and distance_km > 0:
+                    self.log_test("Verify Steps 5000 Calculations", True, 
+                                f"Steps: {steps}, Calories: {calories}, Distance: {distance_km}km")
+                else:
+                    self.log_test("Verify Steps 5000 Calculations", False, 
+                                f"Invalid calculations - Calories: {calories}, Distance: {distance_km}")
+            else:
+                self.log_test("Verify Steps 5000 Calculations", False, 
+                            f"Steps not updated correctly: {steps}")
+        else:
+            self.log_test("Verify Steps 5000 Calculations", False, f"API call failed: {response}")
+
+    def test_claim_3000_step_goal(self):
+        """Test POST /api/fitness/{player_id}/claim/3000 - should succeed"""
+        print(f"\n🏆 Testing POST /api/fitness/{self.current_player_id}/claim/3000...")
+        
+        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/3000")
+        
+        if success:
+            # Should return success message and XP reward
+            if "xp" in response or "XP" in str(response) or "reward" in str(response).lower():
+                self.log_test("Claim 3000 Step Goal", True, f"Goal claimed successfully: {response}")
+            else:
+                self.log_test("Claim 3000 Step Goal", False, f"Unexpected response: {response}")
+        else:
+            self.log_test("Claim 3000 Step Goal", False, f"Failed to claim goal: {response}")
+
+    def test_verify_3000_claimed(self):
+        """Verify 3000 is in claimed_goals"""
+        print(f"\n✅ Verifying 3000 is in claimed_goals...")
+        
+        success, response = self.api_call("GET", f"/fitness/{self.current_player_id}")
+        
+        if success:
+            claimed_goals = response.get("claimed_goals", [])
+            if 3000 in claimed_goals:
+                self.log_test("Verify 3000 in Claimed Goals", True, f"Claimed goals: {claimed_goals}")
+            else:
+                self.log_test("Verify 3000 in Claimed Goals", False, 
+                            f"3000 not found in claimed_goals: {claimed_goals}")
+        else:
+            self.log_test("Verify 3000 in Claimed Goals", False, f"API call failed: {response}")
+
+    def test_update_steps_7000(self):
+        """Set steps to 7000 for 6000 goal test"""
+        print(f"\n🏃 Testing PUT /api/fitness/{self.current_player_id}/steps?steps=7000...")
+        
+        success, response = self.api_call("PUT", f"/fitness/{self.current_player_id}/steps", 
+                                        params={"steps": 7000})
+        
+        if success and response.get("steps") == 7000:
+            self.log_test("Update Steps to 7000", True, f"Steps updated to: {response['steps']}")
+        else:
+            self.log_test("Update Steps to 7000", False, f"Failed to update steps: {response}")
+
+    def test_claim_6000_step_goal(self):
+        """Test claiming 6000 step goal with 7000 steps"""
+        print(f"\n🏆 Testing POST /api/fitness/{self.current_player_id}/claim/6000...")
+        
+        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/6000")
+        
+        if success:
+            self.log_test("Claim 6000 Step Goal", True, f"Goal claimed successfully: {response}")
+        else:
+            self.log_test("Claim 6000 Step Goal", False, f"Failed to claim goal: {response}")
+
+    def test_error_double_claim_3000(self):
+        """Test error: Try claiming 3000 again - should fail with 'Already claimed'"""
+        print(f"\n🚫 Testing double claim error for 3000 steps...")
+        
+        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/3000")
+        
+        # This should fail
+        if not success:
+            error_text = str(response.get("error", "")).lower()
+            if "already" in error_text or "claimed" in error_text:
+                self.log_test("Error: Double Claim 3000", True, f"Correctly rejected: {response}")
+            else:
+                self.log_test("Error: Double Claim 3000", False, f"Wrong error message: {response}")
+        else:
+            self.log_test("Error: Double Claim 3000", False, f"Should have failed but succeeded: {response}")
+
+    def test_error_insufficient_steps_10000(self):
+        """Test error: Try claiming 10000 with only 7000 steps - should fail"""
+        print(f"\n🚫 Testing insufficient steps error for 10000 goal...")
+        
+        success, response = self.api_call("POST", f"/fitness/{self.current_player_id}/claim/10000")
+        
+        # This should fail
+        if not success:
+            error_text = str(response.get("error", "")).lower()
+            if ("need" in error_text and "10000" in error_text) or ("insufficient" in error_text):
+                self.log_test("Error: Insufficient Steps 10000", True, f"Correctly rejected: {response}")
+            else:
+                self.log_test("Error: Insufficient Steps 10000", False, f"Wrong error message: {response}")
+        else:
+            self.log_test("Error: Insufficient Steps 10000", False, f"Should have failed but succeeded: {response}")
+
+    def run_all_tests(self):
+        """Run all fitness tracker tests"""
+        print("🎮 STARTING COMPREHENSIVE FITNESS TRACKER API TESTING")
         print("=" * 60)
         
-        total_tests = len(results)
-        passed_tests = sum(1 for passed in results.values() if passed)
+        # Test fitness tracker functionality
+        self.test_fitness_api_comprehensive()
         
-        for test_name, passed in results.items():
-            status = "✅ PASS" if passed else "❌ FAIL"
-            print(f"{status} {test_name.replace('_', ' ').title()}")
+        # Print summary
+        self.print_summary()
         
-        print(f"\n📈 Results: {passed_tests}/{total_tests} tests passed")
+        return len([r for r in self.test_results if r["success"]]) == len(self.test_results)
+
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "=" * 60)
+        print("🎯 FITNESS TRACKER API TEST SUMMARY")
+        print("=" * 60)
         
-        if passed_tests == total_tests:
-            print("🎉 ALL TESTS PASSED! Item delete and sell endpoints working correctly.")
-            return 0
-        else:
-            print(f"⚠️  {total_tests - passed_tests} test(s) failed. Review results above.")
-            return 1
-            
-    except Exception as e:
-        print(f"💥 Test execution failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+        total_tests = len(self.test_results)
+        passed_tests = len([r for r in self.test_results if r["success"]])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Tests: {total_tests}")
+        print(f"Passed: {passed_tests} ✅")
+        print(f"Failed: {failed_tests} ❌")
+        print(f"Success Rate: {(passed_tests/total_tests*100):.1f}%")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED TESTS:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"  - {result['test']}: {result['details']}")
+        
+        print("\n✅ PASSED TESTS:")
+        for result in self.test_results:
+            if result["success"]:
+                print(f"  - {result['test']}")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    tester = APITester()
+    success = tester.run_all_tests()
+    
+    if success:
+        print("\n🎉 ALL FITNESS TRACKER TESTS PASSED!")
+        sys.exit(0)
+    else:
+        print("\n💥 SOME FITNESS TRACKER TESTS FAILED!")
+        sys.exit(1)

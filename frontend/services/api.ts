@@ -239,4 +239,20 @@ export const sellItem = async (playerId: string, itemId: string) => {
   return response.data;
 };
 
+// Fitness APIs
+export const getFitnessData = async (playerId: string) => {
+  const response = await api.get(`/fitness/${playerId}`);
+  return response.data;
+};
+
+export const updateSteps = async (playerId: string, steps: number) => {
+  const response = await api.put(`/fitness/${playerId}/steps?steps=${steps}`);
+  return response.data;
+};
+
+export const claimStepGoal = async (playerId: string, goalSteps: number) => {
+  const response = await api.post(`/fitness/${playerId}/claim/${goalSteps}`);
+  return response.data;
+};
+
 export default api;
