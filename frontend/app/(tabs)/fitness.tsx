@@ -8,15 +8,30 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Pedometer } from 'expo-sensors';
+import * as Location from 'expo-location';
 import { useGameStore } from '../../stores/gameStore';
 import { getFitnessData, updateSteps, claimStepGoal } from '../../services/api';
 
 const GOAL_COLORS = ['#3498db', '#f39c12', '#e74c3c'];
 const GOAL_ICONS: Array<'walk' | 'bicycle' | 'rocket'> = ['walk', 'bicycle', 'rocket'];
+const METERS_PER_STEP = 0.762; // average step length
+
+// Haversine distance in meters
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export default function FitnessScreen() {
   const { playerId } = useGameStore();
@@ -25,8 +40,13 @@ export default function FitnessScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [claiming, setClaiming] = useState<number | null>(null);
   const [pedometerAvailable, setPedometerAvailable] = useState(false);
+  const [trackingMode, setTrackingMode] = useState<'pedometer' | 'gps' | 'none'>('none');
+  const [permStatus, setPermStatus] = useState<string>('checking');
   const subscriptionRef = useRef<any>(null);
   const baseStepsRef = useRef(0);
+  const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const gpsStepsRef = useRef(0);
+  const locationSubRef = useRef<any>(null);
 
   const loadFitnessData = useCallback(async () => {
     if (!playerId) return;
@@ -36,6 +56,7 @@ export default function FitnessScreen() {
       if (data.steps > steps) {
         setSteps(data.steps);
         baseStepsRef.current = data.steps;
+        gpsStepsRef.current = data.steps;
       }
     } catch (err) {
       console.log('Error loading fitness:', err);
@@ -46,68 +67,111 @@ export default function FitnessScreen() {
     loadFitnessData();
   }, [loadFitnessData]);
 
-  // Setup pedometer
+  // Try pedometer first, fall back to GPS tracking
   useEffect(() => {
-    let sub: any = null;
+    let pedSub: any = null;
+    let locSub: any = null;
 
-    const setup = async () => {
+    const setupPedometer = async (): Promise<boolean> => {
       try {
-        // MUST request permissions first (especially on Android)
         const { status } = await Pedometer.requestPermissionsAsync();
         if (status !== 'granted') {
-          console.log('Pedometer permission denied:', status);
-          setPedometerAvailable(false);
-          // Still load backend data
-          await loadFitnessData();
-          return;
+          setPermStatus('denied');
+          return false;
         }
-
         const available = await Pedometer.isAvailableAsync();
-        setPedometerAvailable(available);
-
-        if (available) {
-          // Get steps since midnight
-          const now = new Date();
-          const midnight = new Date(now);
-          midnight.setHours(0, 0, 0, 0);
-
-          try {
-            const result = await Pedometer.getStepCountAsync(midnight, now);
-            if (result && result.steps > 0) {
-              setSteps(result.steps);
-              baseStepsRef.current = result.steps;
-              if (playerId) {
-                await updateSteps(playerId, result.steps);
-              }
-            }
-          } catch (e) {
-            console.log('Pedometer history not available:', e);
-          }
-
-          // Watch for new steps in real time
-          sub = Pedometer.watchStepCount((result) => {
-            const newSteps = baseStepsRef.current + result.steps;
-            setSteps(newSteps);
-            if (playerId) {
-              updateSteps(playerId, newSteps).catch(() => {});
-            }
-          });
-          subscriptionRef.current = sub;
-        } else {
-          // Pedometer not available, load from backend
-          await loadFitnessData();
+        if (!available) {
+          setPermStatus('unavailable');
+          return false;
         }
-      } catch (err) {
-        console.log('Pedometer setup error:', err);
-        setPedometerAvailable(false);
-        await loadFitnessData();
+
+        setPedometerAvailable(true);
+        setTrackingMode('pedometer');
+        setPermStatus('granted');
+
+        // Get today's steps
+        const now = new Date();
+        const midnight = new Date(now);
+        midnight.setHours(0, 0, 0, 0);
+        try {
+          const result = await Pedometer.getStepCountAsync(midnight, now);
+          if (result && result.steps > 0) {
+            setSteps(result.steps);
+            baseStepsRef.current = result.steps;
+            if (playerId) await updateSteps(playerId, result.steps);
+          }
+        } catch (e) {
+          console.log('Step history unavailable:', e);
+        }
+
+        pedSub = Pedometer.watchStepCount((result) => {
+          const newSteps = baseStepsRef.current + result.steps;
+          setSteps(newSteps);
+          if (playerId) updateSteps(playerId, newSteps).catch(() => {});
+        });
+        subscriptionRef.current = pedSub;
+        return true;
+      } catch {
+        return false;
       }
     };
 
-    setup();
+    const setupGPSTracking = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setTrackingMode('none');
+          setPermStatus('no-location');
+          return;
+        }
+
+        setTrackingMode('gps');
+        setPermStatus('gps-active');
+
+        // Get initial position
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        lastLocationRef.current = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+
+        // Watch location changes to estimate steps from distance
+        locSub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 5, timeInterval: 3000 },
+          (newLoc) => {
+            if (lastLocationRef.current) {
+              const dist = getDistance(
+                lastLocationRef.current.lat, lastLocationRef.current.lng,
+                newLoc.coords.latitude, newLoc.coords.longitude
+              );
+              if (dist > 2 && dist < 100) { // filter noise (2m min, 100m max per update)
+                const newStepsDelta = Math.round(dist / METERS_PER_STEP);
+                gpsStepsRef.current += newStepsDelta;
+                setSteps(gpsStepsRef.current);
+                if (playerId) updateSteps(playerId, gpsStepsRef.current).catch(() => {});
+              }
+            }
+            lastLocationRef.current = { lat: newLoc.coords.latitude, lng: newLoc.coords.longitude };
+          }
+        );
+        locationSubRef.current = locSub;
+      } catch (e) {
+        console.log('GPS tracking error:', e);
+        setTrackingMode('none');
+      }
+    };
+
+    const init = async () => {
+      await loadFitnessData();
+      const pedOk = await setupPedometer();
+      if (!pedOk) {
+        // Pedometer failed, use GPS as fallback
+        await setupGPSTracking();
+      }
+    };
+
+    init();
 
     return () => {
-      if (sub) sub.remove();
+      if (pedSub) pedSub.remove();
+      if (locSub) locSub.remove();
     };
   }, [playerId]);
 
@@ -168,14 +232,29 @@ export default function FitnessScreen() {
 
           {!pedometerAvailable && Platform.OS !== 'web' && (
             <View style={styles.pedWarning}>
-              <Ionicons name="warning" size={14} color="#f39c12" />
-              <Text style={styles.pedWarningText}>Step tracking needs Physical Activity permission. Check your device Settings &gt; Apps &gt; Permissions &gt; Physical Activity.</Text>
+              {trackingMode === 'gps' ? (
+                <>
+                  <Ionicons name="navigate" size={14} color="#4caf50" />
+                  <Text style={[styles.pedWarningText, {color: '#4caf50'}]}>GPS step tracking active — walk around to count steps!</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="warning" size={14} color="#f39c12" />
+                  <Text style={styles.pedWarningText}>Step sensor unavailable. Walk around on the map to track via GPS.</Text>
+                </>
+              )}
+            </View>
+          )}
+          {pedometerAvailable && (
+            <View style={styles.pedWarning}>
+              <Ionicons name="checkmark-circle" size={14} color="#4caf50" />
+              <Text style={[styles.pedWarningText, {color: '#4caf50'}]}>Step counter active</Text>
             </View>
           )}
           {Platform.OS === 'web' && (
             <View style={styles.pedWarning}>
               <Ionicons name="phone-portrait" size={14} color="#3498db" />
-              <Text style={styles.pedWarningText}>Open on your phone via Expo Go to track real steps</Text>
+              <Text style={styles.pedWarningText}>Open on your phone via Expo Go to track steps</Text>
             </View>
           )}
         </View>
