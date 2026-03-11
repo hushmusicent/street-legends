@@ -28,6 +28,7 @@ import {
   unequipItem,
   uploadProfilePic,
   getProfilePic,
+  getOwnedTerritories,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -95,6 +96,7 @@ export default function CharacterScreen() {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [uploadingPic, setUploadingPic] = useState(false);
   const [showPicMenu, setShowPicMenu] = useState(false);
+  const [ownedTerritories, setOwnedTerritories] = useState<any[]>([]);
 
   useEffect(() => {
     if (playerId) loadAllData();
@@ -117,6 +119,7 @@ export default function CharacterScreen() {
         getPlayerInventoryDetails(playerId),
         getPlayerEquipmentDetails(playerId),
         getProfilePic(playerId),
+        getOwnedTerritories(playerId),
       ]);
       if (results[0].status === 'fulfilled') setPlayer(results[0].value);
       if (results[1].status === 'fulfilled') setSkills(results[1].value);
@@ -126,6 +129,7 @@ export default function CharacterScreen() {
         setProfilePic(results[4].value.profile_pic);
         setGlobalProfilePic(results[4].value.profile_pic);
       }
+      if (results[5].status === 'fulfilled') setOwnedTerritories(results[5].value || []);
     } catch (error) {
       console.error('Failed to load character data:', error);
     }
@@ -336,7 +340,7 @@ export default function CharacterScreen() {
         }
       >
         {activeTab === 'status' && (
-          <StatusTab player={player} classColor={classColor} />
+          <StatusTab player={player} classColor={classColor} territories={ownedTerritories} />
         )}
         {activeTab === 'equipment' && (
           <EquipmentTab
@@ -408,7 +412,9 @@ export default function CharacterScreen() {
 }
 
 // ========== STATUS TAB ==========
-function StatusTab({ player, classColor }: { player: any; classColor: string }) {
+function StatusTab({ player, classColor, territories }: { player: any; classColor: string; territories: any[] }) {
+  const totalIncome = territories.reduce((sum: number, t: any) => sum + (t.rewards?.passive_income || 0), 0);
+
   return (
     <View>
       {/* Health & Energy */}
@@ -454,6 +460,44 @@ function StatusTab({ player, classColor }: { player: any; classColor: string }) 
             <Text style={styles.resourceLabel}>Missions</Text>
           </View>
         </View>
+      </View>
+
+      {/* My Territories */}
+      <View style={styles.section}>
+        <View style={styles.terrSectionHeader}>
+          <Text style={styles.sectionTitle}>MY TERRITORIES</Text>
+          <View style={styles.terrCountBadge}>
+            <Text style={styles.terrCountText}>{territories.length}</Text>
+          </View>
+        </View>
+        {territories.length === 0 ? (
+          <View style={styles.terrEmpty}>
+            <Ionicons name="flag-outline" size={36} color="#555" />
+            <Text style={styles.terrEmptyText}>No territories owned</Text>
+            <Text style={styles.terrEmptyHint}>Capture territories on the map to earn daily income!</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.terrIncomeBar}>
+              <Ionicons name="trending-up" size={18} color="#4caf50" />
+              <Text style={styles.terrIncomeText}>Total Daily Income: ${totalIncome}</Text>
+            </View>
+            {territories.map((t: any) => (
+              <View key={t.id} style={[styles.terrCard, { borderLeftColor: t.color || classColor }]}>
+                <View style={[styles.terrColorDot, { backgroundColor: t.color || classColor }]} />
+                <View style={styles.terrCardInfo}>
+                  <Text style={styles.terrCardName}>{t.name}</Text>
+                  <Text style={styles.terrCardIncome}>
+                    <Ionicons name="cash-outline" size={13} color="#f39c12" /> ${t.rewards?.passive_income || 0}/day
+                  </Text>
+                </View>
+                <View style={styles.terrCardBoss}>
+                  <Text style={styles.terrCardBossLv}>Lv.{t.boss?.level || '?'}</Text>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
       </View>
 
       {/* Battle Record */}
@@ -1042,5 +1086,92 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Territory styles
+  terrSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  terrCountBadge: {
+    backgroundColor: '#f39c12',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 10,
+  },
+  terrCountText: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  terrEmpty: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  terrEmptyText: {
+    color: '#777',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  terrEmptyHint: {
+    color: '#555',
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  terrIncomeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a2e1a',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    gap: 8,
+  },
+  terrIncomeText: {
+    color: '#4caf50',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  terrCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 4,
+  },
+  terrColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    marginRight: 10,
+  },
+  terrCardInfo: {
+    flex: 1,
+  },
+  terrCardName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  terrCardIncome: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  terrCardBoss: {
+    backgroundColor: '#222',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  terrCardBossLv: {
+    color: '#f39c12',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });
