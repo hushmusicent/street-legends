@@ -59,14 +59,6 @@ export default function Index() {
     router.push(path as any);
   };
 
-export default function Index() {
-  const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    initializeApp();
-  }, []);
-
   const initializeApp = async () => {
     try {
       setLoading(true);
