@@ -43,7 +43,11 @@ export default function MissionsTrackerScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchMissions = useCallback(async () => {
-    if (!playerId) return;
+    if (!playerId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const data = await getActiveMissions(playerId);
       setMissions(data);
@@ -58,7 +62,6 @@ export default function MissionsTrackerScreen() {
   // Refresh missions every time this tab comes into focus
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       fetchMissions();
     }, [fetchMissions])
   );
