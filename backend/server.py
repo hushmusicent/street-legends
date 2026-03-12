@@ -1271,6 +1271,7 @@ async def battle_action(battle_id: str, action: BattleAction):
                 "reputation": player["reputation"] + enemy["level"],
                 "stats.health": max(1, player_health),
                 "stats.energy": max(0, player_energy),
+                "last_health_regen": datetime.utcnow().isoformat(),
             }
             
             if level_up:
@@ -1345,6 +1346,7 @@ async def battle_action(battle_id: str, action: BattleAction):
                 "losses": player["losses"] + 1,
                 "stats.health": 1,
                 "stats.energy": max(0, player_energy),
+                "last_health_regen": datetime.utcnow().isoformat(),
             }}
         )
         await decrement_player_buffs(battle["player_id"])

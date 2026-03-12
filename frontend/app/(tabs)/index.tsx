@@ -122,6 +122,18 @@ export default function MapScreen() {
     }
   }, [currentPosition?.latitude, currentPosition?.longitude]);
 
+  // Auto-refresh: spawn new enemies every 5 min + refresh player HP/energy regen
+  useEffect(() => {
+    if (!playerId || !currentPosition) return;
+    const interval = setInterval(() => {
+      // Refresh player data (triggers health/energy regen on backend)
+      getPlayer(playerId).then(setPlayer).catch(console.error);
+      // Refresh monsters (triggers new enemy spawn if 5 min passed)
+      loadNearbyEntities();
+    }, 300000); // 5 minutes = 300,000ms
+    return () => clearInterval(interval);
+  }, [playerId, currentPosition?.latitude, currentPosition?.longitude]);
+
   const initializeLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
