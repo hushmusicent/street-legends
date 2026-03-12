@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
-import { getBattle, battleAction, getPlayerSkills, getPlayer } from '../../services/api';
+import { getBattle, battleAction, getPlayerSkills, getPlayer, getActiveMissions } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { GameButton } from '../../components/GameButton';
 import { Battle, Skill } from '../../types/game';
@@ -73,6 +73,25 @@ export default function BattleScreen() {
         if (playerId) {
           const playerData = await getPlayer(playerId);
           setPlayer(playerData);
+
+          // Show bounty progress feedback after a win
+          if (result.status === 'won') {
+            try {
+              const activeMissions = await getActiveMissions(playerId);
+              const enemyName = result.enemy_name || '';
+              const bountyMissions = activeMissions.filter((m: any) => m.mission_type === 'bounty');
+              for (const bm of bountyMissions) {
+                const be = (bm.bounty_enemy || '').toLowerCase();
+                if (be && enemyName.toLowerCase().includes(be)) {
+                  Alert.alert(
+                    'Bounty Progress!',
+                    `${bm.title}: ${bm.goal_progress}/${bm.goal_target} ${bm.bounty_enemy} defeated`
+                  );
+                  break;
+                }
+              }
+            } catch (_) { /* silent */ }
+          }
         }
       }
     } catch (error: any) {
