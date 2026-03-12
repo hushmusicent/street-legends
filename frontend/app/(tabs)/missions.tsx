@@ -62,6 +62,15 @@ export default function MissionsTrackerScreen() {
     fetchMissions();
   }, [fetchMissions]);
 
+  // Auto-refresh missions every 5 seconds so accepted missions show up
+  useEffect(() => {
+    if (!playerId) return;
+    const interval = setInterval(() => {
+      fetchMissions();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [playerId, fetchMissions]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchMissions();
