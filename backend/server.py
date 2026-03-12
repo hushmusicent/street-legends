@@ -1429,12 +1429,36 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
     
     difficulties = ["easy", "medium", "hard"]
     
-    for _ in range(3 - len(nearby)):
-        # 40% chance to spawn a bounty, 60% regular mission
-        is_bounty = random.random() < 0.4
+    missions_to_spawn = max(0, 5 - len(nearby))
+    
+    # Guarantee at least 2 bounty missions
+    existing_bounties = sum(1 for m in nearby if m.get("mission_type") == "bounty")
+    bounty_count = existing_bounties
+    regular_count = len(nearby) - existing_bounties
+    min_bounties = 2
+    
+    for i in range(missions_to_spawn):
+        # Force bounty if we haven't hit the minimum yet and running out of slots
+        remaining = missions_to_spawn - i
+        bounties_needed = min_bounties - bounty_count
+        
+        if bounties_needed > 0 and bounties_needed >= remaining:
+            is_bounty = True
+        elif bounty_count < min_bounties and random.random() < 0.6:
+            is_bounty = True
+        elif bounty_count >= min_bounties:
+            is_bounty = random.random() < 0.3
+        else:
+            is_bounty = random.random() < 0.5
         
         if is_bounty:
-            template = random.choice(BOUNTY_TEMPLATES)
+            # Pick a bounty that targets a different enemy than already spawned
+            used_enemies = [m.get("bounty_enemy", "") for m in nearby if m.get("mission_type") == "bounty"]
+            available = [t for t in BOUNTY_TEMPLATES if t["enemy"] not in used_enemies]
+            if not available:
+                available = BOUNTY_TEMPLATES
+            template = random.choice(available)
+            bounty_count += 1
             target = random.choice(template["targets"])
             difficulty = random.choice(difficulties)
             diff_mult = {"easy": 0.7, "medium": 1.0, "hard": 1.5}[difficulty]
@@ -1473,6 +1497,7 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
             await db.missions.insert_one(mission_dict)
             nearby.append(serialize_doc(mission_dict))
         else:
+            regular_count += 1
             template = random.choice(MISSION_TEMPLATES)
             difficulty = random.choice(difficulties)
             target = random.choice(template["targets"])
