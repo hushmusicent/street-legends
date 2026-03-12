@@ -1249,7 +1249,9 @@ async def battle_action(battle_id: str, action: BattleAction):
                 "xp": new_xp if not level_up else new_xp - player["xp_to_next"],
                 "cash": new_cash,
                 "wins": player["wins"] + 1,
-                "reputation": player["reputation"] + enemy["level"]
+                "reputation": player["reputation"] + enemy["level"],
+                "stats.health": max(1, player_health),
+                "stats.energy": max(0, player_energy),
             }
             
             if level_up:
@@ -1320,7 +1322,11 @@ async def battle_action(battle_id: str, action: BattleAction):
     if player_health <= 0:
         await db.players.update_one(
             {"id": player["id"]},
-            {"$set": {"losses": player["losses"] + 1}}
+            {"$set": {
+                "losses": player["losses"] + 1,
+                "stats.health": 1,
+                "stats.energy": max(0, player_energy),
+            }}
         )
         await decrement_player_buffs(battle["player_id"])
         combat_log.append("You have been defeated!")
