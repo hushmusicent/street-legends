@@ -300,9 +300,10 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var markerHTML;
             if (enemyImg) {
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#ff6b35;color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
-              markerHTML = '<div style="width:42px;height:48px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+              var nameBadge = m.name ? '<div style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:1px 5px;border-radius:4px;font-size:8px;font-weight:bold;white-space:nowrap;z-index:10;">' + m.name + '</div>' : '';
+              markerHTML = '<div style="width:42px;height:58px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
                 '<div style="width:38px;height:38px;border-radius:50%;overflow:hidden;border:3px solid #ff6b35;box-shadow:0 2px 8px rgba(255,107,53,0.5);background:#1a1a1a;">' +
-                '<img src="' + enemyImg + '" style="width:100%;height:100%;object-fit:cover;" /></div>' + lvlBadge + '</div>';
+                '<img src="' + enemyImg + '" style="width:100%;height:100%;object-fit:cover;" /></div>' + lvlBadge + nameBadge + '</div>';
             } else {
               markerHTML = '<div style="background:' + color + ';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;position:relative;">' + icon + levelHTML + '</div>';
             }
@@ -310,8 +311,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,
-              iconSize: [enemyImg ? 42 : 32, enemyImg ? 48 : 32],
-              iconAnchor: [enemyImg ? 21 : 16, enemyImg ? 24 : 16]
+              iconSize: [enemyImg ? 42 : 32, enemyImg ? 58 : 32],
+              iconAnchor: [enemyImg ? 21 : 16, enemyImg ? 29 : 16]
             });
             var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);
             marker.on('click', (function(id, type) {
