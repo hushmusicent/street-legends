@@ -37,9 +37,14 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
               await AsyncStorage.removeItem('playerId');
               clearPlayer();
               onClose();
-              router.replace('/');
+              // Navigate back to intro screen with delay for modal to close
+              setTimeout(() => {
+                try { router.dismissAll(); } catch (_) {}
+                router.replace('/');
+              }, 300);
             } catch (e) {
               console.log('Quit error:', e);
+              try { router.replace('/'); } catch (_) {}
             }
           },
         },
