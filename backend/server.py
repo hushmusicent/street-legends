@@ -865,7 +865,7 @@ async def get_player(player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    # Passive health regen: 25% of max_health every 15 minutes
+    # Passive health regen: 25% of max_health every 5 minutes
     now = datetime.utcnow()
     last_regen = player.get("last_health_regen")
     current_hp = player["stats"]["health"]
@@ -883,7 +883,7 @@ async def get_player(player_id: str):
                 baseline = datetime.fromisoformat(baseline)
             elapsed_seconds = (now - baseline).total_seconds()
         
-        intervals = int(elapsed_seconds // 900)  # 900 seconds = 15 minutes
+        intervals = int(elapsed_seconds // 300)  # 300 seconds = 5 minutes
         if intervals > 0:
             regen_amount = int(max_hp * 0.25 * intervals)
             new_hp = min(max_hp, current_hp + regen_amount)
@@ -1000,40 +1000,56 @@ async def get_leaderboard(limit: int = 20):
 # ============== MONSTER ENDPOINTS ==============
 @api_router.get("/monsters/spawn")
 async def spawn_monsters(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn monsters near a location based on player level using the tier system"""
+    """Spawn monsters near a location - 1 new enemy every 5 minutes, max 10 per area"""
     position = Position(latitude=latitude, longitude=longitude)
     
     # Clean up expired monsters
     await db.monsters.delete_many({"expires_at": {"$lt": datetime.utcnow()}})
     
-    # Check existing monsters nearby
-    existing = await db.monsters.find().to_list(100)
-    nearby_count = sum(1 for m in existing if calculate_distance(position, Position(**m["position"])) < 200)
+    # Check existing monsters nearby (within 500m)
+    existing = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(100)
+    nearby = [m for m in existing if calculate_distance(position, Position(**m["position"])) < 500]
+    nearby_count = len(nearby)
     
-    monsters_to_spawn = max(0, 5 - nearby_count)
+    # Max 10 per area
+    if nearby_count >= 10:
+        # Already at max, return existing
+        all_monsters = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(50)
+        return [serialize_doc(m) for m in all_monsters if calculate_distance(position, Position(**m["position"])) < 500]
+    
+    # Only spawn 1 new enemy every 5 minutes
+    # Check when the last monster was spawned in this area
+    should_spawn = False
+    if nearby_count == 0:
+        # No monsters at all - spawn 1 immediately
+        should_spawn = True
+    else:
+        # Find the most recently created monster in the area
+        most_recent = max(nearby, key=lambda m: m.get("spawn_time", datetime.min))
+        last_spawn_time = most_recent.get("spawn_time", datetime.min)
+        if isinstance(last_spawn_time, str):
+            last_spawn_time = datetime.fromisoformat(last_spawn_time)
+        elapsed = (datetime.utcnow() - last_spawn_time).total_seconds()
+        if elapsed >= 300:  # 5 minutes
+            should_spawn = True
+    
     spawned = []
-    
-    # Get eligible enemies for this player level
-    weighted_enemies = get_eligible_enemies(player_level)
-    if not weighted_enemies:
-        weighted_enemies = [(ENEMY_TIERS[0], 1)]
-    
-    for _ in range(monsters_to_spawn):
-        # Weighted random selection
+    if should_spawn:
+        # Spawn exactly 1 monster
+        weighted_enemies = get_eligible_enemies(player_level)
+        if not weighted_enemies:
+            weighted_enemies = [(ENEMY_TIERS[0], 1)]
+        
         enemies, weights = zip(*weighted_enemies)
         template = random.choices(enemies, weights=weights, k=1)[0]
         
-        # Determine the actual monster level within its range
         monster_level = random.randint(template["level_min"], template["level_max"])
         
-        # Randomize position slightly (within 100-300m)
         offset_lat = random.uniform(-0.003, 0.003)
         offset_lon = random.uniform(-0.003, 0.003)
         
-        # Calculate stats using the new tier-aware function
         enemy_stats = calculate_enemy_stats(monster_level, template["is_boss"])
         
-        # Generate AI description
         enemy_type = "boss" if template["is_boss"] else "humanoid"
         description = await generate_ai_content("monster", {
             "name": template["name"],
