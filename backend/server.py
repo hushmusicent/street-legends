@@ -1017,60 +1017,62 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
         all_monsters = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(50)
         return [serialize_doc(m) for m in all_monsters if calculate_distance(position, Position(**m["position"])) < 500]
     
-    # Only spawn 1 new enemy every 5 minutes
-    # Check when the last monster was spawned in this area
-    should_spawn = False
+    # Determine how many to spawn
+    spawn_count = 0
     if nearby_count == 0:
-        # No monsters at all - spawn 1 immediately
-        should_spawn = True
-    else:
-        # Find the most recently created monster in the area
+        # New area — spawn 3 to 5 enemies immediately
+        spawn_count = random.randint(3, 5)
+    elif nearby_count < 10:
+        # Existing area — spawn 1 every 5 minutes
         most_recent = max(nearby, key=lambda m: m.get("spawn_time", datetime.min))
         last_spawn_time = most_recent.get("spawn_time", datetime.min)
         if isinstance(last_spawn_time, str):
             last_spawn_time = datetime.fromisoformat(last_spawn_time)
         elapsed = (datetime.utcnow() - last_spawn_time).total_seconds()
         if elapsed >= 300:  # 5 minutes
-            should_spawn = True
+            spawn_count = 1
+    
+    # Cap so we don't exceed 10
+    spawn_count = min(spawn_count, 10 - nearby_count)
     
     spawned = []
-    if should_spawn:
-        # Spawn exactly 1 monster
+    if spawn_count > 0:
         weighted_enemies = get_eligible_enemies(player_level)
         if not weighted_enemies:
             weighted_enemies = [(ENEMY_TIERS[0], 1)]
         
-        enemies, weights = zip(*weighted_enemies)
-        template = random.choices(enemies, weights=weights, k=1)[0]
-        
-        monster_level = random.randint(template["level_min"], template["level_max"])
-        
-        offset_lat = random.uniform(-0.003, 0.003)
-        offset_lon = random.uniform(-0.003, 0.003)
-        
-        enemy_stats = calculate_enemy_stats(monster_level, template["is_boss"])
-        
-        enemy_type = "boss" if template["is_boss"] else "humanoid"
-        description = await generate_ai_content("monster", {
-            "name": template["name"],
-            "level": monster_level,
-            "type": enemy_type
-        })
-        
-        monster = Monster(
-            name=template["name"],
-            description=description,
-            monster_type=enemy_type,
-            level=monster_level,
-            stats=enemy_stats,
-            position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
-            loot_cash=monster_level * random.randint(10, 25) * (3 if template["is_boss"] else 1),
-            loot_xp=monster_level * random.randint(15, 30) * (3 if template["is_boss"] else 1),
-            expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 1)
-        )
-        
-        await db.monsters.insert_one(monster.dict())
-        spawned.append(monster)
+        for _ in range(spawn_count):
+            enemies, weights = zip(*weighted_enemies)
+            template = random.choices(enemies, weights=weights, k=1)[0]
+            
+            monster_level = random.randint(template["level_min"], template["level_max"])
+            
+            offset_lat = random.uniform(-0.003, 0.003)
+            offset_lon = random.uniform(-0.003, 0.003)
+            
+            enemy_stats = calculate_enemy_stats(monster_level, template["is_boss"])
+            
+            enemy_type = "boss" if template["is_boss"] else "humanoid"
+            description = await generate_ai_content("monster", {
+                "name": template["name"],
+                "level": monster_level,
+                "type": enemy_type
+            })
+            
+            monster = Monster(
+                name=template["name"],
+                description=description,
+                monster_type=enemy_type,
+                level=monster_level,
+                stats=enemy_stats,
+                position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
+                loot_cash=monster_level * random.randint(10, 25) * (3 if template["is_boss"] else 1),
+                loot_xp=monster_level * random.randint(15, 30) * (3 if template["is_boss"] else 1),
+                expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 1)
+            )
+            
+            await db.monsters.insert_one(monster.dict())
+            spawned.append(monster)
     
     # Return all nearby monsters
     all_monsters = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(50)
