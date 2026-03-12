@@ -865,19 +865,21 @@ async def get_player(player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    # Passive health regen: 25% of max_health every 5 minutes
+    # Passive health & energy regen: 25% every 5 minutes
     now = datetime.utcnow()
     last_regen = player.get("last_health_regen")
     current_hp = player["stats"]["health"]
     max_hp = player["stats"]["max_health"]
+    current_energy = player["stats"]["energy"]
+    max_energy = player["stats"]["max_energy"]
     
-    if current_hp < max_hp:
+    needs_regen = current_hp < max_hp or current_energy < max_energy
+    if needs_regen:
         if last_regen:
             if isinstance(last_regen, str):
                 last_regen = datetime.fromisoformat(last_regen)
             elapsed_seconds = (now - last_regen).total_seconds()
         else:
-            # First time - use last_active or created_at as baseline
             baseline = player.get("last_active", player.get("created_at", now))
             if isinstance(baseline, str):
                 baseline = datetime.fromisoformat(baseline)
@@ -885,23 +887,22 @@ async def get_player(player_id: str):
         
         intervals = int(elapsed_seconds // 300)  # 300 seconds = 5 minutes
         if intervals > 0:
-            regen_amount = int(max_hp * 0.25 * intervals)
-            new_hp = min(max_hp, current_hp + regen_amount)
+            update_fields = {"last_health_regen": now.isoformat()}
+            
+            # Health regen
+            new_hp = min(max_hp, current_hp + int(max_hp * 0.25 * intervals))
             if new_hp != current_hp:
-                await db.players.update_one(
-                    {"id": player_id},
-                    {"$set": {
-                        "stats.health": new_hp,
-                        "last_health_regen": now.isoformat(),
-                    }}
-                )
+                update_fields["stats.health"] = new_hp
                 player["stats"]["health"] = new_hp
-                player["last_health_regen"] = now.isoformat()
-            elif intervals > 0:
-                await db.players.update_one(
-                    {"id": player_id},
-                    {"$set": {"last_health_regen": now.isoformat()}}
-                )
+            
+            # Energy regen
+            new_energy = min(max_energy, current_energy + int(max_energy * 0.25 * intervals))
+            if new_energy != current_energy:
+                update_fields["stats.energy"] = new_energy
+                player["stats"]["energy"] = new_energy
+            
+            await db.players.update_one({"id": player_id}, {"$set": update_fields})
+            player["last_health_regen"] = now.isoformat()
     
     return Player(**player)
 
