@@ -424,8 +424,26 @@ export default function MapScreen() {
 
       <SafeAreaView style={styles.hud}>
         <View style={styles.playerHud}>
-          <Text style={styles.playerName}>{player?.name}</Text>
-          <Text style={styles.playerLevel}>Lv.{player?.level}</Text>
+          <View style={styles.hudNameRow}>
+            <Text style={styles.playerName}>{player?.name}</Text>
+            <Text style={styles.playerLevel}>Lv.{player?.level}</Text>
+          </View>
+          {/* HP Bar */}
+          <View style={styles.statBarRow}>
+            <Text style={styles.statBarLabel}>HP</Text>
+            <View style={styles.statBarTrack}>
+              <View style={[styles.statBarFill, styles.hpFill, { width: `${Math.min(100, ((player?.stats?.health ?? 0) / (player?.stats?.max_health || 1)) * 100)}%` }]} />
+            </View>
+            <Text style={styles.statBarValue}>{player?.stats?.health ?? 0}/{player?.stats?.max_health ?? 0}</Text>
+          </View>
+          {/* Energy Bar */}
+          <View style={styles.statBarRow}>
+            <Text style={styles.statBarLabel}>EN</Text>
+            <View style={styles.statBarTrack}>
+              <View style={[styles.statBarFill, styles.energyFill, { width: `${Math.min(100, ((player?.stats?.energy ?? 0) / (player?.stats?.max_energy || 1)) * 100)}%` }]} />
+            </View>
+            <Text style={styles.statBarValue}>{player?.stats?.energy ?? 0}/{player?.stats?.max_energy ?? 0}</Text>
+          </View>
         </View>
         <View style={styles.hudRight}>
           <TouchableOpacity style={styles.shopButton} onPress={() => router.push('/shop')}>
@@ -679,9 +697,17 @@ const styles = StyleSheet.create({
   retryButton: { marginTop: 20, backgroundColor: '#4285F4', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
   retryText: { color: '#fff', fontWeight: '600' },
   hud: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4 },
-  playerHud: { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
-  playerName: { color: '#202124', fontWeight: '600', fontSize: 14 },
-  playerLevel: { color: '#4285F4', fontWeight: '600', marginLeft: 6, fontSize: 14 },
+  playerHud: { backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3, minWidth: 150 },
+  hudNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  playerName: { color: '#202124', fontWeight: '700', fontSize: 13 },
+  playerLevel: { color: '#4285F4', fontWeight: '700', marginLeft: 6, fontSize: 13 },
+  statBarRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
+  statBarLabel: { color: '#888', fontSize: 9, fontWeight: '800', width: 18 },
+  statBarTrack: { flex: 1, height: 8, backgroundColor: '#e0e0e0', borderRadius: 4, overflow: 'hidden' },
+  statBarFill: { height: '100%', borderRadius: 4 },
+  hpFill: { backgroundColor: '#e74c3c' },
+  energyFill: { backgroundColor: '#3498db' },
+  statBarValue: { color: '#555', fontSize: 9, fontWeight: '700', marginLeft: 5, minWidth: 40, textAlign: 'right' },
   hudRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   shopButton: { backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
   shopCash: { color: '#f39c12', fontSize: 12, fontWeight: '700' },
