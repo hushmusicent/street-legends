@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as NavigationBar from 'expo-navigation-bar';
 import { OptionsModal } from '../../components/OptionsModal';
 import { useGameStore } from '../../stores/gameStore';
 
@@ -10,6 +11,20 @@ export default function TabLayout() {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const { isMuted, setMuted } = useGameStore();
   const insets = useSafeAreaInsets();
+
+  // Hide Android navigation bar for immersive gaming
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+    }
+    return () => {
+      // Restore nav bar when leaving game
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible');
+      }
+    };
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>

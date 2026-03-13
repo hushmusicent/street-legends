@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useGameStore } from '../stores/gameStore';
 
 interface OptionsModalProps {
@@ -34,6 +36,10 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
           style: 'destructive',
           onPress: async () => {
             try {
+              // Restore Android navigation bar before quitting
+              if (Platform.OS === 'android') {
+                await NavigationBar.setVisibilityAsync('visible');
+              }
               await AsyncStorage.removeItem('playerId');
               clearPlayer();
               onClose();
