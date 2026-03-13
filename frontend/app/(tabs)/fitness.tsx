@@ -17,6 +17,7 @@ import { Pedometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import { useGameStore } from '../../stores/gameStore';
 import { getFitnessData, updateSteps, claimStepGoal } from '../../services/api';
+import { showGameToast } from '../../components/GameToast';
 
 const GOAL_COLORS = ['#3498db', '#f39c12', '#e74c3c'];
 const GOAL_ICONS: Array<'walk' | 'bicycle' | 'rocket'> = ['walk', 'bicycle', 'rocket'];
@@ -35,6 +36,7 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 export default function FitnessScreen() {
   const { playerId } = useGameStore();
+  const triggerMissionRefresh = useGameStore((s) => s.triggerMissionRefresh);
   const [steps, setSteps] = useState(0);
   const [fitnessData, setFitnessData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,7 +109,11 @@ export default function FitnessScreen() {
         pedSub = Pedometer.watchStepCount((result) => {
           const newSteps = baseStepsRef.current + result.steps;
           setSteps(newSteps);
-          if (playerId) updateSteps(playerId, newSteps).catch(() => {});
+          if (playerId) {
+            updateSteps(playerId, newSteps).then(() => {
+              triggerMissionRefresh();
+            }).catch(() => {});
+          }
         });
         subscriptionRef.current = pedSub;
         return true;
@@ -145,7 +151,11 @@ export default function FitnessScreen() {
                 const newStepsDelta = Math.round(dist / METERS_PER_STEP);
                 gpsStepsRef.current += newStepsDelta;
                 setSteps(gpsStepsRef.current);
-                if (playerId) updateSteps(playerId, gpsStepsRef.current).catch(() => {});
+                if (playerId) {
+                  updateSteps(playerId, gpsStepsRef.current).then(() => {
+                    triggerMissionRefresh();
+                  }).catch(() => {});
+                }
               }
             }
             lastLocationRef.current = { lat: newLoc.coords.latitude, lng: newLoc.coords.longitude };

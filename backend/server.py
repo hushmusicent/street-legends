@@ -2716,13 +2716,33 @@ async def get_fitness_data(player_id: str):
 
 @api_router.put("/fitness/{player_id}/steps")
 async def update_steps(player_id: str, steps: int):
-    """Update step count for today"""
+    """Update step count for today and sync walk_steps mission progress"""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     await db.fitness.update_one(
         {"player_id": player_id, "date": today},
         {"$set": {"steps": steps}},
         upsert=True,
     )
+    
+    # Update walk_steps mission progress
+    player = await db.players.find_one({"id": player_id})
+    if player:
+        active_ids = player.get("active_missions", [])
+        if active_ids:
+            missions = await db.missions.find({"id": {"$in": active_ids}, "mission_type": "walk_steps"}).to_list(50)
+            for m in missions:
+                pp = m.get("player_progress", {})
+                player_data = pp.get(player_id, {})
+                old_progress = player_data.get("progress", 0)
+                # Steps are absolute (total today), so set progress directly
+                if steps > old_progress:
+                    player_data["progress"] = steps
+                    pp[player_id] = player_data
+                    await db.missions.update_one(
+                        {"id": m["id"]},
+                        {"$set": {"player_progress": pp}}
+                    )
+    
     return {"steps": steps}
 
 @api_router.post("/fitness/{player_id}/claim/{goal_steps}")
