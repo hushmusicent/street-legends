@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Platform, TouchableOpacity, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as NavigationBar from 'expo-navigation-bar';
 import { OptionsModal } from '../../components/OptionsModal';
@@ -12,19 +12,35 @@ export default function TabLayout() {
   const { isMuted, setMuted } = useGameStore();
   const insets = useSafeAreaInsets();
 
-  // Hide Android navigation bar for immersive gaming
-  useEffect(() => {
+  // Aggressively hide Android navigation bar
+  const hideNavBar = useCallback(() => {
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('hidden');
-      NavigationBar.setBehaviorAsync('overlay-swipe');
+      NavigationBar.setBehaviorAsync('inset-swipe');
     }
+  }, []);
+
+  useEffect(() => {
+    hideNavBar();
+
+    // Re-hide when app returns from background (Android restores nav bar)
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        hideNavBar();
+      }
+    });
+
+    // Re-hide periodically in case system reveals it
+    const interval = setInterval(hideNavBar, 3000);
+
     return () => {
-      // Restore nav bar when leaving game
+      subscription.remove();
+      clearInterval(interval);
       if (Platform.OS === 'android') {
         NavigationBar.setVisibilityAsync('visible');
       }
     };
-  }, []);
+  }, [hideNavBar]);
 
   return (
     <View style={{ flex: 1 }}>
