@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { View, StyleSheet } from 'react-native';
+import { GameToastProvider } from '../components/GameToast';
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ export default function RootLayout() {
           <Stack.Screen name="battle/[id]" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="mission/[id]" options={{ presentation: 'modal' }} />
         </Stack>
+        <GameToastProvider />
       </View>
     </QueryClientProvider>
   );

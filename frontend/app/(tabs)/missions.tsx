@@ -37,6 +37,7 @@ const MISSION_TYPE_LABELS: Record<string, string> = {
 
 export default function MissionsTrackerScreen() {
   const { playerId, player } = useGameStore();
+  const missionRefreshTrigger = useGameStore((s) => s.missionRefreshTrigger);
   const [missions, setMissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,12 +63,19 @@ export default function MissionsTrackerScreen() {
     fetchMissions();
   }, [fetchMissions]);
 
-  // Auto-refresh missions every 5 seconds so accepted missions show up
+  // Event-driven refresh: re-fetch when battle won, mission accepted/cancelled
+  useEffect(() => {
+    if (missionRefreshTrigger > 0) {
+      fetchMissions();
+    }
+  }, [missionRefreshTrigger]);
+
+  // Gentle background refresh every 30s as fallback
   useEffect(() => {
     if (!playerId) return;
     const interval = setInterval(() => {
       fetchMissions();
-    }, 5000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [playerId, fetchMissions]);
 
@@ -94,6 +102,7 @@ export default function MissionsTrackerScreen() {
             try {
               await cancelMission(mission.id, playerId);
               setMissions((prev) => prev.filter((m) => m.id !== mission.id));
+              useGameStore.getState().triggerMissionRefresh();
             } catch (err: any) {
               Alert.alert('Error', err?.response?.data?.detail || 'Failed to cancel');
             }

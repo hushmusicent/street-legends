@@ -29,6 +29,9 @@ interface GameState {
   // Audio
   isMuted: boolean;
   
+  // Data refresh triggers
+  missionRefreshTrigger: number;
+  
   // Actions
   setPlayer: (player: Player) => void;
   setPlayerId: (id: string) => void;
@@ -44,6 +47,7 @@ interface GameState {
   setPlayerGuild: (guild: Guild | null) => void;
   setProfilePic: (pic: string | null) => void;
   setMuted: (muted: boolean) => void;
+  triggerMissionRefresh: () => void;
   clearPlayer: () => void;
   
   // Persistence
@@ -65,6 +69,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   playerGuild: null,
   profilePic: null,
   isMuted: false,
+  missionRefreshTrigger: 0,
   
   // Actions
   setPlayer: (player) => set({ player }),
@@ -85,6 +90,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setPlayerGuild: (guild) => set({ playerGuild: guild }),
   setProfilePic: (pic) => set({ profilePic: pic }),
   setMuted: (muted) => set({ isMuted: muted }),
+  triggerMissionRefresh: () => set((state) => ({ missionRefreshTrigger: state.missionRefreshTrigger + 1 })),
   
   clearPlayer: () => set({
     player: null,

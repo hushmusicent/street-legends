@@ -2412,6 +2412,48 @@ async def collect_territory_income(player_id: str):
     }
 
 
+@api_router.get("/territories/income-preview/{player_id}")
+async def territory_income_preview(player_id: str):
+    """Preview available income without collecting it"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    owned = await db.territories.find({"owner_id": player_id}).to_list(100)
+    if not owned:
+        return {"available_income": 0, "ready_territories": 0, "total_territories": 0, "next_collection_hours": 0}
+    
+    now = datetime.utcnow()
+    available_income = 0
+    ready_territories = 0
+    min_hours_remaining = 999
+    
+    for t in owned:
+        income = t.get("passive_income", 30)
+        last_collected = t.get("last_income_collected")
+        
+        if last_collected:
+            try:
+                last_dt = datetime.fromisoformat(last_collected)
+                hours_since = (now - last_dt).total_seconds() / 3600
+                if hours_since < 24:
+                    remaining = 24 - hours_since
+                    min_hours_remaining = min(min_hours_remaining, remaining)
+                    continue
+            except (ValueError, TypeError):
+                pass
+        
+        available_income += income
+        ready_territories += 1
+    
+    return {
+        "available_income": available_income,
+        "ready_territories": ready_territories,
+        "total_territories": len(owned),
+        "next_collection_hours": round(min_hours_remaining, 1) if min_hours_remaining < 999 else 0,
+    }
+
+
 @api_router.post("/territories/{territory_id}/capture")
 async def capture_territory(territory_id: str, player_id: str):
     """Fight the territory boss to capture an unclaimed territory"""
@@ -2596,7 +2638,7 @@ async def challenge_territory_owner(territory: dict, challenger: dict):
         }
 
 @api_router.post("/territories/{territory_id}/collect-income")
-async def collect_territory_income(territory_id: str, player_id: str):
+async def collect_single_territory_income(territory_id: str, player_id: str):
     """Collect passive income from an owned territory"""
     territory = await db.territories.find_one({"id": territory_id})
     if not territory:

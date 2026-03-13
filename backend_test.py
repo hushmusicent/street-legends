@@ -1,243 +1,323 @@
 #!/usr/bin/env python3
 """
-Multi-player Mission Acceptance System Test
-Tests the new system where multiple players can accept the same mission with independent progress tracking.
+GTA GPS RPG Backend API Testing Suite
+Testing Territory Income Features and Battle System
 """
 
 import requests
 import json
+import time
 import sys
+from datetime import datetime
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://nexus-battle-quest.preview.emergentagent.com"
-API_BASE = f"{BACKEND_URL}/api"
+BASE_URL = "https://nexus-battle-quest.preview.emergentagent.com/api"
 
-def log_test(test_name, status, details=""):
-    """Log test results with clear formatting"""
-    status_symbol = "✅" if status == "PASS" else "❌" if status == "FAIL" else "⏭️"
-    print(f"{status_symbol} {test_name}")
-    if details:
-        print(f"   → {details}")
+# Test configuration
+TEST_COORDS = {
+    "latitude": 40.758,
+    "longitude": -73.9855,
+    "player_level": 1
+}
 
-def create_player(name, character_class):
-    """Create a new player"""
-    response = requests.post(f"{API_BASE}/players", json={
-        "name": name,
-        "character_class": character_class
-    })
-    return response
+# Color codes for output
+class Colors:
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    END = '\033[0m'
 
-def main():
-    print("🎮 MULTI-PLAYER MISSION ACCEPTANCE SYSTEM TEST")
+def log(message, color=Colors.WHITE):
+    """Print colored log message"""
+    print(f"{color}{message}{Colors.END}")
+
+def log_success(message):
+    log(f"✅ {message}", Colors.GREEN)
+
+def log_error(message):
+    log(f"❌ {message}", Colors.RED)
+
+def log_info(message):
+    log(f"ℹ️  {message}", Colors.BLUE)
+
+def log_warning(message):
+    log(f"⚠️  {message}", Colors.YELLOW)
+
+def log_test_start(test_name):
+    log(f"\n🧪 TESTING: {test_name}", Colors.CYAN + Colors.BOLD)
     print("=" * 60)
-    
-    test_results = []
-    
+
+def make_request(method, endpoint, data=None, params=None):
+    """Make HTTP request and handle errors"""
+    url = f"{BASE_URL}{endpoint}"
     try:
-        # Test 1: Create Player1
-        print("\n1. Creating Player1...")
-        response = create_player("MultiTest1", "street_soldier")
-        if response.status_code == 200:
-            player1_data = response.json()
-            player1_id = player1_data["id"]
-            log_test("Create Player1", "PASS", f"ID: {player1_id}")
-            test_results.append(True)
+        if method == "GET":
+            response = requests.get(url, params=params)
+        elif method == "POST":
+            response = requests.post(url, json=data, params=params)
+        elif method == "PUT":
+            response = requests.put(url, json=data, params=params)
         else:
-            log_test("Create Player1", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            return
-            
-        # Test 2: Create Player2
-        print("\n2. Creating Player2...")
-        response = create_player("MultiTest2", "hacker")
-        if response.status_code == 200:
-            player2_data = response.json()
-            player2_id = player2_data["id"]
-            log_test("Create Player2", "PASS", f"ID: {player2_id}")
-            test_results.append(True)
-        else:
-            log_test("Create Player2", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            return
-            
-        # Test 3: Generate missions
-        print("\n3. Generating missions at Times Square...")
-        response = requests.get(f"{API_BASE}/missions/generate", params={
-            "latitude": 40.758,
-            "longitude": -73.9855,
-            "player_level": 5
-        })
-        if response.status_code == 200:
-            missions = response.json()
-            if len(missions) >= 1:
-                mission = missions[0]
-                mission_id = mission["id"]
-                log_test("Generate missions", "PASS", f"Generated {len(missions)} missions, using mission: {mission['title']}")
-                test_results.append(True)
-            else:
-                log_test("Generate missions", "FAIL", "No missions generated")
-                test_results.append(False)
-                return
-        else:
-            log_test("Generate missions", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            return
-            
-        # Test 4: Player1 accepts mission
-        print(f"\n4. Player1 accepting mission {mission_id}...")
-        response = requests.post(f"{API_BASE}/missions/{mission_id}/accept", params={
-            "player_id": player1_id
-        })
-        if response.status_code == 200:
-            result = response.json()
-            log_test("Player1 accepts mission", "PASS", f"Message: {result['message']}")
-            test_results.append(True)
-        else:
-            log_test("Player1 accepts mission", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            
-        # Test 5: Player2 accepts THE SAME mission (KEY TEST)
-        print(f"\n5. Player2 accepting THE SAME mission {mission_id}...")
-        response = requests.post(f"{API_BASE}/missions/{mission_id}/accept", params={
-            "player_id": player2_id
-        })
-        if response.status_code == 200:
-            result = response.json()
-            log_test("Player2 accepts SAME mission", "PASS", f"SUCCESS: Multiple players can accept same mission! Message: {result['message']}")
-            test_results.append(True)
-        else:
-            log_test("Player2 accepts SAME mission", "FAIL", f"CRITICAL: Multiple players cannot accept same mission. Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            
-        # Test 6: Player1 tries to re-accept same mission
-        print(f"\n6. Player1 trying to re-accept same mission {mission_id}...")
-        response = requests.post(f"{API_BASE}/missions/{mission_id}/accept", params={
-            "player_id": player1_id
-        })
-        if response.status_code == 400:
-            log_test("Player1 re-acceptance blocked", "PASS", f"Correctly blocked: {response.json().get('detail', 'Unknown error')}")
-            test_results.append(True)
-        else:
-            log_test("Player1 re-acceptance blocked", "FAIL", f"Should have been blocked! Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            
-        # Test 7: Get Player1's active missions
-        print(f"\n7. Getting Player1's active missions...")
-        response = requests.get(f"{API_BASE}/missions/active/{player1_id}")
-        if response.status_code == 200:
-            player1_missions = response.json()
-            if len(player1_missions) >= 1:
-                p1_mission = player1_missions[0]
-                p1_progress = p1_mission.get("goal_progress", "unknown")
-                log_test("Player1 active missions", "PASS", f"Found {len(player1_missions)} missions, progress: {p1_progress}")
-                test_results.append(True)
-            else:
-                log_test("Player1 active missions", "FAIL", "No active missions found for Player1")
-                test_results.append(False)
-        else:
-            log_test("Player1 active missions", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            
-        # Test 8: Get Player2's active missions
-        print(f"\n8. Getting Player2's active missions...")
-        response = requests.get(f"{API_BASE}/missions/active/{player2_id}")
-        if response.status_code == 200:
-            player2_missions = response.json()
-            if len(player2_missions) >= 1:
-                p2_mission = player2_missions[0]
-                p2_progress = p2_mission.get("goal_progress", "unknown")
-                log_test("Player2 active missions", "PASS", f"Found {len(player2_missions)} missions, progress: {p2_progress}")
-                
-                # Verify they have the same mission with independent progress
-                if p1_mission["id"] == p2_mission["id"] and p1_progress == p2_progress == 0:
-                    log_test("Independent progress tracking", "PASS", f"Both players have same mission with independent progress (both at 0)")
-                    test_results.append(True)
-                else:
-                    log_test("Independent progress tracking", "FAIL", f"Progress mismatch or different missions. P1: {p1_progress}, P2: {p2_progress}")
-                    test_results.append(False)
-            else:
-                log_test("Player2 active missions", "FAIL", "No active missions found for Player2")
-                test_results.append(False)
-        else:
-            log_test("Player2 active missions", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            
-        # Test 9: Test generate_missions with player_id parameter
-        print(f"\n9. Testing generate_missions with player_id for Player1...")
-        response = requests.get(f"{API_BASE}/missions/generate", params={
-            "latitude": 40.758,
-            "longitude": -73.9855,
-            "player_level": 5,
-            "player_id": player1_id
-        })
-        if response.status_code == 200:
-            missions_with_player = response.json()
-            accepted_missions = [m for m in missions_with_player if m.get("accepted_by") == player1_id]
-            if len(accepted_missions) >= 1:
-                log_test("Generate missions with player_id", "PASS", f"Found {len(accepted_missions)} missions accepted by Player1")
-                test_results.append(True)
-            else:
-                log_test("Generate missions with player_id", "FAIL", "No missions marked as accepted by Player1")
-                test_results.append(False)
-        else:
-            log_test("Generate missions with player_id", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-            
-        # Test 10: Test generate_missions with player_id parameter for Player2
-        print(f"\n10. Testing generate_missions with player_id for Player2...")
-        response = requests.get(f"{API_BASE}/missions/generate", params={
-            "latitude": 40.758,
-            "longitude": -73.9855,
-            "player_level": 5,
-            "player_id": player2_id
-        })
-        if response.status_code == 200:
-            missions_with_player2 = response.json()
-            accepted_missions_p2 = [m for m in missions_with_player2 if m.get("accepted_by") == player2_id]
-            if len(accepted_missions_p2) >= 1:
-                log_test("Generate missions with player_id (Player2)", "PASS", f"Found {len(accepted_missions_p2)} missions accepted by Player2")
-                test_results.append(True)
-            else:
-                log_test("Generate missions with player_id (Player2)", "FAIL", "No missions marked as accepted by Player2")
-                test_results.append(False)
-        else:
-            log_test("Generate missions with player_id (Player2)", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-            test_results.append(False)
-
-    except requests.exceptions.RequestException as e:
-        log_test("Network Connection", "FAIL", f"Connection error: {e}")
-        test_results.append(False)
+            log_error(f"Unsupported method: {method}")
+            return None
+        
+        log_info(f"{method} {endpoint} -> {response.status_code}")
+        
+        if response.status_code >= 400:
+            log_error(f"HTTP Error: {response.status_code} - {response.text}")
+            return None
+        
+        return response.json()
     except Exception as e:
-        log_test("Unexpected Error", "FAIL", f"Error: {e}")
-        test_results.append(False)
+        log_error(f"Request failed: {e}")
+        return None
+
+def test_1_register_user():
+    """Test 1: Register new user as specified in review request"""
+    log_test_start("User Registration")
     
-    # Summary
-    print("\n" + "=" * 60)
-    print("📊 MULTI-PLAYER MISSION SYSTEM TEST SUMMARY")
-    print("=" * 60)
+    register_data = {
+        "username": "incometest",
+        "password": "test123",
+        "name": "IncomeTester",
+        "character_class": "street_soldier"
+    }
     
-    passed = sum(test_results)
-    total = len(test_results)
-    success_rate = (passed / total * 100) if total > 0 else 0
+    log_info(f"Registering user: {register_data['username']}")
+    result = make_request("POST", "/auth/register", register_data)
     
-    print(f"Tests passed: {passed}/{total} ({success_rate:.1f}%)")
-    
-    if success_rate == 100:
-        print("🎉 MULTI-PLAYER MISSION SYSTEM: ALL TESTS PASSED!")
-        print("✅ Multiple players can accept the same mission")
-        print("✅ Independent progress tracking working")
-        print("✅ Re-acceptance prevention working")
-        print("✅ Active missions API working for both players")
-        print("✅ Generate missions with player_id parameter working")
-    elif success_rate >= 80:
-        print("⚠️ MULTI-PLAYER MISSION SYSTEM: MOSTLY WORKING")
-        print("Some issues found but core functionality appears to work")
+    if result and "id" in result:
+        log_success(f"User registered successfully! Player ID: {result['id']}")
+        log_info(f"Character: {result['name']} (Level {result['level']})")
+        log_info(f"Class: {result['character_class']} | Cash: ${result['cash']}")
+        return result["id"]
     else:
-        print("❌ MULTI-PLAYER MISSION SYSTEM: CRITICAL ISSUES FOUND")
-        print("Major problems detected that need attention")
+        log_error("Failed to register user")
+        return None
+
+def test_2_territory_income_preview(player_id):
+    """Test 2: Territory Income Preview endpoint"""
+    log_test_start("Territory Income Preview")
     
-    return success_rate == 100
+    log_info(f"Testing GET /territories/income-preview/{player_id}")
+    result = make_request("GET", f"/territories/income-preview/{player_id}")
+    
+    if result is not None:
+        log_success("Income preview endpoint working!")
+        log_info(f"Available Income: ${result.get('available_income', 0)}")
+        log_info(f"Ready Territories: {result.get('ready_territories', 0)}")
+        log_info(f"Total Territories: {result.get('total_territories', 0)}")
+        log_info(f"Next Collection Hours: {result.get('next_collection_hours', 0)}")
+        
+        # Verify expected fields exist
+        required_fields = ["available_income", "ready_territories", "total_territories", "next_collection_hours"]
+        missing = [field for field in required_fields if field not in result]
+        if missing:
+            log_error(f"Missing required fields: {missing}")
+            return False
+        
+        log_success("All required fields present!")
+        return result
+    else:
+        log_error("Income preview endpoint failed")
+        return None
+
+def test_3_territory_capture_flow(player_id):
+    """Test 3: Territory Capture + Income Flow"""
+    log_test_start("Territory Capture + Income Flow")
+    
+    # Step 1: Get nearby territories
+    log_info("Step 1: Getting nearby territories")
+    territories = make_request("GET", "/territories/nearby", params=TEST_COORDS)
+    
+    if not territories:
+        log_error("Failed to get nearby territories")
+        return False
+    
+    log_success(f"Found {len(territories)} territories nearby")
+    
+    # Find an unclaimed territory
+    unclaimed = None
+    for territory in territories:
+        if not territory.get("owner_id"):
+            unclaimed = territory
+            break
+    
+    if not unclaimed:
+        log_warning("No unclaimed territories found, using first available")
+        unclaimed = territories[0]
+    
+    log_info(f"Selected territory: {unclaimed['name']} (ID: {unclaimed['id']})")
+    
+    # Step 2: Capture territory
+    log_info("Step 2: Capturing territory")
+    capture_result = make_request("POST", f"/territories/{unclaimed['id']}/capture", params={"player_id": player_id})
+    
+    if not capture_result:
+        log_error("Territory capture failed")
+        return False
+    
+    log_success(f"Territory captured! {capture_result.get('message', 'Success')}")
+    
+    # Step 3: Check income preview after capture
+    log_info("Step 3: Checking income preview after capture")
+    income_preview = make_request("GET", f"/territories/income-preview/{player_id}")
+    
+    if income_preview:
+        log_success("Income preview after capture:")
+        log_info(f"Available Income: ${income_preview.get('available_income', 0)}")
+        log_info(f"Total Territories: {income_preview.get('total_territories', 0)}")
+        
+        if income_preview.get("total_territories", 0) > 0:
+            log_success("Territory ownership confirmed!")
+        else:
+            log_warning("Territory capture may not have been recorded")
+    
+    # Step 4: Try to collect income
+    log_info("Step 4: Attempting to collect income")
+    collect_result = make_request("POST", f"/territories/collect-income/{player_id}")
+    
+    if collect_result:
+        log_success(f"Income collection result: {collect_result.get('message', 'Success')}")
+        log_info(f"Income collected: ${collect_result.get('income', 0)}")
+        log_info(f"Territories paid: {collect_result.get('territories', 0)}")
+        
+        # Step 5: Check income preview after collection
+        log_info("Step 5: Checking income preview after collection")
+        final_preview = make_request("GET", f"/territories/income-preview/{player_id}")
+        
+        if final_preview:
+            log_success("Final income preview:")
+            log_info(f"Available Income: ${final_preview.get('available_income', 0)}")
+            
+            if final_preview.get("available_income", 0) == 0:
+                log_success("Income collection successful - available income now 0!")
+            else:
+                log_info(f"Still has ${final_preview.get('available_income', 0)} available (may be expected)")
+        
+        return True
+    else:
+        log_error("Income collection failed")
+        return False
+
+def test_4_battle_system(player_id):
+    """Test 4: Existing battle endpoint still works"""
+    log_test_start("Battle System Verification")
+    
+    # Step 1: Spawn monsters
+    log_info("Step 1: Spawning monsters")
+    monsters = make_request("GET", "/monsters/spawn", params=TEST_COORDS)
+    
+    if not monsters:
+        log_error("Failed to spawn monsters")
+        return False
+    
+    log_success(f"Spawned {len(monsters)} monsters")
+    
+    if not monsters:
+        log_warning("No monsters available for battle test")
+        return True
+    
+    monster = monsters[0]
+    log_info(f"Selected monster: {monster['name']} (Level {monster['level']})")
+    
+    # Step 2: Start battle
+    log_info("Step 2: Starting battle")
+    battle_params = {
+        "player_id": player_id,
+        "enemy_type": "monster",
+        "enemy_id": monster["id"]
+    }
+    battle = make_request("POST", "/battles/start", params=battle_params)
+    
+    if not battle:
+        log_error("Failed to start battle")
+        return False
+    
+    log_success("Battle started successfully!")
+    log_info(f"Battle ID: {battle['id']}")
+    log_info(f"Enemy: {battle.get('enemy_name', 'Unknown')}")
+    log_info(f"Player Health: {battle['player_health']}/{battle['player_max_health']}")
+    log_info(f"Enemy Health: {battle['enemy_health']}/{battle['enemy_max_health']}")
+    
+    # Verify enemy_name is included
+    if "enemy_name" in battle:
+        log_success(f"Battle response includes enemy_name: '{battle['enemy_name']}'")
+        return True
+    else:
+        log_error("Battle response missing enemy_name field!")
+        return False
+
+def run_comprehensive_test():
+    """Run all tests in sequence"""
+    log(f"\n{'='*60}", Colors.PURPLE + Colors.BOLD)
+    log("🎮 GTA GPS RPG BACKEND API TEST SUITE", Colors.PURPLE + Colors.BOLD)
+    log(f"{'='*60}\n", Colors.PURPLE + Colors.BOLD)
+    
+    log_info(f"Testing Backend URL: {BASE_URL}")
+    log_info(f"Test Coordinates: {TEST_COORDS}")
+    
+    results = {
+        "user_registration": False,
+        "income_preview": False,
+        "territory_capture_flow": False,
+        "battle_system": False
+    }
+    
+    # Test 1: Register user
+    player_id = test_1_register_user()
+    if player_id:
+        results["user_registration"] = True
+        
+        # Test 2: Income preview
+        income_preview_result = test_2_territory_income_preview(player_id)
+        if income_preview_result is not None:
+            results["income_preview"] = True
+        
+        # Test 3: Territory capture flow
+        if test_3_territory_capture_flow(player_id):
+            results["territory_capture_flow"] = True
+        
+        # Test 4: Battle system
+        if test_4_battle_system(player_id):
+            results["battle_system"] = True
+    
+    # Final results
+    log(f"\n{'='*60}", Colors.PURPLE + Colors.BOLD)
+    log("📊 TEST RESULTS SUMMARY", Colors.PURPLE + Colors.BOLD)
+    log(f"{'='*60}", Colors.PURPLE + Colors.BOLD)
+    
+    total_tests = len(results)
+    passed_tests = sum(results.values())
+    
+    for test_name, passed in results.items():
+        status = "PASS" if passed else "FAIL"
+        color = Colors.GREEN if passed else Colors.RED
+        log(f"{test_name.upper()}: {status}", color)
+    
+    log(f"\nOVERALL: {passed_tests}/{total_tests} tests passed", 
+        Colors.GREEN if passed_tests == total_tests else Colors.YELLOW)
+    
+    if passed_tests == total_tests:
+        log("🎉 ALL TESTS PASSED! Territory income system working correctly!", Colors.GREEN + Colors.BOLD)
+    else:
+        failed_tests = [name for name, passed in results.items() if not passed]
+        log(f"🚨 FAILED TESTS: {', '.join(failed_tests)}", Colors.RED + Colors.BOLD)
+    
+    return passed_tests == total_tests
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    try:
+        success = run_comprehensive_test()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        log("\n🛑 Test interrupted by user", Colors.YELLOW)
+        sys.exit(1)
+    except Exception as e:
+        log(f"\n💥 Test suite crashed: {e}", Colors.RED)
+        sys.exit(1)

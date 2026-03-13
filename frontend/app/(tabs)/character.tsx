@@ -32,11 +32,13 @@ import {
   deleteItem,
   sellItem,
   collectTerritoryIncome,
+  getTerritoryIncomePreview,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
 import { Skill } from '../../types/game';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { showGameToast } from '../../components/GameToast';
 
 type TabType = 'status' | 'equipment' | 'items' | 'skills';
 
@@ -460,6 +462,13 @@ export default function CharacterScreen() {
 function StatusTab({ player, classColor, territories, playerId }: { player: any; classColor: string; territories: any[]; playerId: string }) {
   const totalIncome = territories.reduce((sum: number, t: any) => sum + (t.rewards?.passive_income || 0), 0);
   const [collecting, setCollecting] = useState(false);
+  const [incomePreview, setIncomePreview] = useState<{ available_income: number; ready_territories: number; total_territories: number; next_collection_hours: number } | null>(null);
+
+  useEffect(() => {
+    if (playerId && territories.length > 0) {
+      getTerritoryIncomePreview(playerId).then(setIncomePreview).catch(() => {});
+    }
+  }, [playerId, territories.length]);
 
   return (
     <View>
@@ -525,23 +534,53 @@ function StatusTab({ player, classColor, territories, playerId }: { player: any;
         ) : (
           <>
             <View style={styles.terrIncomeBar}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                <Ionicons name="trending-up" size={18} color="#4caf50" />
-                <Text style={styles.terrIncomeText}>Daily Income: ${totalIncome}</Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="trending-up" size={18} color="#4caf50" />
+                  <Text style={styles.terrIncomeText}>Daily Income: ${totalIncome}</Text>
+                </View>
+                {incomePreview && incomePreview.available_income > 0 && (
+                  <Text style={styles.terrAvailableText}>
+                    Available: ${incomePreview.available_income} from {incomePreview.ready_territories} territory{incomePreview.ready_territories !== 1 ? 'ies' : 'y'}
+                  </Text>
+                )}
+                {incomePreview && incomePreview.available_income === 0 && incomePreview.next_collection_hours > 0 && (
+                  <Text style={styles.terrCooldownText}>
+                    Next in: {incomePreview.next_collection_hours}h
+                  </Text>
+                )}
               </View>
               <TouchableOpacity
-                style={[styles.collectBtn, collecting && { opacity: 0.6 }]}
+                style={[styles.collectBtn, collecting && { opacity: 0.6 }, incomePreview && incomePreview.available_income > 0 && styles.collectBtnReady]}
                 onPress={async () => {
                   if (collecting || !playerId) return;
                   setCollecting(true);
                   try {
                     const result = await collectTerritoryIncome(playerId);
-                    Alert.alert(
-                      result.income > 0 ? '💰 Income Collected!' : 'No Income Ready',
-                      result.message
-                    );
+                    if (result.income > 0) {
+                      showGameToast({
+                        type: 'success',
+                        title: `$${result.income} Collected!`,
+                        message: `Income from ${result.territories} territory${result.territories !== 1 ? 'ies' : 'y'}`,
+                        duration: 3000,
+                      });
+                    } else {
+                      showGameToast({
+                        type: 'info',
+                        title: 'No Income Ready',
+                        message: 'Come back in 24 hours',
+                        duration: 2500,
+                      });
+                    }
+                    // Refresh preview
+                    const preview = await getTerritoryIncomePreview(playerId);
+                    setIncomePreview(preview);
                   } catch (err: any) {
-                    Alert.alert('Error', err?.response?.data?.detail || 'Failed to collect');
+                    showGameToast({
+                      type: 'error',
+                      title: 'Collection Failed',
+                      message: err?.response?.data?.detail || 'Try again later',
+                    });
                   } finally {
                     setCollecting(false);
                   }
@@ -1260,16 +1299,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
+  terrAvailableText: {
+    color: '#f39c12',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  terrCooldownText: {
+    color: '#888',
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 3,
+  },
   collectBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#4caf50',
+    backgroundColor: '#555',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     minWidth: 90,
     justifyContent: 'center',
+  },
+  collectBtnReady: {
+    backgroundColor: '#4caf50',
   },
   collectBtnText: {
     color: '#fff',

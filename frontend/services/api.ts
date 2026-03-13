@@ -96,6 +96,11 @@ export const collectTerritoryIncome = async (playerId: string): Promise<{ messag
   return response.data;
 };
 
+export const getTerritoryIncomePreview = async (playerId: string): Promise<{ available_income: number; ready_territories: number; total_territories: number; next_collection_hours: number }> => {
+  const response = await api.get(`/territories/income-preview/${playerId}`);
+  return response.data;
+};
+
 // Guild APIs
 export const createGuild = async (name: string, tag: string, description: string, leaderId: string): Promise<Guild> => {
   const response = await api.post(`/guilds?leader_id=${leaderId}`, { name, tag, description });

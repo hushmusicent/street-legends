@@ -12,6 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
+import { showGameToast } from '../../components/GameToast';
 import { useGameStore } from '../../stores/gameStore';
 import { getBattle, battleAction, getPlayerSkills, getPlayer, getActiveMissions } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
@@ -23,6 +25,7 @@ export default function BattleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { playerId, setPlayer, setCurrentBattle } = useGameStore();
   const removeMonster = useGameStore((s) => s.removeMonster);
+  const triggerMissionRefresh = useGameStore((s) => s.triggerMissionRefresh);
   const [battle, setBattle] = useState<Battle | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +77,9 @@ export default function BattleScreen() {
           const playerData = await getPlayer(playerId);
           setPlayer(playerData);
 
+          // Trigger mission refresh so mission tab updates
+          triggerMissionRefresh();
+
           // Show bounty progress feedback after a win
           if (result.status === 'won') {
             try {
@@ -83,10 +89,12 @@ export default function BattleScreen() {
               for (const bm of bountyMissions) {
                 const be = (bm.bounty_enemy || '').toLowerCase();
                 if (be && enemyName.toLowerCase().includes(be)) {
-                  Alert.alert(
-                    'Bounty Progress!',
-                    `${bm.title}: ${bm.goal_progress}/${bm.goal_target} ${bm.bounty_enemy} defeated`
-                  );
+                  showGameToast({
+                    type: 'success',
+                    title: 'Bounty Progress!',
+                    message: `${bm.title}: ${bm.goal_progress}/${bm.goal_target} ${bm.bounty_enemy} defeated`,
+                    duration: 4000,
+                  });
                   break;
                 }
               }
