@@ -391,7 +391,7 @@ ENEMY_TIERS = [
     {"tier": 3, "name": "Offender", "level_min": 21, "level_max": 22, "is_boss": False},
     {"tier": 3, "name": "Hood", "level_min": 23, "level_max": 24, "is_boss": False},
     {"tier": 3, "name": "Mobster", "level_min": 25, "level_max": 26, "is_boss": False},
-    {"tier": 3, "name": "Gangster", "level_min": 27, "level_max": 28, "is_boss": False},
+    {"tier": 3, "name": "Gangsta", "level_min": 27, "level_max": 28, "is_boss": False},
     {"tier": 3, "name": "Hooligan", "level_min": 29, "level_max": 30, "is_boss": False},
     {"tier": 3, "name": "Super Hood", "level_min": 31, "level_max": 31, "is_boss": True},
     # Tier 4 (Levels 31-40, Boss at 41)
@@ -1434,7 +1434,7 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
     
     BOUNTY_TEMPLATES = []
     bounty_titles = {
-        "Thug": "Thug Bounty", "Gangster": "Gangster Hit", "Criminal": "Criminal Warrant",
+        "Thug": "Thug Bounty", "Gangster": "Gangster Hit", "Gangsta": "Gangsta Hit", "Criminal": "Criminal Warrant",
         "Villain": "Villain Contract", "Bandit": "Bandit Sweep", "Assassin": "Assassin Hunt",
         "Mobster": "Mobster Bounty", "Hooligan": "Hooligan Purge", "Thief": "Thief Hunt",
         "Hoodlum": "Hoodlum Purge", "Pirate": "Pirate Raid", "Bully": "Bully Beatdown",

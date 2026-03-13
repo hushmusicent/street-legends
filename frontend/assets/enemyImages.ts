@@ -44,6 +44,7 @@ export const ENEMY_MAP_IMAGES: Record<string, string> = {
   'villain': VILLAIN_MAP_IMAGE,
   'criminal': CRIMINAL_MAP_IMAGE,
   'gangster': GANGSTER_MAP_IMAGE,
+  'gangsta': GANGSTER_MAP_IMAGE,
 };
 
 export const ENEMY_BATTLE_IMAGES: Record<string, string> = {
@@ -53,6 +54,7 @@ export const ENEMY_BATTLE_IMAGES: Record<string, string> = {
   'villain': VILLAIN_BATTLE_IMAGE,
   'criminal': CRIMINAL_BATTLE_IMAGE,
   'gangster': GANGSTER_BATTLE_IMAGE,
+  'gangsta': GANGSTER_BATTLE_IMAGE,
 };
 
 export const getEnemyMapImage = (name: string): string | null => {
