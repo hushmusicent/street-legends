@@ -450,31 +450,36 @@ def get_player_tier(player_level: int) -> int:
     return min(10, max(1, (player_level - 1) // 10 + 1))
 
 def get_eligible_enemies(player_level: int):
-    """Get enemies from current tier and all previous tiers"""
+    """Get enemies from current tier and all previous tiers.
+    Lower level enemies spawn MORE frequently than higher level ones."""
     current_tier = get_player_tier(player_level)
     eligible = [e for e in ENEMY_TIERS if e["tier"] <= current_tier]
     
-    # Filter: mostly show enemies close to player level, but allow some from lower tiers
-    # Prioritize current tier enemies and bosses near player level
+    # Weight system: lower tiers get much higher spawn rates
+    # Tier 1 = highest weight, each tier above = less common
     weighted = []
     for e in eligible:
         if e["is_boss"]:
-            # Bosses only spawn when player is at or above the boss level
+            # Bosses are always rare, only when player is at/above boss level
             if player_level >= e["level_min"]:
-                weighted.append((e, 1))  # Lower weight for bosses (rarer)
+                weighted.append((e, 1))
         else:
-            # Regular enemies: higher weight for enemies closer to player level
-            level_diff = abs(((e["level_min"] + e["level_max"]) / 2) - player_level)
-            if level_diff <= 5:
-                weighted.append((e, 5))  # High weight - close to player level
-            elif level_diff <= 15:
-                weighted.append((e, 2))  # Medium weight
-            else:
-                weighted.append((e, 1))  # Low weight - far from player level
+            # Lower tier enemies spawn more often
+            # Tier 1 = weight 10, Tier 2 = weight 7, Tier 3 = weight 5, etc.
+            tier_weight = max(1, 11 - e["tier"])  # T1=10, T2=9, T3=8... T10=1
+            
+            # Boost even more for much lower tiers (they're the common street thugs)
+            tier_diff = current_tier - e["tier"]
+            if tier_diff >= 3:
+                tier_weight += 3  # Extra common for enemies 3+ tiers below
+            elif tier_diff >= 1:
+                tier_weight += 1  # Slightly boosted for lower tiers
+            
+            weighted.append((e, tier_weight))
     
     if not weighted:
         # Fallback to first tier
-        weighted = [(e, 1) for e in ENEMY_TIERS if e["tier"] == 1 and not e["is_boss"]]
+        weighted = [(e, 10) for e in ENEMY_TIERS if e["tier"] == 1 and not e["is_boss"]]
     
     return weighted
 
@@ -1027,8 +1032,8 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
     # Determine how many to spawn
     spawn_count = 0
     if nearby_count == 0:
-        # New area — spawn 3 to 5 enemies immediately
-        spawn_count = random.randint(3, 5)
+        # New area — always spawn exactly 5 enemies
+        spawn_count = 5
     elif nearby_count < 10:
         # Existing area — spawn 1 every 5 minutes
         most_recent = max(nearby, key=lambda m: m.get("spawn_time", datetime.min))
