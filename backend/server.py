@@ -960,7 +960,10 @@ async def get_nearby_players(player_id: str, radius: float = 500):
         raise HTTPException(status_code=404, detail="Player not found or no position")
     
     player_pos = Position(**player["position"])
-    all_players = await db.players.find({"id": {"$ne": player_id}, "position": {"$exists": True}}).to_list(100)
+    all_players = await db.players.find(
+        {"id": {"$ne": player_id}, "position": {"$exists": True}},
+        {"id": 1, "name": 1, "level": 1, "character_class": 1, "position": 1, "guild_id": 1, "profile_pic": 1}
+    ).to_list(100)
     
     nearby = []
     for p in all_players:
@@ -983,7 +986,10 @@ async def get_nearby_players(player_id: str, radius: float = 500):
 @api_router.get("/leaderboard")
 async def get_leaderboard(limit: int = 20):
     """Get top players by reputation"""
-    players = await db.players.find().sort("reputation", -1).limit(limit).to_list(limit)
+    players = await db.players.find(
+        {},
+        {"id": 1, "name": 1, "level": 1, "reputation": 1, "wins": 1, "character_class": 1, "profile_pic": 1}
+    ).sort("reputation", -1).limit(limit).to_list(limit)
     return [
         {
             "rank": i + 1,
@@ -1289,10 +1295,11 @@ async def battle_action(battle_id: str, action: BattleAction):
             # Auto-increment "defeat_monsters" mission progress (per-player)
             active_missions = player.get("active_missions", [])
             if active_missions:
-                for mid in active_missions:
-                    m = await db.missions.find_one({"id": mid})
-                    if not m:
-                        continue
+                # Batch fetch all missions in one query (fix N+1 pattern)
+                missions_cursor = db.missions.find({"id": {"$in": active_missions}})
+                missions_list = await missions_cursor.to_list(length=50)
+                for m in missions_list:
+                    mid = m["id"]
                     pp = m.get("player_progress", {})
                     player_data = pp.get(player["id"], {})
                     current_progress = player_data.get("progress", 0)
