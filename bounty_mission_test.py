@@ -13,7 +13,7 @@ import sys
 import time
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://territory-battle-map.preview.emergentagent.com"
+BACKEND_URL = "https://nexus-battle-quest.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def log_test(test_name, status, details=""):

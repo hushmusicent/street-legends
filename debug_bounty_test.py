@@ -9,7 +9,7 @@ import json
 import sys
 import time
 
-BACKEND_URL = "https://territory-battle-map.preview.emergentagent.com"
+BACKEND_URL = "https://nexus-battle-quest.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def debug_log(message):

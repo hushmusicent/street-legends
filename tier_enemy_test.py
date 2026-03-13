@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Optional, List
 
 # API Configuration
-API_BASE_URL = "https://territory-battle-map.preview.emergentagent.com/api"
+API_BASE_URL = "https://nexus-battle-quest.preview.emergentagent.com/api"
 
 class TierEnemyTester:
     def __init__(self, base_url: str):
