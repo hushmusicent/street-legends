@@ -29,9 +29,12 @@ import {
   getNearbyTerritories,
   captureTerritory,
   collectTerritoryIncome,
+  spawnRestaurants,
+  eatAtRestaurant,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
+import { showGameToast } from '../../components/GameToast';
 
 // Calculate distance between two points in meters
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -62,13 +65,14 @@ export default function MapScreen() {
 
   const [loading, setLoading] = useState(true);
   const [selectedMarker, setSelectedMarker] = useState<{
-    type: 'monster' | 'mission' | 'bounty' | 'player' | 'shop';
+    type: 'monster' | 'mission' | 'bounty' | 'player' | 'shop' | 'restaurant';
     data: any;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [heading, setHeading] = useState<number>(0);
   const [nearbyShops, setNearbyShops] = useState<any[]>([]);
+  const [nearbyRestaurants, setNearbyRestaurants] = useState<any[]>([]);
   const [territories, setTerritories] = useState<any[]>([]);
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
@@ -247,6 +251,7 @@ export default function MapScreen() {
         getNearbyPlayers(playerId, 500),
         spawnShops(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyTerritories(currentPosition.latitude, currentPosition.longitude, player.level),
+        spawnRestaurants(currentPosition.latitude, currentPosition.longitude, player.level),
       ]);
 
       const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -254,14 +259,16 @@ export default function MapScreen() {
       const players = results[2].status === 'fulfilled' ? results[2].value : [];
       const shops = results[3].status === 'fulfilled' ? results[3].value : [];
       const terrs = results[4].status === 'fulfilled' ? results[4].value : [];
+      const restaurants = results[5].status === 'fulfilled' ? results[5].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
       setNearbyPlayers(players);
       setNearbyShops(shops);
       setTerritories(terrs);
+      setNearbyRestaurants(restaurants);
       
-      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs } };
+      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
@@ -393,7 +400,14 @@ export default function MapScreen() {
       name: s.name,
       level: s.level,
     })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops]);
+    ...nearbyRestaurants.map((r) => ({
+      id: r.id,
+      coordinate: { latitude: r.latitude, longitude: r.longitude },
+      type: 'restaurant' as const,
+      name: r.name,
+      icon: r.icon,
+    })),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -408,8 +422,11 @@ export default function MapScreen() {
     } else if (marker.type === 'shop') {
       const shop = nearbyShops.find((s) => s.id === marker.id);
       if (shop) setSelectedMarker({ type: 'shop', data: shop });
+    } else if (marker.type === 'restaurant') {
+      const restaurant = nearbyRestaurants.find((r) => r.id === marker.id);
+      if (restaurant) setSelectedMarker({ type: 'restaurant', data: restaurant });
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants]);
 
   if (loading) {
     return (
@@ -586,6 +603,56 @@ export default function MapScreen() {
                 }}
               >
                 <Text style={styles.actionButtonText}>BROWSE SHOP</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {selectedMarker.type === 'restaurant' && (
+            <View>
+              <View style={styles.popupHeader}>
+                <Text style={{ fontSize: 28 }}>🍔</Text>
+                <View style={styles.popupHeaderText}>
+                  <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
+                  <Text style={styles.popupSubtitle}>Heals 25% HP</Text>
+                </View>
+              </View>
+              <View style={styles.rewardsRow}>
+                <View style={styles.rewardItem}>
+                  <Ionicons name="heart" size={14} color="#e74c3c" />
+                  <Text style={styles.rewardText}>HP: {player?.stats?.health ?? 0}/{player?.stats?.max_health ?? 0}</Text>
+                </View>
+                <View style={styles.rewardItem}>
+                  <Ionicons name="add-circle" size={14} color="#4caf50" />
+                  <Text style={styles.rewardText}>+{Math.round((player?.stats?.max_health || 100) * 0.25)} HP</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={[styles.actionButton, {backgroundColor: '#FF5722'}]} 
+                onPress={async () => {
+                  if (!playerId) return;
+                  try {
+                    const result = await eatAtRestaurant(selectedMarker.data.id, playerId);
+                    showGameToast({
+                      type: 'success',
+                      title: `${selectedMarker.data.name}`,
+                      message: result.healed > 0 ? `Healed ${result.healed} HP! (${result.health}/${result.max_health})` : 'Already at full health!',
+                      duration: 3000,
+                    });
+                    // Refresh player data
+                    const updatedPlayer = await getPlayer(playerId);
+                    setPlayer(updatedPlayer);
+                    setSelectedMarker(null);
+                  } catch (err: any) {
+                    showGameToast({
+                      type: 'warning',
+                      title: 'Not Hungry Yet',
+                      message: err?.response?.data?.detail || 'Try again later',
+                      duration: 3000,
+                    });
+                  }
+                }}
+              >
+                <Text style={styles.actionButtonText}>EAT HERE</Text>
               </TouchableOpacity>
             </View>
           )}

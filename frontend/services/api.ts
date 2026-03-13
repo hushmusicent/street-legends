@@ -272,4 +272,15 @@ export const claimStepGoal = async (playerId: string, goalSteps: number) => {
   return response.data;
 };
 
+// ============== RESTAURANTS ==============
+export const spawnRestaurants = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/restaurants/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const eatAtRestaurant = async (restaurantId: string, playerId: string) => {
+  const response = await api.post(`/restaurants/${restaurantId}/eat?player_id=${playerId}`);
+  return response.data;
+};
+
 export default api;

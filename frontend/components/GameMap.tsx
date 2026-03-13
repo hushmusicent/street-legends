@@ -19,9 +19,10 @@ interface Position {
 interface MapMarker {
   id: string;
   coordinate: Position;
-  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self';
+  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant';
   level?: number;
   name?: string;
+  icon?: string;
 }
 
 interface MapTerritory {
@@ -145,8 +146,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     function getEnemyImage(name) {
@@ -298,7 +299,14 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
               enemyImg = getEnemyImage(m.name);
             }
             var markerHTML;
-            if (enemyImg) {
+            if (m.type === 'restaurant') {
+              var rIcon = m.name ? m.name.charAt(0) : '\\u{1F354}';
+              var rName = m.name || 'Restaurant';
+              markerHTML = '<div style="width:48px;height:62px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                '<div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#FF5722,#E64A19);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(255,87,34,0.6);font-size:22px;cursor:pointer;">\\u{1F354}</div>' +
+                '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(255,87,34,0.9);color:#fff;padding:1px 6px;border-radius:4px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + rName + '</div>' +
+                '</div>';
+            } else if (enemyImg) {
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#ff6b35;color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
               var nameBadge = m.name ? '<div style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:1px 5px;border-radius:4px;font-size:8px;font-weight:bold;white-space:nowrap;z-index:10;">' + m.name + '</div>' : '';
               markerHTML = '<div style="width:42px;height:58px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
@@ -311,8 +319,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,
-              iconSize: [enemyImg ? 42 : 32, enemyImg ? 58 : 32],
-              iconAnchor: [enemyImg ? 21 : 16, enemyImg ? 29 : 16]
+              iconSize: [(m.type === 'restaurant') ? 48 : (enemyImg ? 42 : 32), (m.type === 'restaurant') ? 62 : (enemyImg ? 58 : 32)],
+              iconAnchor: [(m.type === 'restaurant') ? 24 : (enemyImg ? 21 : 16), (m.type === 'restaurant') ? 31 : (enemyImg ? 29 : 16)]
             });
             var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);
             marker.on('click', (function(id, type) {
