@@ -2093,6 +2093,117 @@ async def eat_at_restaurant(restaurant_id: str, player_id: str):
     }
 
 
+# ============== NIGHT CLUB SYSTEM ==============
+
+NIGHTCLUB_NAMES = [
+    "The Malibu Club", "Bahama Mamas", "Maisonette 9", "Hercules",
+    "Vanilla Unicorn", "The Pink Swan", "Studio 54", "Tequi-la-la",
+    "Club Pulse", "Neon Nights", "The Electric Banana", "Pitchers",
+    "Ten Green Bottles", "Misty's", "The Strip Club", "Swingers",
+]
+
+NIGHTCLUB_ICONS = ["🎵", "🎶", "🪩", "💃", "🕺", "🍸", "🎤", "🌙"]
+
+
+@api_router.get("/nightclubs/spawn")
+async def spawn_nightclubs(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn nightclubs near a location — appears in every other radius area"""
+    # Use a grid-based seed so the same area always gives the same result
+    grid_lat = round(latitude * 200) / 200  # ~500m grid cells
+    grid_lng = round(longitude * 200) / 200
+    area_seed = hash(f"nightclub_{grid_lat}_{grid_lng}")
+    rng = random.Random(area_seed)
+    
+    # Only spawn in ~50% of areas (every other radius)
+    if rng.random() > 0.5:
+        return []
+    
+    # Check if nightclubs already exist nearby in DB
+    existing = await db.nightclubs.find({
+        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
+        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
+    }).to_list(10)
+    
+    if existing:
+        for nc in existing:
+            nc.pop("_id", None)
+        return existing
+    
+    # Spawn 1 nightclub in this area
+    lat_offset = rng.uniform(-0.003, 0.003)
+    lng_offset = rng.uniform(-0.003, 0.003)
+    
+    nightclub = {
+        "id": str(uuid.uuid4()),
+        "name": rng.choice(NIGHTCLUB_NAMES),
+        "icon": rng.choice(NIGHTCLUB_ICONS),
+        "latitude": latitude + lat_offset,
+        "longitude": longitude + lng_offset,
+        "energy_percent": 25,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.nightclubs.insert_one(nightclub)
+    nightclub.pop("_id", None)
+    return [nightclub]
+
+
+@api_router.post("/nightclubs/{nightclub_id}/visit")
+async def visit_nightclub(nightclub_id: str, player_id: str):
+    """Player visits nightclub — restores 25% of max Energy. Cooldown: 10 minutes per nightclub."""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    nightclub = await db.nightclubs.find_one({"id": nightclub_id})
+    if not nightclub:
+        raise HTTPException(status_code=404, detail="Nightclub not found")
+    
+    # Check cooldown (10 minutes per player per nightclub)
+    last_visit = player.get("nightclub_cooldowns", {}).get(nightclub_id)
+    if last_visit:
+        try:
+            last_dt = datetime.fromisoformat(last_visit)
+            mins_since = (datetime.utcnow() - last_dt).total_seconds() / 60
+            if mins_since < 10:
+                remaining = round(10 - mins_since, 1)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"You partied here recently! Come back in {remaining} minutes."
+                )
+        except (ValueError, TypeError):
+            pass
+    
+    stats = player.get("stats", {})
+    current_energy = stats.get("energy", 100)
+    max_energy = stats.get("max_energy", 100)
+    
+    if current_energy >= max_energy:
+        return {"message": "You're already at full energy!", "restored": 0, "energy": current_energy, "max_energy": max_energy}
+    
+    restore_amount = int(max_energy * 0.25)
+    new_energy = min(current_energy + restore_amount, max_energy)
+    actual_restored = new_energy - current_energy
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {
+            "$set": {
+                "stats.energy": new_energy,
+                f"nightclub_cooldowns.{nightclub_id}": datetime.utcnow().isoformat(),
+            }
+        }
+    )
+    
+    return {
+        "message": f"Partied at {nightclub['name']}! Restored {actual_restored} Energy.",
+        "nightclub_name": nightclub["name"],
+        "restored": actual_restored,
+        "energy": new_energy,
+        "max_energy": max_energy,
+    }
+
+
 # ============== EQUIPMENT ENDPOINTS ==============
 
 @api_router.get("/items")

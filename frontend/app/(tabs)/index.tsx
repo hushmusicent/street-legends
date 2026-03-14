@@ -31,6 +31,8 @@ import {
   collectTerritoryIncome,
   spawnRestaurants,
   eatAtRestaurant,
+  spawnNightclubs,
+  visitNightclub,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -65,7 +67,7 @@ export default function MapScreen() {
 
   const [loading, setLoading] = useState(true);
   const [selectedMarker, setSelectedMarker] = useState<{
-    type: 'monster' | 'mission' | 'bounty' | 'player' | 'shop' | 'restaurant';
+    type: 'monster' | 'mission' | 'bounty' | 'player' | 'shop' | 'restaurant' | 'nightclub';
     data: any;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,6 +75,7 @@ export default function MapScreen() {
   const [heading, setHeading] = useState<number>(0);
   const [nearbyShops, setNearbyShops] = useState<any[]>([]);
   const [nearbyRestaurants, setNearbyRestaurants] = useState<any[]>([]);
+  const [nearbyNightclubs, setNearbyNightclubs] = useState<any[]>([]);
   const [territories, setTerritories] = useState<any[]>([]);
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
@@ -252,6 +255,7 @@ export default function MapScreen() {
         spawnShops(currentPosition.latitude, currentPosition.longitude, player.level),
         getNearbyTerritories(currentPosition.latitude, currentPosition.longitude, player.level),
         spawnRestaurants(currentPosition.latitude, currentPosition.longitude, player.level),
+        spawnNightclubs(currentPosition.latitude, currentPosition.longitude, player.level),
       ]);
 
       const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -260,6 +264,7 @@ export default function MapScreen() {
       const shops = results[3].status === 'fulfilled' ? results[3].value : [];
       const terrs = results[4].status === 'fulfilled' ? results[4].value : [];
       const restaurants = results[5].status === 'fulfilled' ? results[5].value : [];
+      const nightclubs = results[6].status === 'fulfilled' ? results[6].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
@@ -267,8 +272,9 @@ export default function MapScreen() {
       setNearbyShops(shops);
       setTerritories(terrs);
       setNearbyRestaurants(restaurants);
+      setNearbyNightclubs(nightclubs);
       
-      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants } };
+      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants, nightclubs } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
@@ -407,7 +413,14 @@ export default function MapScreen() {
       name: r.name,
       icon: r.icon,
     })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants]);
+    ...nearbyNightclubs.map((nc) => ({
+      id: nc.id,
+      coordinate: { latitude: nc.latitude, longitude: nc.longitude },
+      type: 'nightclub' as const,
+      name: nc.name,
+      icon: nc.icon,
+    })),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -425,8 +438,11 @@ export default function MapScreen() {
     } else if (marker.type === 'restaurant') {
       const restaurant = nearbyRestaurants.find((r) => r.id === marker.id);
       if (restaurant) setSelectedMarker({ type: 'restaurant', data: restaurant });
+    } else if (marker.type === 'nightclub') {
+      const nightclub = nearbyNightclubs.find((nc) => nc.id === marker.id);
+      if (nightclub) setSelectedMarker({ type: 'nightclub', data: nightclub });
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs]);
 
   if (loading) {
     return (
@@ -653,6 +669,56 @@ export default function MapScreen() {
                 }}
               >
                 <Text style={styles.actionButtonText}>EAT HERE</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {selectedMarker.type === 'nightclub' && (
+            <View>
+              <View style={styles.popupHeader}>
+                <Text style={{ fontSize: 28 }}>🪩</Text>
+                <View style={styles.popupHeaderText}>
+                  <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
+                  <Text style={styles.popupSubtitle}>Restores 25% Energy</Text>
+                </View>
+              </View>
+              <View style={styles.rewardsRow}>
+                <View style={styles.rewardItem}>
+                  <Ionicons name="flash" size={14} color="#3498db" />
+                  <Text style={styles.rewardText}>Energy: {player?.stats?.energy ?? 0}/{player?.stats?.max_energy ?? 100}</Text>
+                </View>
+                <View style={styles.rewardItem}>
+                  <Ionicons name="add-circle" size={14} color="#9b59b6" />
+                  <Text style={styles.rewardText}>+{Math.round((player?.stats?.max_energy || 100) * 0.25)} EN</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={[styles.actionButton, {backgroundColor: '#9b59b6'}]} 
+                onPress={async () => {
+                  if (!playerId) return;
+                  try {
+                    const result = await visitNightclub(selectedMarker.data.id, playerId);
+                    showGameToast({
+                      type: 'success',
+                      title: `${selectedMarker.data.name}`,
+                      message: result.restored > 0 ? `Restored ${result.restored} Energy! (${result.energy}/${result.max_energy})` : 'Already at full energy!',
+                      duration: 3000,
+                    });
+                    // Refresh player data
+                    const updatedPlayer = await getPlayer(playerId);
+                    setPlayer(updatedPlayer);
+                    setSelectedMarker(null);
+                  } catch (err: any) {
+                    showGameToast({
+                      type: 'warning',
+                      title: 'Too Soon!',
+                      message: err?.response?.data?.detail || 'Try again later',
+                      duration: 3000,
+                    });
+                  }
+                }}
+              >
+                <Text style={styles.actionButtonText}>PARTY HERE</Text>
               </TouchableOpacity>
             </View>
           )}

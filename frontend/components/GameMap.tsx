@@ -19,7 +19,7 @@ interface Position {
 interface MapMarker {
   id: string;
   coordinate: Position;
-  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant';
+  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub';
   level?: number;
   name?: string;
   icon?: string;
@@ -146,8 +146,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '\\u{1FA69}' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     function getEnemyImage(name) {
@@ -306,6 +306,12 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 '<div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#FF5722,#E64A19);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(255,87,34,0.6);font-size:22px;cursor:pointer;">\\u{1F354}</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(255,87,34,0.9);color:#fff;padding:1px 6px;border-radius:4px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + rName + '</div>' +
                 '</div>';
+            } else if (m.type === 'nightclub') {
+              var ncName = m.name || 'Night Club';
+              markerHTML = '<div style="width:48px;height:62px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                '<div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#9b59b6,#8e44ad);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(155,89,182,0.6);font-size:22px;cursor:pointer;">\\u{1FA69}</div>' +
+                '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(155,89,182,0.9);color:#fff;padding:1px 6px;border-radius:4px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + ncName + '</div>' +
+                '</div>';
             } else if (enemyImg) {
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#ff6b35;color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
               var nameBadge = m.name ? '<div style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:1px 5px;border-radius:4px;font-size:8px;font-weight:bold;white-space:nowrap;z-index:10;">' + m.name + '</div>' : '';
@@ -319,8 +325,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,
-              iconSize: [(m.type === 'restaurant') ? 48 : (enemyImg ? 42 : 32), (m.type === 'restaurant') ? 62 : (enemyImg ? 58 : 32)],
-              iconAnchor: [(m.type === 'restaurant') ? 24 : (enemyImg ? 21 : 16), (m.type === 'restaurant') ? 31 : (enemyImg ? 29 : 16)]
+              iconSize: [(m.type === 'restaurant' || m.type === 'nightclub') ? 48 : (enemyImg ? 42 : 32), (m.type === 'restaurant' || m.type === 'nightclub') ? 62 : (enemyImg ? 58 : 32)],
+              iconAnchor: [(m.type === 'restaurant' || m.type === 'nightclub') ? 24 : (enemyImg ? 21 : 16), (m.type === 'restaurant' || m.type === 'nightclub') ? 31 : (enemyImg ? 29 : 16)]
             });
             var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);
             marker.on('click', (function(id, type) {

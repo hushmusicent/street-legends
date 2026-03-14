@@ -283,4 +283,15 @@ export const eatAtRestaurant = async (restaurantId: string, playerId: string) =>
   return response.data;
 };
 
+// ============== NIGHTCLUBS ==============
+export const spawnNightclubs = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/nightclubs/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const visitNightclub = async (nightclubId: string, playerId: string) => {
+  const response = await api.post(`/nightclubs/${nightclubId}/visit?player_id=${playerId}`);
+  return response.data;
+};
+
 export default api;
