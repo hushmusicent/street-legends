@@ -2034,7 +2034,7 @@ async def list_guilds(limit: int = 20):
 
 @api_router.get("/shops/spawn")
 async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn random shops near a location"""
+    """Spawn random shops near a location - only shows items available at player's level"""
     shops = []
     num_shops = random.randint(1, 2)
     
@@ -2047,13 +2047,16 @@ async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
         shop_config = SHOP_TYPES[shop_type]
         shop_name = random.choice(SHOP_NAMES)
         
-        # Pick random items focused on the shop type
-        focus_items = [item for item in ALL_ITEMS.values() if item["equipment_type"] in shop_config["focus"]]
-        other_items = [item for item in ALL_ITEMS.values() if item["equipment_type"] not in shop_config["focus"]]
+        # Filter items by player level - only show items the player can actually use
+        level_appropriate_items = [item for item in ALL_ITEMS.values() if item.get("level_requirement", 1) <= player_level]
+        
+        # Pick random items focused on the shop type from level-appropriate items
+        focus_items = [item for item in level_appropriate_items if item.get("equipment_type") in shop_config["focus"]]
+        other_items = [item for item in level_appropriate_items if item.get("equipment_type") not in shop_config["focus"]]
         
         # Main stock: 4-8 items from focus + 1-2 random others
         stock_count = random.randint(4, 8)
-        stock = random.sample(focus_items, min(stock_count, len(focus_items)))
+        stock = random.sample(focus_items, min(stock_count, len(focus_items))) if focus_items else []
         extra_count = random.randint(1, 2)
         if other_items:
             stock += random.sample(other_items, min(extra_count, len(other_items)))
@@ -2077,7 +2080,7 @@ async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
             "longitude": longitude + lng_offset,
             "price_multiplier": price_mult,
             "stock": priced_stock,
-            "level": max(1, player_level + random.randint(-2, 3)),
+            "level": player_level,
         }
         shops.append(shop)
     
