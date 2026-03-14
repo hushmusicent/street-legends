@@ -30,7 +30,6 @@ export default function Index() {
           const playerData = await getPlayer(storedId);
           setPlayer(playerData);
           setPlayerId(storedId);
-          await stopMusic();
           router.replace('/(tabs)');
         } catch (err) {
           setPlayerId('');
