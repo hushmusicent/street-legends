@@ -2260,17 +2260,23 @@ async def get_all_skills():
 
 @api_router.get("/players/{player_id}/skills")
 async def get_player_skills(player_id: str):
-    """Get player's unlocked skills"""
+    """Get ALL skills - unlocked ones are usable, locked ones show what's coming"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    unlocked = []
+    all_skills = []
     for skill_id, skill in SKILLS.items():
-        if player["level"] >= skill["unlock_level"]:
-            unlocked.append({"id": skill_id, **skill, "unlocked": skill_id in player.get("skills", [])})
+        is_unlocked = player["level"] >= skill["unlock_level"]
+        all_skills.append({
+            "id": skill_id,
+            **skill,
+            "unlocked": is_unlocked,
+        })
     
-    return unlocked
+    # Sort: unlocked first, then by unlock_level
+    all_skills.sort(key=lambda s: (0 if s["unlocked"] else 1, s["unlock_level"]))
+    return all_skills
 
 # ============== CONSUMABLE SHOP ENDPOINTS ==============
 

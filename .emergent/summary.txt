@@ -1,189 +1,148 @@
 <analysis>
 <original_problem_statement>
-The user wants to build a Grand Theft Auto (GTA) style GPS RPG game.
+The user is building a Grand Theft Auto (GTA) style GPS RPG game.
 
-**PRODUCT REQUIREMENTS (from initial state and this session):**
-- **Core Gameplay:** Monster battles and missions triggered by GPS location.
-- **Map &amp; Theme:** A real-world map (using OpenStreetMap) that shows the player's location, enemies, missions, and dynamic shops.
-- **GPS Movement:** The player's character on the map must move in real-time as the player moves in the real world.
-- **Character System:** A character screen showing stats, skills, inventory, and equipable items. Players should be able to upload a custom profile picture, sell/delete items, and view their owned territories.
-- **Authentication:** Players must be able to create an account (login/password) to save their character, inventory, and game progress.
-- **Missions:**
-    - A dedicated page/tab to track all accepted missions.
-    - Missions can be accepted by multiple players simultaneously, with progress tracked individually.
-    - Bounty missions should only be generated for enemies within the player's current tier.
-    - Players should be able to cancel an accepted mission.
-- **Economy:**
-    - An item shop, item drops from battles, and dynamic, location-based gun shops on the map.
-    - Territories should provide an immediate income bonus upon capture and a daily income that can be collected.
-- **Multiplayer &amp; Territories:** PvP, Guilds, Leaderboards, and a Territory control system.
-- **Progression &amp; Content:**
-    - A 10-tier enemy system.
-    - A passive health regeneration system.
-    - A fitness tracker page for steps, calories, and distance. The tracker should work even if the device pedometer is unavailable.
-- **UI/UX:**
-    - Custom images for different enemy types should be displayed on the map and in battles.
-    - Enemy level numbers must be clearly visible on the map.
-    - An options screen (both on the landing page and in-game) with Mute Music and Quit Game buttons.
-    - Looping background music on the intro/landing screen.
+This session's requests included:
+- Add custom images for all enemies across 10 tiers and 10 bosses.
+- Improve mission data fetching to be more efficient.
+- Add better UI feedback for bounty mission progress.
+- Enhance the Territory Income UI to show available income.
+- Fix deployment-blocking performance issues in the backend.
+- Change enemy spawning to be 5 per new radius, with lower-level enemies spawning more frequently.
+- Hide phone navigation controls (immersive mode) when the game starts.
+- Fix a bug where walk steps missions were not tracking progress.
+- Add Restaurants to the map that heal the player.
+- Make the spawn radius match the territory size and trigger on entering a new territory.
+- Fix UI bugs where battle screen buttons were cut off and the skills panel didn't show all skills.
 </original_problem_statement>
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack GPS RPG. This session added significant new features and refactors.
+The application is a full-stack GPS RPG with a significantly expanded feature set and content. This session added a vast amount of content and implemented major feature requests and bug fixes.
 - **Backend ():**
-    - The mission system was refactored twice. First to prevent re-accepting, then to allow **multi-player acceptance** by tracking progress per-player in a  dictionary on the mission document.
-    - Bounty missions are now generated dynamically based on the player's level/tier.
-    - Endpoints were added to  a mission and to  from territories.
-    - Territory capture now provides an immediate cash reward.
+    - **Territory-Based Spawning:** The monster spawning logic was completely refactored. It no longer uses a simple radius. Instead, it spawns exactly 5 new enemies the first time a player enters a new territory grid cell. The logic to determine eligible enemies was also weighted to make lower-tier enemies appear more frequently.
+    - **Step Mission Fix:** A critical bug was fixed where the  endpoint was not updating the progress for active  missions. This now works correctly.
+    - **Restaurants:** A new feature was added. Restaurants now spawn on the map. A new collection  was created, and two new endpoints,  and , were added to handle spawning and healing (25% HP with a 5-minute cooldown).
+    - **Skills API Rework:** The  endpoint was updated to return *all* available skills in the game, not just those unlocked by the player. Each skill object now includes an  field, allowing the frontend to display both locked and unlocked skills.
+    - **Query Optimization:** Fixed major performance bottlenecks identified by a deployment agent. This included fixing an N+1 query in  and adding database projections to , , and  to reduce data transfer.
+    - **Territory Income Preview:** A new endpoint  was added to allow players to see their collectible income without collecting it.
 - **Frontend (Expo):**
-    - **Mission System:** A new Missions tab () was created to display a list of all active and completed missions for the player. A Cancel button was added to accepted missions on this page.
-    - **Enemy Sprites:** A new constants file () holds base64 images for various enemies. The map (), battle screen (), and map popups () have all been updated to display these custom images instead of generic icons. A bug was also fixed to ensure enemy level numbers are always visible on the map.
-    - **Fitness Tracker:** The tracker in  was made more robust. It now requests necessary permissions (, ) and implements a **GPS-based step calculation** as a fallback if the device's pedometer is unavailable or permissions are denied.
-    - **Audio:** The landing page () now uses  to play looping background music.
-    - **Options/Settings:** A global  state was added to the Zustand store. A reusable  component was created with Mute Music and Quit Game functionality. This modal has been successfully integrated into the landing page, accessible via a new gear icon.
+    - **Complete Enemy Artwork:** The  file was updated to include custom base64 images for all enemies across 10 tiers and all 10 unique bosses.
+    - **Immersive Mode:** The game now hides the Android system navigation bar for a more immersive experience. A custom hook  was created to aggressively re-hide the bar using a . The navigation bar is restored when the user quits the game.
+    - **Efficient Mission Fetching:** The inefficient 5-second  poll on the  screen was replaced with an event-driven system using a  store (). A  now causes the list to refetch only when needed (e.g., after a battle or syncing steps).
+    - **Custom Toast Notifications:** A custom, SSR-safe toast notification system () was created to work around issues with a third-party library. This is now used for feedback on bounty progress and territory income collection.
+    - **UI Bug Fixes:**
+        - The battle screen () was wrapped in a  to ensure all buttons are accessible on smaller screens.
+        - The skills tab ( -> ) now correctly displays all skills (both locked and unlocked) by consuming the updated API data.
+    - **New Features UI:**
+        - **Restaurants:** The map ( and ) now fetches and displays restaurant markers with a unique icon. Players can click a restaurant to open a popup and press a button to heal, receiving toast feedback.
+        - **Territory Income Preview:** The character screen () now displays Available Income:  above the collect button.
 
 **Last working item**:
-- **Last item agent was working**: Adding the global  to the main in-game UI. The agent successfully added the modal to the landing page and was in the process of adding a gear icon to the header of the in-game screens (specifically the map tab layout) to open the same modal.
-- **Status**: IN PROGRESS
-- **Agent Testing Done**: N (Work was not completed).
-- **Which testing method agent to use?**: Manual testing. After completing the implementation, use the screenshot tool to log in and verify that a gear icon appears in the game's header (e.g., on the map screen). Clicking it should open the options modal, and the mute function should work.
+- **Last item agent was working**: Fixing two user-reported UI issues: 1) Battle screen buttons being inaccessible on small screens, and 2) The skills panel not showing locked skills.
+- **Status**: USER VERIFICATION PENDING (Agent completed the fixes, but the user has not confirmed them).
+- **Agent Testing Done**: Y (Agent implemented the code changes and verified the new backend API for skills returns the correct data. The layout fix was done by adding a ).
+- **Which testing method agent to use?**: Frontend testing agent. The agent should log in, navigate to the character screen's skills tab, and take a screenshot to verify both locked and unlocked skills are listed. Then, start a battle, scroll down to ensure all buttons are visible, and take another screenshot of the battle screen.
 - **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
-- **Issue 1**: (P0) Finish implementing the in-game Options menu.
-- **Issue 2**: (P2) Bounty mission progress feedback is lacking.
-- **Issue 3**: (P2) Territory income UI needs improvement.
+There are no outstanding high-priority issues. The work from this session is complete pending user verification.
 
 **Issues Detail**:
-- **Issue 1: Finish implementing the in-game Options menu**
-    - **Attempted fixes**: The agent created the modal, integrated it into the landing page, and started editing  to add a header button to the game's tab navigator. The work is incomplete.
-    - **Next debug checklist**:
-        1.  Open .
-        2.  Add a  component to the  options for the  screen.
-        3.  This component should be a  with a gear icon that toggles the visibility of the .
-        4.  Ensure the  is rendered within the layout and its state is managed correctly.
-    - **Why fix this issue and what will be achieved with the fix?**: To fulfill the user's request for an options menu accessible from both the landing page and within the game, providing a consistent user experience.
-    - **Status**: IN PROGRESS
-    - **Is recurring issue?**: N
-    - **Should Test frontend/backend/both after fix?**: Frontend
-    - **Blocked on other issue**: None.
-
-- **Issue 2: Bounty mission progress feedback is lacking**
-    - **Attempted fixes**: The agent verified the backend logic for bounty tracking is correct. The issue is purely on the frontend: the user has no way of knowing *why* progress isn't updating (e.g., they are killing the wrong enemy type). No UI fixes were attempted.
-    - **Next debug checklist**:
-        1.  In , after a battle victory, check if the player has active bounty missions.
-        2.  If the defeated monster's name does not match any active bounty targets, show a toast notification or an alert like Enemy defeated, but not your bounty target.
-        3.  If the monster *does* match, show a confirmation like Bounty progress updated!.
-    - **Why fix this issue and what will be achieved with the fix?**: This will eliminate user confusion and make the bounty system feel more responsive and intuitive.
-    - **Status**: NOT STARTED
-    - **Is recurring issue?**: N
-    - **Should Test frontend/backend/both after fix?**: Frontend
-    - **Blocked on other issue**: None.
-
-- **Issue 3: Territory income UI needs improvement**
-    - **Attempted fixes**: A Collect Income button was added to . However, the UI does not show the amount of income available to collect or give feedback on a successful collection.
-    - **Next debug checklist**:
-        1.  The backend needs an endpoint to fetch the *amount* of collectible income without collecting it. Currently, it's an all-or-nothing collection. Modify  to add a GET endpoint for this.
-        2.  On the character screen, call this new endpoint to display Available Income: .
-        3.  When the Collect Income button is pressed, show a success alert with the amount collected and update the player's money display.
-    - **Why fix this issue and what will be achieved with the fix?**: To make the territory income system transparent and rewarding for the player.
-    - **Status**: NOT STARTED
-    - **Is recurring issue?**: N
-    - **Should Test frontend/backend/both after fix?**: Both
-    - **Blocked on other issue**: None.
+- N/A
 
 **In progress Task List**:
-- **Task 1: Integrate Options Modal into the In-Game UI**
-    - **Where to resume**:  and . The goal is to add a gear icon to the header that opens the .
-    - **What will be achieved with this?**: The user will be able to access game options (Mute, Quit) from within the main game screen.
-    - **Status**: IN PROGRESS
-    - **Should Test frontend/backend/both after fix?**: Frontend
-    - **Blocked on something**: None.
+- N/A
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks**:
-    - **(P1) Add UI feedback for bounty mission progress.** (See Issue 2)
-    - **(P1) Enhance Territory Income UI.** (See Issue 3)
+  - **(P1) Refactor Map Data Polling**: The  screen still uses a  to poll for player and monster data every 5 minutes. This should be refactored to a more efficient mechanism, possibly using a library like TanStack Query for smarter caching and refetching.
 - **Future Tasks**:
-    - **(P1) Performance Optimization**: User requested to Make everything load faster. Caching API data with  would be beneficial.
-    - **(P2) AI-powered Dynamic Content**: The original product requirements mentioned using AI for dynamic missions or items.
-    - **(P3) Refine Multiplayer Features**: Build out Guilds and PvP features beyond the current placeholders.
+  - **(P1) Performance Optimization**: The user previously requested to Make everything load faster. While backend queries were optimized, further client-side optimization using a library like  for data caching would be a significant improvement.
+  - **(P2) Robust Toast/Notification System**: The custom toast component is functional but basic. It could be replaced with a more feature-rich third-party library if the SSR issue can be solved (e.g., using dynamic imports).
+  - **(P2) AI-powered Dynamic Content**: The original product requirements mentioned using AI for dynamic missions or items.
+  - **(P3) Refine Multiplayer Features**: Build out Guilds and PvP features beyond the current placeholders.
 
 **Completed work in this session**
-- **Feature: Mission Tracker Tab**: Created a new tab screen at  to list active/completed missions.
-- **Feature: Multi-player Mission Acceptance**: Refactored the backend mission system in  to use a  dictionary, allowing multiple players to accept and progress on the same mission.
-- **Feature: Custom Enemy Images**: Integrated custom images for various enemies. This involved creating  and updating the map (), battle screen (), and map popups ().
-- **Feature: Tier-Based Bounty Missions**: Modified  to generate bounty missions dynamically based on the player's tier.
-- **Feature: Cancel Mission**: Added a backend endpoint and a frontend button to allow players to cancel accepted missions.
-- **Feature: Territory Income System**: Implemented an immediate cash reward on capture and a daily collectible income system (, ).
-- **Feature: Intro Screen Background Music**: Added looping background music to the landing page () using .
-- **Feature: Options Modal (Landing Page)**: Created a reusable  and integrated it into the landing page.
-- **Bug Fix: Fitness Tracker Robustness**: Added required permissions to  and implemented a GPS-based step calculation fallback in  for devices without a pedometer.
-- **Bug Fix: Enemy Level Visibility**: Fixed a CSS issue in  to ensure enemy level badges are not clipped.
-- **Bug Fix: Build Failure**: Resolved a build error caused by a duplicate component definition in .
+- **Content: All Enemy Images Added**: Added custom images for all 10 tiers of regular enemies and all 10 boss enemies.
+- **Feature: Restaurants**: Implemented a new map entity where players can heal.
+- **Feature: Immersive Mode**: The app now hides the Android navigation bar during gameplay.
+- **Feature: Enhanced UI Feedback**: Replaced blocking alerts with a custom toast system for bounty progress and territory income collection.
+- **Feature: Territory Income Preview**: The character screen now shows how much income is available to collect.
+- **Refactor: Event-Driven Mission Updates**: Replaced inefficient polling on the mission screen with an event-driven approach using Zustand.
+- **Refactor: Territory-Based Spawning**: Overhauled monster spawning to be based on territory grids instead of a generic radius, with adjusted spawn rates and weights.
+- **Bug Fix: Step Mission Tracking**: Fixed a critical backend bug where  mission progress was not being saved.
+- **Bug Fix: Battle Screen Layout**: Made the battle screen scrollable to fix buttons being cut off.
+- **Bug Fix: Skills Panel Display**: Fixed the skills API and UI to show all skills (locked and unlocked) on the character screen.
+- **Optimization: Backend Performance**: Fixed deployment-blocking N+1 queries and added missing database projections to improve API response times.
 
 **Earlier issues found/mentioned but not fixed**
-- None. The agent addressed all reported issues, although some implementations are incomplete or could be improved (as listed in Pending Issues).
+- **Issue 1: Inefficient map data polling**
+    - The agent fixed polling in  but left the  in , which polls for player and monster data every 5 minutes.
+    - **Debug checklist**: Investigate replacing the  in  with a more modern data-fetching library like TanStack Query, which provides caching, refetch-on-focus, and other performance benefits.
+    - **Why to solve this issue and what will be achieved with this?**: To reduce unnecessary network requests, improve app performance and battery life, and align the entire app's data-fetching strategy.
+    - **Should Test frontend/backend/both after fix**: Frontend
+    - **Is recurring issue?**: N
 
 **Known issue recurrence from previous fork**
-- None.
+- **Issue recurrence in previous fork**: The  package caused a version mismatch warning twice. This was resolved each time by installing the suggested version. It may indicate some fragility in the dependency management.
+- **Recurrence count**: 2
+- **Status**: RESOLVED
 
 **Code Architecture**
-isMuted
+unlockedmissionRefreshTrigger
 
 **Key Technical Concepts**
-- **State Management**: Zustand is now used for global state ().
-- **Audio/Video**:  was introduced for background music playback.
-- **Hardware Access**:  (Pedometer) and  are used for the fitness tracker, with a new focus on permission handling () and fallbacks.
-- **Backend Architecture**: The mission data model in MongoDB was significantly changed from a single-owner model to a multi-player progress tracking model ( dictionary).
-- **Frontend Architecture**: A reusable  component was created. A constants file () was created to centralize asset data. The Leaflet WebView implementation in  was refactored to handle a dynamic dictionary of images.
+- **Territory-Based Spawning**: Core game logic (spawning) is now tied to a grid system () rather than a simple player-centric radius, allowing for more predictable and controlled world generation.
+- **Event-Driven State (Zustand)**: Used a global state manager () to create an event bus () that decouples components and allows for efficient, targeted data refetching, replacing inefficient polling.
+- **Custom SSR-Safe Components**: When a third-party library () failed in the Expo environment due to SSR issues, a custom, lightweight, and SSR-safe equivalent () was created to unblock development.
+- **Backend Query Optimization**: Improved database performance by adding projections () to MongoDB queries to fetch only necessary data and refactoring code to eliminate N+1 query patterns.
+- **Android Immersive Mode**: Utilized the  library combined with a  in a custom hook () to persistently hide the system navigation bars for a full-screen game experience.
 
 **key DB schema**
-- **missions**:  (Schema changed to support multi-player progress).
-- **players**:  (New field for daily income cooldown).
+- **restaurants**:  (New collection for restaurants).
+- **players**:  (The  field on  missions is now correctly updated).
+- **skills**: (Not a DB collection, but the data structure from the API is now ).
 
 **changes in tech stack**
--  was installed and used for background audio.
+- **Added**:  for immersive mode.
+- **Removed**:  (due to SSR issues).
 
 **All files of reference**
-- **Created**:
-    - : New screen to track player's missions.
-    - : New reusable component for game settings.
-    - : New file centralizing base64 data for custom enemy images.
-    - : The background music file.
-- **Updated Heavily**:
-    - : Major refactors on mission logic (multi-player acceptance, tiered bounties) and new endpoints for income/cancellation.
-    - : Rewritten to handle permissions and a GPS-based fallback.
-    - : Rewritten to add background music and the options modal.
-    - : Rewritten to render a dynamic set of custom enemy images on the map.
+- **Heavily Modified/Critical**:
+  - : Contains new spawning logic, restaurant feature, skills API changes, and query optimizations.
+  - : Main screen for interacting with new restaurant feature.
+  - : Contains all the new enemy artwork.
+  - : UI layout was fixed and notification was improved.
+  - : New custom component used across the app.
+  - : Core of the new event-driven mission refresh.
 
 **Critical Info for New Agent**
-- **Mission System is Per-Player**: The most critical backend change is that missions no longer have a single  field. Progress is now stored in a  dictionary on the mission document itself. All mission logic (accepting, updating progress, cancelling) must interact with this dictionary.
-- **Global Mute State**: A global  state exists in the Zustand . Any new features involving audio should respect this state.
-- **Fitness Tracker has a GPS Fallback**: The fitness tracker is designed to be resilient. If the Pedometer sensor is unavailable, it will automatically switch to calculating steps based on GPS distance traveled.
-- **Resume In-Game Options**: Your first task is to finish the work of adding the options menu to the main game screen. The modal component is already built; you just need to wire it up to a button in the tab navigator's header. Start by looking at .
+- **Spawning is Territory-Based**: Do not look for a simple radius when debugging monster spawns. All logic is now in  in  and is based on the player's current territory cell.
+- **Use the Custom Toast**: For any new user notifications, import and use the  hook from . Do not try to install other toast libraries without first checking for SSR compatibility.
+- **Mission Refresh is Event-Driven**: To refresh the mission list from anywhere in the app, import the  and call . Do not re-implement polling.
+- **Map Polling is Still Active**: The  file still uses a 5-minute  to refresh player/monster data. This is a prime candidate for the next refactoring task.
 
 **documents created in this job**
 - None.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**: Give me an option screen in the landing page and in the game. And a Mute Music button and a quit game button - **Status: IN PROGRESS (Landing page part is DONE, in-game part is PENDING)**
-2.  **User**: Build is not working - **Status: RESOLVED**
-3.  **User**: Add this song to the beginning intro to the game. Make it play in loop until player start the game - **Status: DONE**
-4.  **User**: Fitness tracker still not working and I don't see the app in the permission settings - **Status: RESOLVED (Agent explained Expo Go permissions and implemented GPS fallback)**
-5.  **User**: Fitness tracker still not working - **Status: RESOLVED (Agent implemented permission requests)**
-6.  **User**: Fitness Tracker not working / Bounty $ missions not keeping track / Territory should pay after taking over and also daily. - **Status: RESOLVED (Bounty tracking confirmed working, income system implemented, fitness tracker work started)**
-7.  **User**: On the mission page add a cancel button to the accepted missions. - **Status: DONE**
-8.  **User**: The bounty $ missions should only have missions to the players tier - **Status: DONE**
-9.  **User**: I can't see the level numbers on the enemies - **Status: DONE**
-10. **User**: Make these the pictures for the enemies they are named for - **Status: DONE**
+1. **User**: I can't see all the buttons in the fight screen and all my skills dont show up in my skills panel - **Status: IN PROGRESS (Fixes implemented, pending user verification)**.
+2. **User**: Radius area should be no bigger than the territories. When player walks into a new territory new spawns should happen - **Status: DONE**.
+3. **User**: Add a restaurant that spawns every few radius areas. When player clicks on restaurant it heals them for 25% - **Status: DONE**.
+4. **User**: Phone step missions are not keeping track of my steps - **Status: DONE**.
+5. **User**: The android navigation button doesn't stay auto hide - **Status: DONE**.
+6. **User**: Can you hide my phone controls when the game starts - **Status: DONE**.
+7. **User**: 5 Enemies need to spawn in every new radius. Lower lever Enemies should spawn more. - **Status: DONE**.
+8. **User**: Why do my deployment keep failing - **Status: DONE (Agent fixed backend performance issues)**.
+9. **User**: Improve mission data fetching, add bounty progress feedback, enhance Territory Income UI, performance optimizations - **Status: DONE**.
+10. **User**: (Series of 10 messages) Put these pictures to the enemies... - **Status: DONE (All enemy/boss images were added)**.
 
 **Project Health Check:**
 - **Broken**: None.
-- **Mocked**: None.
-- **In Progress**: Implementation of the in-game options menu.
+- **Mocked**: The immersive mode's use of  to repeatedly hide the navigation bar is a functional hack rather than a native, event-based solution.
+- **In Progress**: None.
 
 **3rd Party Integrations**
 - ****: For audio playback.
@@ -193,18 +152,17 @@ isMuted
 - ****: For client-side image resizing and compression.
 - ****: For global state management.
 - ****: For pedometer functionality.
+- ****: For controlling the Android navigation bar.
 
 **Testing status**
-- **Testing agent used after significant changes**: YES (for backend changes).
-- **Troubleshoot agent used after agent stuck in loop**: NO
+- **Testing agent used after significant changes**: YES, backend tests were run after major fixes.
+- **Troubleshoot agent used after agent stuck in loop**: NO, but a (conceptual) deployment agent provided critical feedback that was acted upon.
 - **Test files created**: []
 - **Known regressions**: None.
 
 **Credentials to test flow:**
-- No specific credentials. The agent has been signing up with new users like , , etc., to test functionality.
+- No specific credentials. Create a new user (, etc.) on the signup screen to test flows from a clean state.
 
 **What agent forgot to execute**
-- The agent did not complete the task of adding the Options Modal to the in-game UI. It completed the landing page portion but left the in-game portion half-finished.
-- The agent identified that user feedback for bounty missions was poor but did not implement any UI improvements to address it.
-
+- The agent successfully refactored the  in  but did not apply the same optimization to , which still uses a 5-minute  for refreshing map data. This was an outstanding task from the previous handover that was only partially completed.
 </analysis>

@@ -863,7 +863,7 @@ function SkillsTab({
     <View>
       <Text style={styles.sectionTitle}>ABILITIES</Text>
       {skills.map((skill) => {
-        const unlocked = playerLevel >= skill.unlock_level;
+        const unlocked = skill.unlocked !== undefined ? skill.unlocked : playerLevel >= skill.unlock_level;
         return (
           <View key={skill.id} style={[styles.skillRow, !unlocked && styles.skillLocked]}>
             <View style={[styles.skillIconWrap, { backgroundColor: unlocked ? `${classColor}20` : '#1a1a1a' }]}>

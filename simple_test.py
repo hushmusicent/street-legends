@@ -6,7 +6,7 @@ Simple test to check specific issues
 import requests
 import json
 
-BACKEND_URL = "https://nexus-battle-quest.preview.emergentagent.com"
+BACKEND_URL = "https://heist-map-game.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def main():

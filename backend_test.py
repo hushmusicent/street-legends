@@ -7,7 +7,7 @@ from typing import Dict, List
 from collections import Counter
 
 # Use the backend URL from frontend .env
-BASE_URL = "https://nexus-battle-quest.preview.emergentagent.com/api"
+BASE_URL = "https://heist-map-game.preview.emergentagent.com/api"
 
 def test_exact_5_enemies_new_area():
     """Test that exactly 5 enemies spawn in a new area"""

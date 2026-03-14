@@ -8,11 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Toast from 'react-native-toast-message';
 import { showGameToast } from '../../components/GameToast';
 import { useGameStore } from '../../stores/gameStore';
 import { getBattle, battleAction, getPlayerSkills, getPlayer, getActiveMissions } from '../../services/api';
@@ -20,6 +20,9 @@ import { HealthBar } from '../../components/HealthBar';
 import { GameButton } from '../../components/GameButton';
 import { Battle, Skill } from '../../types/game';
 import { getEnemyBattleImage } from '../../assets/enemyImages';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const COMPACT = SCREEN_HEIGHT < 750;
 
 export default function BattleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -55,32 +58,26 @@ export default function BattleScreen() {
     if (!playerId) return;
     try {
       const data = await getPlayerSkills(playerId);
-      setSkills(data.filter((s) => s.unlocked));
+      setSkills(data);
     } catch (error) {
       console.error('Failed to load skills:', error);
     }
   };
 
   const executeAction = async (action: string, skillId?: string) => {
-    if (!id || actionLoading) return;
-
+    if (!id || !playerId || actionLoading) return;
+    setActionLoading(true);
     try {
-      setActionLoading(true);
-      const result = await battleAction(id, action, skillId);
+      const result = await battleAction(id, playerId, action, skillId);
       setBattle(result);
       setCurrentBattle(result);
-      setShowSkills(false);
 
       if (result.status !== 'active') {
-        // Refresh player data
         if (playerId) {
           const playerData = await getPlayer(playerId);
           setPlayer(playerData);
-
-          // Trigger mission refresh so mission tab updates
           triggerMissionRefresh();
 
-          // Show bounty progress feedback after a win
           if (result.status === 'won') {
             try {
               const activeMissions = await getActiveMissions(playerId);
@@ -103,18 +100,17 @@ export default function BattleScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Action failed');
+      Alert.alert('Error', error?.response?.data?.detail || 'Action failed');
     } finally {
       setActionLoading(false);
+      setShowSkills(false);
     }
   };
 
   const handleExit = () => {
-    // Remove defeated monster from map
-    if (battle && battle.status === 'won' && battle.enemy_type === 'monster') {
+    if (battle?.status === 'won' && battle?.enemy_id) {
       removeMonster(battle.enemy_id);
     }
-    setCurrentBattle(null);
     router.back();
   };
 
@@ -134,76 +130,61 @@ export default function BattleScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.turnText}>TURN {battle.turn}</Text>
-        {isActive && <Text style={styles.battleStatus}>BATTLE IN PROGRESS</Text>}
-      </View>
-
-      {/* Enemy Section */}
-      <View style={styles.enemySection}>
-        <View style={[styles.enemyAvatar, enemyImage && styles.enemyAvatarThug]}>
-          {enemyImage ? (
-            <Image source={{ uri: enemyImage }} style={styles.enemyImage} />
-          ) : (
-            <Ionicons
-              name={battle.enemy_type === 'monster' ? 'skull' : 'person'}
-              size={48}
-              color="#e74c3c"
-            />
-          )}
+      {/* Top Section: Enemy + Player (compact, no scroll needed) */}
+      <View style={styles.topSection}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.turnText}>TURN {battle.turn}</Text>
+          {isActive && <Text style={styles.battleStatus}>BATTLE IN PROGRESS</Text>}
         </View>
-        <Text style={styles.enemyName}>{battle.enemy_name}</Text>
-        <HealthBar
-          current={battle.enemy_health}
-          max={battle.enemy_max_health}
-          color="#e74c3c"
-        />
-      </View>
 
-      {/* VS Divider */}
-      <View style={styles.vsDivider}>
-        <View style={styles.vsLine} />
-        <Text style={styles.vsText}>VS</Text>
-        <View style={styles.vsLine} />
-      </View>
-
-      {/* Player Section */}
-      <View style={styles.playerSection}>
-        <View style={styles.playerStats}>
-          <View style={styles.statBox}>
-            <HealthBar
-              current={battle.player_health}
-              max={battle.player_max_health}
-              label="HEALTH"
-              color="#27ae60"
-            />
+        {/* Enemy */}
+        <View style={styles.enemySection}>
+          <View style={[styles.enemyAvatar, enemyImage && styles.enemyAvatarWithImage]}>
+            {enemyImage ? (
+              <Image source={{ uri: enemyImage }} style={styles.enemyImage} />
+            ) : (
+              <Ionicons
+                name={battle.enemy_type === 'monster' ? 'skull' : 'person'}
+                size={COMPACT ? 32 : 40}
+                color="#e74c3c"
+              />
+            )}
           </View>
-          <View style={styles.energyBox}>
-            <Text style={styles.energyLabel}>ENERGY</Text>
+          <View style={styles.enemyInfo}>
+            <Text style={styles.enemyName}>{battle.enemy_name}</Text>
+            <HealthBar current={battle.enemy_health} max={battle.enemy_max_health} color="#e74c3c" />
+          </View>
+        </View>
+
+        {/* VS + Player */}
+        <View style={styles.playerRow}>
+          <View style={styles.playerHP}>
+            <HealthBar current={battle.player_health} max={battle.player_max_health} label="HP" color="#27ae60" />
+          </View>
+          <View style={styles.energyBadge}>
+            <Ionicons name="flash" size={14} color="#3498db" />
             <Text style={styles.energyValue}>{battle.player_energy}</Text>
           </View>
         </View>
       </View>
 
-      {/* Combat Log */}
+      {/* Combat Log (fills remaining space) */}
       <View style={styles.logSection}>
         <Text style={styles.logTitle}>COMBAT LOG</Text>
-        <ScrollView style={styles.logScroll}>
-          {battle.combat_log.slice(-5).map((log, index) => (
-            <Text key={index} style={styles.logEntry}>
-              {log}
-            </Text>
+        <ScrollView style={styles.logScroll} showsVerticalScrollIndicator={false}>
+          {battle.combat_log.slice(-6).map((log, index) => (
+            <Text key={index} style={styles.logEntry}>{log}</Text>
           ))}
         </ScrollView>
       </View>
 
-      {/* Battle Result */}
+      {/* Battle Result Overlay */}
       {!isActive && (
         <View style={[styles.resultOverlay, isVictory ? styles.victoryOverlay : styles.defeatOverlay]}>
           <Ionicons
             name={isVictory ? 'trophy' : 'skull'}
-            size={64}
+            size={56}
             color={isVictory ? '#f39c12' : '#e74c3c'}
           />
           <Text style={styles.resultText}>
@@ -211,14 +192,13 @@ export default function BattleScreen() {
           </Text>
           {battle.rewards && (
             <View style={styles.rewardsContainer}>
-              <Text style={styles.rewardsTitle}>REWARDS</Text>
               <View style={styles.rewardsRow}>
                 <View style={styles.rewardItem}>
-                  <Ionicons name="cash" size={20} color="#f39c12" />
+                  <Ionicons name="cash" size={18} color="#f39c12" />
                   <Text style={styles.rewardValue}>${battle.rewards.cash}</Text>
                 </View>
                 <View style={styles.rewardItem}>
-                  <Ionicons name="star" size={20} color="#3498db" />
+                  <Ionicons name="star" size={18} color="#3498db" />
                   <Text style={styles.rewardValue}>{battle.rewards.xp} XP</Text>
                 </View>
               </View>
@@ -234,70 +214,78 @@ export default function BattleScreen() {
         </View>
       )}
 
-      {/* Action Buttons */}
+      {/* Action Buttons (always visible at bottom) */}
       {isActive && (
         <View style={styles.actions}>
           {showSkills ? (
             <View style={styles.skillsPanel}>
               <View style={styles.skillsHeader}>
                 <Text style={styles.skillsTitle}>SELECT SKILL</Text>
-                <TouchableOpacity onPress={() => setShowSkills(false)}>
-                  <Ionicons name="close" size={24} color="#888" />
+                <TouchableOpacity onPress={() => setShowSkills(false)} style={styles.skillCloseBtn}>
+                  <Ionicons name="close-circle" size={28} color="#888" />
                 </TouchableOpacity>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {skills.map((skill) => (
-                  <TouchableOpacity
-                    key={skill.id}
-                    style={[
-                      styles.skillButton,
-                      skill.cost > battle.player_energy && styles.skillDisabled,
-                    ]}
-                    onPress={() => executeAction('skill', skill.id)}
-                    disabled={skill.cost > battle.player_energy || actionLoading}
-                  >
-                    <Ionicons name="flash" size={20} color="#e74c3c" />
-                    <Text style={styles.skillName}>{skill.name}</Text>
-                    <Text style={styles.skillCost}>{skill.cost} Energy</Text>
-                  </TouchableOpacity>
-                ))}
+              <ScrollView style={styles.skillsScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.skillsGrid}>
+                  {skills.filter((s) => s.unlocked).map((skill) => (
+                    <TouchableOpacity
+                      key={skill.id}
+                      style={[
+                        styles.skillButton,
+                        skill.cost > battle.player_energy && styles.skillDisabled,
+                      ]}
+                      onPress={() => executeAction('skill', skill.id)}
+                      disabled={skill.cost > battle.player_energy || actionLoading}
+                    >
+                      <Ionicons name="flash" size={18} color="#e74c3c" />
+                      <Text style={styles.skillName} numberOfLines={1}>{skill.name}</Text>
+                      <Text style={styles.skillCost}>{skill.cost} EN</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {skills.filter((s) => s.unlocked).length === 0 && (
+                    <View style={styles.noSkills}>
+                      <Ionicons name="alert-circle-outline" size={24} color="#666" />
+                      <Text style={styles.noSkillsText}>No skills unlocked yet</Text>
+                    </View>
+                  )}
+                </View>
               </ScrollView>
             </View>
           ) : (
             <View style={styles.actionGrid}>
               <TouchableOpacity
-                style={styles.actionButton}
+                style={[styles.actionButton, styles.attackBtn]}
                 onPress={() => executeAction('attack')}
                 disabled={actionLoading}
               >
-                <Ionicons name="flash" size={28} color="#fff" />
+                <Ionicons name="flash" size={24} color="#fff" />
                 <Text style={styles.actionText}>ATTACK</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionButton, styles.skillActionButton]}
+                style={[styles.actionButton, styles.skillBtn]}
                 onPress={() => setShowSkills(true)}
                 disabled={actionLoading}
               >
-                <Ionicons name="sparkles" size={28} color="#fff" />
+                <Ionicons name="sparkles" size={24} color="#fff" />
                 <Text style={styles.actionText}>SKILLS</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionButton, styles.defendButton]}
+                style={[styles.actionButton, styles.defendBtn]}
                 onPress={() => executeAction('defend')}
                 disabled={actionLoading}
               >
-                <Ionicons name="shield" size={28} color="#fff" />
+                <Ionicons name="shield" size={24} color="#fff" />
                 <Text style={styles.actionText}>DEFEND</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionButton, styles.fleeButton]}
+                style={[styles.actionButton, styles.fleeBtn]}
                 onPress={() => executeAction('flee')}
                 disabled={actionLoading}
               >
-                <Ionicons name="exit" size={28} color="#fff" />
+                <Ionicons name="exit" size={24} color="#fff" />
                 <Text style={styles.actionText}>FLEE</Text>
               </TouchableOpacity>
             </View>
@@ -329,197 +317,225 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 16,
   },
+
+  // Top section: enemy + player (compact)
+  topSection: {
+    paddingHorizontal: 16,
+  },
   header: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: COMPACT ? 6 : 10,
   },
   turnText: {
     color: '#f39c12',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     letterSpacing: 2,
   },
   battleStatus: {
     color: '#e74c3c',
-    fontSize: 12,
+    fontSize: 10,
     letterSpacing: 2,
-    marginTop: 4,
+    marginTop: 2,
   },
+
+  // Enemy section: horizontal layout for compactness
   enemySection: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 20,
+    backgroundColor: 'rgba(231, 76, 60, 0.08)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(231, 76, 60, 0.2)',
   },
   enemyAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: COMPACT ? 56 : 68,
+    height: COMPACT ? 56 : 68,
+    borderRadius: COMPACT ? 28 : 34,
     backgroundColor: 'rgba(231, 76, 60, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#e74c3c',
   },
-  enemyAvatarThug: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  enemyAvatarWithImage: {
     overflow: 'hidden',
     backgroundColor: 'rgba(231, 76, 60, 0.1)',
     borderColor: '#ff6b35',
-    borderWidth: 3,
   },
   enemyImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
+  enemyInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
   enemyName: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: COMPACT ? 18 : 22,
     fontWeight: 'bold',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  vsDivider: {
+
+  // Player row
+  playerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    marginTop: 10,
+    paddingHorizontal: 4,
   },
-  vsLine: {
+  playerHP: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#333',
   },
-  vsText: {
-    color: '#666',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginHorizontal: 16,
-  },
-  playerSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  playerStats: {
+  energyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  statBox: {
-    flex: 1,
-  },
-  energyBox: {
     backgroundColor: 'rgba(52, 152, 219, 0.2)',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    marginLeft: 12,
-    minWidth: 80,
-  },
-  energyLabel: {
-    color: '#3498db',
-    fontSize: 10,
-    fontWeight: '600',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginLeft: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 152, 219, 0.3)',
   },
   energyValue: {
     color: '#3498db',
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
+    marginLeft: 4,
   },
+
+  // Combat Log
   logSection: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    marginHorizontal: 20,
+    marginHorizontal: 16,
+    marginTop: 10,
     borderRadius: 12,
-    padding: 12,
+    padding: 10,
+    minHeight: 60,
   },
   logTitle: {
-    color: '#666',
-    fontSize: 10,
+    color: '#555',
+    fontSize: 9,
     letterSpacing: 2,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   logScroll: {
     flex: 1,
   },
   logEntry: {
     color: '#aaa',
-    fontSize: 13,
-    marginBottom: 4,
-    lineHeight: 18,
+    fontSize: 12,
+    marginBottom: 3,
+    lineHeight: 16,
   },
+
+  // Action Buttons
   actions: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   actionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   actionButton: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#e74c3c',
+    width: '47%',
+    flexGrow: 1,
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: COMPACT ? 12 : 14,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  skillActionButton: {
-    backgroundColor: '#9b59b6',
-  },
-  defendButton: {
-    backgroundColor: '#3498db',
-  },
-  fleeButton: {
-    backgroundColor: '#7f8c8d',
-  },
+  attackBtn: { backgroundColor: '#e74c3c' },
+  skillBtn: { backgroundColor: '#9b59b6' },
+  defendBtn: { backgroundColor: '#3498db' },
+  fleeBtn: { backgroundColor: '#7f8c8d' },
   actionText: {
     color: '#fff',
     fontWeight: 'bold',
-    marginTop: 4,
+    fontSize: 14,
     letterSpacing: 1,
   },
+
+  // Skills Panel (vertical grid, scrollable)
   skillsPanel: {
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: 'rgba(20, 10, 30, 0.95)',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(155, 89, 182, 0.4)',
+    maxHeight: SCREEN_HEIGHT * 0.35,
   },
   skillsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   skillsTitle: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  skillCloseBtn: {
+    padding: 4,
+  },
+  skillsScroll: {
+    flexGrow: 0,
+  },
+  skillsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   skillButton: {
-    backgroundColor: 'rgba(231, 76, 60, 0.2)',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: 'rgba(155, 89, 182, 0.15)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    marginRight: 12,
-    minWidth: 100,
+    width: '47%',
+    flexGrow: 1,
     borderWidth: 1,
-    borderColor: '#e74c3c',
+    borderColor: 'rgba(155, 89, 182, 0.4)',
   },
   skillDisabled: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
   skillName: {
     color: '#fff',
     fontWeight: '600',
-    marginTop: 8,
+    marginTop: 4,
     fontSize: 12,
+    textAlign: 'center',
   },
   skillCost: {
     color: '#3498db',
     fontSize: 10,
-    marginTop: 4,
+    marginTop: 2,
+    fontWeight: '600',
   },
+  noSkills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 16,
+  },
+  noSkillsText: {
+    color: '#666',
+    fontSize: 13,
+  },
+
   actionLoadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -531,6 +547,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
   },
+
+  // Result overlay
   resultOverlay: {
     position: 'absolute',
     top: 0,
@@ -546,20 +564,14 @@ const styles = StyleSheet.create({
   defeatOverlay: {},
   resultText: {
     color: '#fff',
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: 'bold',
-    marginTop: 16,
+    marginTop: 12,
     letterSpacing: 4,
   },
   rewardsContainer: {
-    marginTop: 32,
+    marginTop: 24,
     alignItems: 'center',
-  },
-  rewardsTitle: {
-    color: '#888',
-    fontSize: 12,
-    letterSpacing: 2,
-    marginBottom: 16,
   },
   rewardsRow: {
     flexDirection: 'row',
@@ -568,19 +580,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 8,
-    marginHorizontal: 8,
+    marginHorizontal: 6,
   },
   rewardValue: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   continueButton: {
-    marginTop: 40,
+    marginTop: 32,
     minWidth: 200,
   },
 });
