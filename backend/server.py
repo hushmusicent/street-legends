@@ -450,13 +450,14 @@ def get_player_tier(player_level: int) -> int:
     return min(10, max(1, (player_level - 1) // 10 + 1))
 
 def get_eligible_enemies(player_level: int):
-    """Get enemies that are AT OR BELOW the player's level.
+    """Get enemies at player's level and up to 1 level higher.
     Lower level enemies spawn MORE frequently than higher level ones."""
     current_tier = get_player_tier(player_level)
     
-    # Only include enemies whose level_min is at or below player level
-    # This ensures we never spawn enemies stronger than the player
-    eligible = [e for e in ENEMY_TIERS if e["level_min"] <= player_level]
+    # Include enemies whose level_min is at or below player_level + 1
+    # This allows enemies at player level and 1 level higher for challenge
+    max_spawn_level = player_level + 1
+    eligible = [e for e in ENEMY_TIERS if e["level_min"] <= max_spawn_level]
     
     # Weight system: lower tiers get much higher spawn rates
     # Tier 1 = highest weight, each tier above = less common
@@ -1081,8 +1082,8 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
             enemies, weights = zip(*weighted_enemies)
             template = random.choices(enemies, weights=weights, k=1)[0]
             
-            # Cap the monster level to never exceed player level
-            max_enemy_level = min(template["level_max"], player_level)
+            # Cap the monster level to player level + 1 for slight challenge
+            max_enemy_level = min(template["level_max"], player_level + 1)
             monster_level = random.randint(template["level_min"], max_enemy_level)
             
             # Offset within territory cell bounds
