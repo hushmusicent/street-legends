@@ -7,6 +7,7 @@ import {
   Modal,
   Alert,
   Platform,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +25,24 @@ interface OptionsModalProps {
 
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
   const { clearPlayer } = useGameStore();
+
+  const handleShare = async () => {
+    try {
+      const result = await Share.share({
+        message: '🎮 Check out Street Empire - A GTA-style GPS RPG game! Fight enemies, capture territories, and build your criminal empire in real life locations! Download now: https://street-empire.app',
+        title: 'Street Empire - GPS RPG Game',
+      });
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          console.log('Shared with activity type:', result.activityType);
+        } else {
+          console.log('Shared successfully');
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Could not share the game link');
+    }
+  };
 
   const handleQuit = () => {
     Alert.alert(
@@ -91,6 +110,14 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
             <View style={[styles.toggleTrack, isMuted && styles.toggleTrackOff]}>
               <View style={[styles.toggleThumb, isMuted && styles.toggleThumbOff]} />
             </View>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          {/* Share Game */}
+          <TouchableOpacity style={styles.shareRow} onPress={handleShare} activeOpacity={0.7}>
+            <Ionicons name="share-social" size={22} color="#3498db" />
+            <Text style={styles.shareText}>SHARE GAME</Text>
           </TouchableOpacity>
 
           {/* Quit Game */}
@@ -195,6 +222,23 @@ const styles = StyleSheet.create({
   },
   quitText: {
     color: '#e74c3c',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(52, 152, 219, 0.12)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 152, 219, 0.3)',
+  },
+  shareText: {
+    color: '#3498db',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,
