@@ -1224,14 +1224,21 @@ async def battle_action(battle_id: str, action: BattleAction):
     
     # Player action
     if action.action == "attack":
-        damage = max(1, player_stats["attack"] - enemy_stats.get("defense", 0) // 2)
-        crit = random.random() < (player_stats["luck"] / 100)
-        if crit:
-            damage = int(damage * 1.5)
-            combat_log.append(f"CRITICAL HIT! You deal {damage} damage!")
+        # Miss chance: 10% base, reduced by luck (min 5%)
+        miss_chance = max(0.05, 0.10 - (player_stats.get("luck", 0) * 0.005))
+        if random.random() < miss_chance:
+            combat_log.append("Your attack MISSED!")
         else:
-            combat_log.append(f"You attack for {damage} damage!")
-        enemy_health -= damage
+            damage = max(1, player_stats["attack"] - enemy_stats.get("defense", 0) // 2)
+            # Crit chance: based on luck (5% base + luck bonus)
+            crit_chance = 0.05 + (player_stats.get("luck", 0) * 0.01)
+            crit = random.random() < crit_chance
+            if crit:
+                damage = int(damage * 2.0)
+                combat_log.append(f"💥 CRITICAL HIT! You deal {damage} damage!")
+            else:
+                combat_log.append(f"You attack for {damage} damage!")
+            enemy_health -= damage
         
     elif action.action == "skill" and action.skill_id:
         skill = SKILLS.get(action.skill_id)
@@ -1243,9 +1250,18 @@ async def battle_action(battle_id: str, action: BattleAction):
         player_energy -= skill["cost"]
         
         if "damage_mult" in skill:
-            damage = int(player_stats["attack"] * skill["damage_mult"])
-            enemy_health -= damage
-            combat_log.append(f"You use {skill['name']} for {damage} damage!")
+            # Skills have lower miss chance (5%)
+            if random.random() < 0.05:
+                combat_log.append(f"Your {skill['name']} MISSED!")
+            else:
+                damage = int(player_stats["attack"] * skill["damage_mult"])
+                # Skills can also crit (10% chance)
+                if random.random() < 0.10:
+                    damage = int(damage * 2.0)
+                    combat_log.append(f"💥 CRITICAL {skill['name']}! You deal {damage} damage!")
+                else:
+                    combat_log.append(f"You use {skill['name']} for {damage} damage!")
+                enemy_health -= damage
         elif "heal_percent" in skill:
             heal = int(battle["player_max_health"] * skill["heal_percent"])
             player_health = min(battle["player_max_health"], player_health + heal)
@@ -1370,12 +1386,22 @@ async def battle_action(battle_id: str, action: BattleAction):
         return serialize_doc(await db.battles.find_one({"id": battle_id}))
     
     # Enemy turn
-    enemy_damage = max(1, enemy_stats.get("attack", 10) - player_stats["defense"] // 2)
-    if action.action == "defend":
-        enemy_damage = enemy_damage // 2
-    
-    player_health -= enemy_damage
-    combat_log.append(f"{battle['enemy_name']} attacks for {enemy_damage} damage!")
+    # Enemy miss chance: 12% base
+    if random.random() < 0.12:
+        combat_log.append(f"{battle['enemy_name']}'s attack MISSED!")
+    else:
+        enemy_damage = max(1, enemy_stats.get("attack", 10) - player_stats["defense"] // 2)
+        if action.action == "defend":
+            enemy_damage = enemy_damage // 2
+        
+        # Enemy crit chance: 8%
+        if random.random() < 0.08:
+            enemy_damage = int(enemy_damage * 2.0)
+            combat_log.append(f"💥 {battle['enemy_name']} lands a CRITICAL HIT for {enemy_damage} damage!")
+        else:
+            combat_log.append(f"{battle['enemy_name']} attacks for {enemy_damage} damage!")
+        
+        player_health -= enemy_damage
     
     # Check if player defeated
     if player_health <= 0:
