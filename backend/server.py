@@ -259,6 +259,132 @@ GUN_SHOP_ITEMS = {
 
 ALL_ITEMS.update(GUN_SHOP_ITEMS)
 
+# ============== 100 LEVEL-BASED WEAPONS ==============
+# Each weapon unlocks at its corresponding level (level 1-100)
+LEVEL_WEAPONS = {
+    # Level 1-10: Street Weapons
+    "broken_bottle": {"id": "broken_bottle", "name": "Broken Bottle", "description": "Shattered glass. Desperate but effective.", "equipment_type": "weapon", "rarity": "common", "stats_bonus": {"attack": 3}, "level_requirement": 1, "value": 15},
+    "lead_pipe": {"id": "lead_pipe", "name": "Lead Pipe", "description": "Heavy plumbing. Cracks skulls.", "equipment_type": "weapon", "rarity": "common", "stats_bonus": {"attack": 5}, "level_requirement": 2, "value": 25},
+    "pocket_knife": {"id": "pocket_knife", "name": "Pocket Knife", "description": "Small but sharp. Always handy.", "equipment_type": "weapon", "rarity": "common", "stats_bonus": {"attack": 6, "speed": 1}, "level_requirement": 3, "value": 35},
+    "crowbar": {"id": "crowbar", "name": "Crowbar", "description": "Versatile tool of destruction.", "equipment_type": "weapon", "rarity": "common", "stats_bonus": {"attack": 8}, "level_requirement": 4, "value": 45},
+    "tire_iron": {"id": "tire_iron", "name": "Tire Iron", "description": "Roadside weapon. Solid swing.", "equipment_type": "weapon", "rarity": "uncommon", "stats_bonus": {"attack": 10}, "level_requirement": 5, "value": 60},
+    "machete": {"id": "machete", "name": "Machete", "description": "Jungle blade. Cuts through anything.", "equipment_type": "weapon", "rarity": "uncommon", "stats_bonus": {"attack": 12, "speed": -1}, "level_requirement": 6, "value": 75},
+    "police_baton": {"id": "police_baton", "name": "Police Baton", "description": "Confiscated from a dirty cop.", "equipment_type": "weapon", "rarity": "uncommon", "stats_bonus": {"attack": 13, "defense": 2}, "level_requirement": 7, "value": 85},
+    "steel_chain": {"id": "steel_chain", "name": "Steel Chain", "description": "Heavy links. Wrap and swing.", "equipment_type": "weapon", "rarity": "uncommon", "stats_bonus": {"attack": 14, "speed": 2}, "level_requirement": 8, "value": 95},
+    "combat_knife": {"id": "combat_knife", "name": "Combat Knife", "description": "Military-grade blade. Silent killer.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 16, "speed": 3}, "level_requirement": 9, "value": 120},
+    "saturday_special": {"id": "saturday_special", "name": "Saturday Night Special", "description": "Cheap revolver. Gets the job done.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 18}, "level_requirement": 10, "value": 140},
+    
+    # Level 11-20: Street Upgraded
+    "sawed_off_shotgun": {"id": "sawed_off_shotgun", "name": "Sawed-Off Shotgun", "description": "Cut down for close quarters.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 20, "speed": -2}, "level_requirement": 11, "value": 160},
+    "colt_1911": {"id": "colt_1911", "name": "Colt 1911", "description": "Classic American steel. .45 ACP power.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 22, "luck": 2}, "level_requirement": 12, "value": 180},
+    "butterfly_knife": {"id": "butterfly_knife", "name": "Butterfly Knife", "description": "Flashy blade work. Style points.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 21, "speed": 5}, "level_requirement": 13, "value": 195},
+    "tec_9": {"id": "tec_9", "name": "TEC-9", "description": "Street sweeper. High capacity.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 24, "speed": 1}, "level_requirement": 14, "value": 210},
+    "magnum_357": {"id": "magnum_357", "name": ".357 Magnum", "description": "Dirty Harry's choice. Massive stopping power.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 26}, "level_requirement": 15, "value": 230},
+    "pump_shotgun": {"id": "pump_shotgun", "name": "Pump Shotgun", "description": "12 gauge devastation. Rack and roll.", "equipment_type": "weapon", "rarity": "rare", "stats_bonus": {"attack": 28, "speed": -3}, "level_requirement": 16, "value": 250},
+    "mac_10": {"id": "mac_10", "name": "MAC-10", "description": "Compact SMG. Spray the block.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 27, "speed": 4}, "level_requirement": 17, "value": 280},
+    "beretta_92": {"id": "beretta_92", "name": "Beretta 92", "description": "Italian precision. 15 rounds of accuracy.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 29, "speed": 2, "luck": 1}, "level_requirement": 18, "value": 300},
+    "katana": {"id": "katana", "name": "Katana", "description": "Japanese steel. Slice through enemies.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 31, "speed": 3}, "level_requirement": 19, "value": 330},
+    "mp5_navy": {"id": "mp5_navy", "name": "MP5 Navy", "description": "SEAL-approved SMG. Suppressed death.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 32, "speed": 3, "defense": 2}, "level_requirement": 20, "value": 360},
+    
+    # Level 21-30: Professional Grade
+    "ak47": {"id": "ak47", "name": "AK-47", "description": "Russian reliability. Never jams.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 35, "speed": -1}, "level_requirement": 21, "value": 400},
+    "m4a1": {"id": "m4a1", "name": "M4A1 Carbine", "description": "US military standard. Versatile and deadly.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 36, "speed": 2}, "level_requirement": 22, "value": 430},
+    "sig_sauer": {"id": "sig_sauer", "name": "SIG Sauer P226", "description": "Navy SEAL sidearm. Elite precision.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 34, "speed": 4, "luck": 3}, "level_requirement": 23, "value": 450},
+    "combat_axe": {"id": "combat_axe", "name": "Combat Axe", "description": "Viking warrior tool. Brutal cleaves.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 38, "defense": 3}, "level_requirement": 24, "value": 480},
+    "p90": {"id": "p90", "name": "P90", "description": "Belgian bullet hose. 50 rounds of fury.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 37, "speed": 5}, "level_requirement": 25, "value": 510},
+    "auto_shotgun": {"id": "auto_shotgun", "name": "Auto Shotgun", "description": "Semi-automatic devastation. Room clearer.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 40, "speed": -2}, "level_requirement": 26, "value": 550},
+    "g36c": {"id": "g36c", "name": "G36C", "description": "German engineering. Compact assault rifle.", "equipment_type": "weapon", "rarity": "epic", "stats_bonus": {"attack": 41, "speed": 3}, "level_requirement": 27, "value": 580},
+    "vector_smg": {"id": "vector_smg", "name": "KRISS Vector", "description": "Super V recoil system. Laser accurate.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 42, "speed": 6}, "level_requirement": 28, "value": 620},
+    "aug_a3": {"id": "aug_a3", "name": "AUG A3", "description": "Austrian bullpup. Futuristic firepower.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 44, "speed": 2, "luck": 2}, "level_requirement": 29, "value": 660},
+    "scar_h": {"id": "scar_h", "name": "SCAR-H", "description": "Special ops favorite. 7.62 NATO power.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 46, "speed": 1, "defense": 3}, "level_requirement": 30, "value": 700},
+    
+    # Level 31-40: Elite Weapons
+    "aa12": {"id": "aa12", "name": "AA-12", "description": "Full auto shotgun. Absolute chaos.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 48, "speed": -1}, "level_requirement": 31, "value": 750},
+    "famas": {"id": "famas", "name": "FAMAS", "description": "French bullpup. Burst fire excellence.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 49, "speed": 4}, "level_requirement": 32, "value": 790},
+    "fn_scar": {"id": "fn_scar", "name": "FN SCAR-L", "description": "Light and lethal. Operator's choice.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 50, "speed": 5, "luck": 3}, "level_requirement": 33, "value": 830},
+    "double_barrel": {"id": "double_barrel", "name": "Double Barrel Shotgun", "description": "Two shells of pure devastation.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 54, "speed": -4}, "level_requirement": 34, "value": 870},
+    "ump45": {"id": "ump45", "name": "UMP45", "description": ".45 ACP SMG. Subsonic silencer ready.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 51, "speed": 6}, "level_requirement": 35, "value": 910},
+    "dragunov": {"id": "dragunov", "name": "Dragunov SVD", "description": "Russian sniper. Long range death.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 56, "luck": 5}, "level_requirement": 36, "value": 960},
+    "galil": {"id": "galil", "name": "Galil ACE", "description": "Israeli assault rifle. Desert proven.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 55, "speed": 3, "defense": 4}, "level_requirement": 37, "value": 1000},
+    "m249": {"id": "m249", "name": "M249 SAW", "description": "Belt-fed suppression. 200 rounds.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 58, "defense": 5}, "level_requirement": 38, "value": 1050},
+    "mp7": {"id": "mp7", "name": "MP7", "description": "Armor piercing PDW. Compact killer.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 54, "speed": 8}, "level_requirement": 39, "value": 1100},
+    "hk416": {"id": "hk416", "name": "HK416", "description": "DEVGRU standard. Bin Laden killer.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 60, "speed": 4, "luck": 4}, "level_requirement": 40, "value": 1150},
+    
+    # Level 41-50: Military Spec
+    "m14_ebr": {"id": "m14_ebr", "name": "M14 EBR", "description": "Enhanced battle rifle. Semi-auto precision.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 62, "luck": 6}, "level_requirement": 41, "value": 1200},
+    "tavor": {"id": "tavor", "name": "Tavor TAR-21", "description": "Israeli bullpup. Urban warfare king.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 63, "speed": 5}, "level_requirement": 42, "value": 1260},
+    "mk18": {"id": "mk18", "name": "MK18 CQBR", "description": "Close quarters battle receiver. Compact AR.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 64, "speed": 6, "defense": 4}, "level_requirement": 43, "value": 1320},
+    "r700": {"id": "r700", "name": "Remington 700", "description": "Bolt action precision. One shot glory.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 70, "luck": 8}, "level_requirement": 44, "value": 1380},
+    "pkm": {"id": "pkm", "name": "PKM", "description": "Russian machine gun. Sustained firepower.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 68, "defense": 6}, "level_requirement": 45, "value": 1450},
+    "awp": {"id": "awp", "name": "AWP", "description": "Arctic Warfare Police. Legendary sniper.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 75, "luck": 10}, "level_requirement": 46, "value": 1520},
+    "acr": {"id": "acr", "name": "ACR", "description": "Adaptive Combat Rifle. No recoil king.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 70, "speed": 7}, "level_requirement": 47, "value": 1600},
+    "m60": {"id": "m60", "name": "M60", "description": "The Pig. Vietnam-era machine gun.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 72, "defense": 8}, "level_requirement": 48, "value": 1680},
+    "rpk": {"id": "rpk", "name": "RPK", "description": "Russian LMG. AK with a drum.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 71, "speed": 2, "defense": 7}, "level_requirement": 49, "value": 1760},
+    "mk14": {"id": "mk14", "name": "MK14 EBR-RI", "description": "Enhanced battle rifle. Semi-auto beast.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 76, "speed": 4, "luck": 6}, "level_requirement": 50, "value": 1850},
+    
+    # Level 51-60: Advanced Military
+    "mg42": {"id": "mg42", "name": "MG42", "description": "Hitler's Buzzsaw. 1200 RPM.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 78, "defense": 9}, "level_requirement": 51, "value": 1950},
+    "barrett_m82": {"id": "barrett_m82", "name": "Barrett M82", "description": ".50 BMG anti-material. Vehicle killer.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 85, "luck": 12}, "level_requirement": 52, "value": 2050},
+    "fn_minimi": {"id": "fn_minimi", "name": "FN Minimi", "description": "Belgian LMG. NATO standard.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 80, "defense": 10}, "level_requirement": 53, "value": 2150},
+    "groza": {"id": "groza", "name": "OTs-14 Groza", "description": "Russian bullpup. Spetsnaz special.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 81, "speed": 6, "luck": 5}, "level_requirement": 54, "value": 2260},
+    "vssk": {"id": "vssk", "name": "VSSK Vykhlop", "description": "Russian silenced sniper. Ghost rifle.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 84, "speed": 8, "luck": 7}, "level_requirement": 55, "value": 2370},
+    "negev": {"id": "negev", "name": "IWI Negev", "description": "Israeli LMG. Desert storm proven.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 83, "defense": 11}, "level_requirement": 56, "value": 2480},
+    "m110": {"id": "m110", "name": "M110 SASS", "description": "Semi-auto sniper system. Precision.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 86, "luck": 14}, "level_requirement": 57, "value": 2600},
+    "as_val": {"id": "as_val", "name": "AS Val", "description": "Russian integrated suppressor. Silent killer.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 82, "speed": 10}, "level_requirement": 58, "value": 2720},
+    "qbu_88": {"id": "qbu_88", "name": "QBU-88", "description": "Chinese bullpup DMR. Precision rifle.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 87, "luck": 10, "speed": 4}, "level_requirement": 59, "value": 2850},
+    "mg3": {"id": "mg3", "name": "MG3", "description": "German GPMG. 1000 RPM of fury.", "equipment_type": "weapon", "rarity": "legendary", "stats_bonus": {"attack": 88, "defense": 12}, "level_requirement": 60, "value": 2980},
+    
+    # Level 61-70: Experimental Weapons
+    "xm8": {"id": "xm8", "name": "XM8", "description": "Cancelled prototype. Rare find.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 90, "speed": 8, "luck": 8}, "level_requirement": 61, "value": 3120},
+    "an94": {"id": "an94", "name": "AN-94", "description": "Russian hyperburst. Two shots one hole.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 92, "speed": 6, "luck": 10}, "level_requirement": 62, "value": 3270},
+    "chainsaw": {"id": "chainsaw", "name": "Combat Chainsaw", "description": "Modified for warfare. Brutal.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 95, "defense": 8}, "level_requirement": 63, "value": 3420},
+    "minigun": {"id": "minigun", "name": "M134 Minigun", "description": "6000 RPM. Predator approved.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 100, "speed": -10, "defense": 15}, "level_requirement": 64, "value": 3580},
+    "railgun_proto": {"id": "railgun_proto", "name": "Railgun Prototype", "description": "Electromagnetic accelerator. Experimental.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 105, "luck": 15}, "level_requirement": 65, "value": 3750},
+    "oicw": {"id": "oicw", "name": "XM29 OICW", "description": "Objective Individual Combat Weapon. Future soldier.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 98, "speed": 5, "luck": 12, "defense": 5}, "level_requirement": 66, "value": 3920},
+    "cheytac": {"id": "cheytac", "name": "CheyTac M200", "description": "Intervention. 2000+ meter kills.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 110, "luck": 18}, "level_requirement": 67, "value": 4100},
+    "corner_shot": {"id": "corner_shot", "name": "CornerShot", "description": "Shoot around corners. Tactical innovation.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 94, "speed": 12, "defense": 10}, "level_requirement": 68, "value": 4280},
+    "metal_storm": {"id": "metal_storm", "name": "Metal Storm", "description": "Electronic firing. 1 million RPM capable.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 115, "speed": -5}, "level_requirement": 69, "value": 4470},
+    "xm25": {"id": "xm25", "name": "XM25 CDTE", "description": "Airburst grenade launcher. Smart munitions.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 108, "luck": 15, "defense": 8}, "level_requirement": 70, "value": 4660},
+    
+    # Level 71-80: Black Ops Grade
+    "psg1": {"id": "psg1", "name": "PSG1", "description": "German precision sniper. Zero tolerance.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 112, "luck": 20}, "level_requirement": 71, "value": 4860},
+    "dsr50": {"id": "dsr50", "name": "DSR-50", "description": ".50 BMG bullpup sniper. Compact destruction.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 118, "luck": 18, "speed": 2}, "level_requirement": 72, "value": 5070},
+    "ksg": {"id": "ksg", "name": "Kel-Tec KSG", "description": "Dual tube bullpup shotgun. 14 shells.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 105, "speed": 8, "defense": 12}, "level_requirement": 73, "value": 5280},
+    "kriss_super_v": {"id": "kriss_super_v", "name": "KRISS Super V", "description": "Zero recoil system. Perfect accuracy.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 108, "speed": 15}, "level_requirement": 74, "value": 5500},
+    "m32_mgl": {"id": "m32_mgl", "name": "M32 MGL", "description": "6-shot grenade launcher. Area denial.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 120, "defense": 10}, "level_requirement": 75, "value": 5720},
+    "ots_03": {"id": "ots_03", "name": "OTs-03 SVU", "description": "Bullpup Dragunov. Compact sniper.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 115, "speed": 10, "luck": 15}, "level_requirement": 76, "value": 5950},
+    "rpg7": {"id": "rpg7", "name": "RPG-7", "description": "Soviet rocket launcher. Anti-everything.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 130, "speed": -8}, "level_requirement": 77, "value": 6180},
+    "at4": {"id": "at4", "name": "AT4", "description": "Disposable anti-tank. One and done.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 135, "luck": 10}, "level_requirement": 78, "value": 6420},
+    "carl_gustav": {"id": "carl_gustav", "name": "Carl Gustaf M4", "description": "Recoilless rifle. Swedish steel.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 140, "defense": 12}, "level_requirement": 79, "value": 6660},
+    "javelin": {"id": "javelin", "name": "FGM-148 Javelin", "description": "Fire and forget. Tank nightmare.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 145, "luck": 20}, "level_requirement": 80, "value": 6910},
+    
+    # Level 81-90: Elite Experimental
+    "plasma_cutter": {"id": "plasma_cutter", "name": "Plasma Cutter", "description": "Industrial tool weaponized. Melts armor.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 148, "speed": 5, "luck": 15}, "level_requirement": 81, "value": 7160},
+    "gauss_rifle": {"id": "gauss_rifle", "name": "Gauss Rifle", "description": "Magnetic acceleration. Hypersonic rounds.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 152, "luck": 22}, "level_requirement": 82, "value": 7420},
+    "laser_designator": {"id": "laser_designator", "name": "Laser Designator", "description": "Orbital strike coordinator. Call the thunder.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 155, "luck": 25}, "level_requirement": 83, "value": 7680},
+    "pulse_rifle": {"id": "pulse_rifle", "name": "Pulse Rifle", "description": "Energy weapon prototype. Unlimited ammo.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 150, "speed": 12, "defense": 10}, "level_requirement": 84, "value": 7950},
+    "sonic_cannon": {"id": "sonic_cannon", "name": "Sonic Cannon", "description": "Sound-based weapon. Internal damage.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 158, "speed": 8}, "level_requirement": 85, "value": 8220},
+    "cryo_gun": {"id": "cryo_gun", "name": "Cryo Gun", "description": "Freezing spray. Slow and shatter.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 155, "speed": 15, "luck": 18}, "level_requirement": 86, "value": 8500},
+    "microwave_emitter": {"id": "microwave_emitter", "name": "Microwave Emitter", "description": "Active denial weapon. Cooks from inside.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 162, "defense": 15}, "level_requirement": 87, "value": 8780},
+    "emp_cannon": {"id": "emp_cannon", "name": "EMP Cannon", "description": "Electromagnetic pulse. Disables everything.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 165, "luck": 20, "speed": 5}, "level_requirement": 88, "value": 9070},
+    "fusion_lance": {"id": "fusion_lance", "name": "Fusion Lance", "description": "Focused energy beam. Cuts through steel.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 170, "speed": 10}, "level_requirement": 89, "value": 9360},
+    "antimatter_pistol": {"id": "antimatter_pistol", "name": "Antimatter Pistol", "description": "Annihilation rounds. Pure destruction.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 175, "luck": 25}, "level_requirement": 90, "value": 9660},
+    
+    # Level 91-100: Legendary Arsenal
+    "death_ray": {"id": "death_ray", "name": "Death Ray", "description": "Concentrated doom. One shot delete.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 180, "luck": 28}, "level_requirement": 91, "value": 9970},
+    "gravity_hammer": {"id": "gravity_hammer", "name": "Gravity Hammer", "description": "Manipulates mass. Crushing blows.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 185, "defense": 20}, "level_requirement": 92, "value": 10280},
+    "void_blade": {"id": "void_blade", "name": "Void Blade", "description": "Cuts through dimensions. Reality warper.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 188, "speed": 15, "luck": 20}, "level_requirement": 93, "value": 10600},
+    "quantum_rifle": {"id": "quantum_rifle", "name": "Quantum Rifle", "description": "Shoots in multiple realities. Never misses.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 192, "luck": 35}, "level_requirement": 94, "value": 10920},
+    "singularity_gun": {"id": "singularity_gun", "name": "Singularity Gun", "description": "Creates micro black holes. Ultimate gravity.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 195, "defense": 18, "luck": 25}, "level_requirement": 95, "value": 11250},
+    "nova_cannon": {"id": "nova_cannon", "name": "Nova Cannon", "description": "Stellar explosion in your hands. Supernova.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 200, "speed": -5, "luck": 30}, "level_requirement": 96, "value": 11580},
+    "reality_shredder": {"id": "reality_shredder", "name": "Reality Shredder", "description": "Tears the fabric of space. Unstoppable.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 205, "speed": 12, "defense": 15}, "level_requirement": 97, "value": 11920},
+    "omega_blade": {"id": "omega_blade", "name": "Omega Blade", "description": "The end of all things. Final strike.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 210, "luck": 40}, "level_requirement": 98, "value": 12260},
+    "godslayer": {"id": "godslayer", "name": "Godslayer", "description": "Weapon of legend. Kills anything.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 220, "speed": 15, "luck": 35, "defense": 20}, "level_requirement": 99, "value": 12610},
+    "infinity_gauntlet": {"id": "infinity_gauntlet", "name": "Infinity Gauntlet", "description": "Ultimate power. Snap and win.", "equipment_type": "weapon", "rarity": "mythic", "stats_bonus": {"attack": 250, "speed": 20, "luck": 50, "defense": 25}, "level_requirement": 100, "value": 15000},
+}
+
+ALL_ITEMS.update(LEVEL_WEAPONS)
+
 # ============== CONSUMABLE SHOP ITEMS ==============
 CONSUMABLE_ITEMS = {
     # --- Health Recharges ---
