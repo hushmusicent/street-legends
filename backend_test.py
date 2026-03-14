@@ -3,250 +3,240 @@
 import requests
 import json
 import sys
-from typing import Dict, List
-from collections import Counter
+import time
+import random
 
-# Use the backend URL from frontend .env
-BASE_URL = "https://heist-map-game.preview.emergentagent.com/api"
+# Backend URL from environment
+BACKEND_URL = "https://heist-map-game.preview.emergentagent.com/api"
 
-def test_exact_5_enemies_new_area():
-    """Test that exactly 5 enemies spawn in a new area"""
-    print("=== TEST 1: Exactly 5 enemies spawn in new area ===")
+def test_enemy_level_cap():
+    """Test that enemies never spawn at a level higher than the player's level"""
     
-    # Use unique coordinates that haven't been used before
-    url = f"{BASE_URL}/monsters/spawn"
-    params = {
-        "latitude": 41.123,
-        "longitude": -74.567,
-        "player_level": 25
-    }
+    print("🎯 TESTING ENEMY LEVEL CAP - No enemies should spawn above player level")
+    print("=" * 80)
     
-    try:
-        response = requests.get(url, params=params)
-        print(f"Request: GET {url} with params {params}")
-        print(f"Response Status: {response.status_code}")
+    # Test coordinates (Times Square NYC)
+    test_lat = 40.758
+    test_lng = -73.9855
+    
+    # Test different player levels as requested
+    test_levels = [1, 5, 10, 15]
+    
+    all_tests_passed = True
+    total_violations = 0
+    total_monsters = 0
+    
+    for player_level in test_levels:
+        print(f"\n🔍 Testing Player Level {player_level}")
+        print("-" * 40)
         
-        if response.status_code != 200:
-            print(f"❌ FAILED: Expected status 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            return False
+        # Test with multiple spawn calls to ensure consistency 
+        level_violations = []
+        level_monsters = []
         
-        data = response.json()
-        enemy_count = len(data)
-        
-        print(f"Number of enemies returned: {enemy_count}")
-        
-        if enemy_count == 5:
-            print("✅ PASSED: Exactly 5 enemies spawned in new area")
+        for test_run in range(3):  # Run 3 times per level to get more data
+            print(f"  Test Run {test_run + 1}/3:", end=" ")
             
-            # Show enemy details
-            print("\nSpawned enemies:")
-            for i, enemy in enumerate(data, 1):
-                print(f"  {i}. {enemy.get('name', 'Unknown')} (Level {enemy.get('level', 'Unknown')})")
-            
-            return True
-        else:
-            print(f"❌ FAILED: Expected exactly 5 enemies, got {enemy_count}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ ERROR: {str(e)}")
-        return False
-
-def test_level_distribution_high_level_player():
-    """Test that lower level enemies spawn more frequently for high-level player"""
-    print("\n=== TEST 2: Level distribution for high-level player (3 attempts) ===")
-    
-    test_coordinates = [
-        (41.456, -74.789),
-        (41.457, -74.790), 
-        (41.458, -74.791)
-    ]
-    
-    all_enemies = []
-    success_count = 0
-    
-    for i, (lat, lon) in enumerate(test_coordinates, 1):
-        print(f"\nAttempt {i}: Testing at coordinates ({lat}, {lon})")
-        
-        url = f"{BASE_URL}/monsters/spawn"
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "player_level": 50  # High level player with access to Tiers 1-5
-        }
-        
-        try:
-            response = requests.get(url, params=params)
-            print(f"Request: GET {url} with params {params}")
-            print(f"Response Status: {response.status_code}")
-            
-            if response.status_code != 200:
-                print(f"❌ FAILED: Expected status 200, got {response.status_code}")
+            try:
+                # Call spawn endpoint
+                response = requests.get(
+                    f"{BACKEND_URL}/monsters/spawn",
+                    params={
+                        "latitude": test_lat + (test_run * 0.001),  # Slightly offset each test
+                        "longitude": test_lng + (test_run * 0.001),
+                        "player_level": player_level
+                    },
+                    timeout=10
+                )
+                
+                if response.status_code != 200:
+                    print(f"❌ HTTP {response.status_code}")
+                    print(f"    Response: {response.text[:200]}")
+                    all_tests_passed = False
+                    continue
+                
+                monsters = response.json()
+                if not isinstance(monsters, list):
+                    print(f"❌ Invalid response format (expected list, got {type(monsters)})")
+                    all_tests_passed = False
+                    continue
+                
+                print(f"✅ Spawned {len(monsters)} monsters")
+                
+                # Check each monster's level
+                test_violations = []
+                for i, monster in enumerate(monsters):
+                    monster_level = monster.get("level", 0)
+                    monster_name = monster.get("name", "Unknown")
+                    
+                    level_monsters.append({
+                        "name": monster_name,
+                        "level": monster_level,
+                        "run": test_run + 1
+                    })
+                    
+                    if monster_level > player_level:
+                        violation = f"Monster '{monster_name}' level {monster_level} > player level {player_level}"
+                        test_violations.append(violation)
+                        print(f"    ❌ VIOLATION: {violation}")
+                
+                if test_violations:
+                    level_violations.extend(test_violations)
+                else:
+                    max_monster_level = max([m.get("level", 0) for m in monsters]) if monsters else 0
+                    print(f"    ✅ All monsters <= level {player_level} (max found: {max_monster_level})")
+                    
+            except requests.RequestException as e:
+                print(f"❌ Request failed: {e}")
+                all_tests_passed = False
                 continue
-            
-            data = response.json()
-            enemy_count = len(data)
-            
-            if enemy_count != 5:
-                print(f"❌ FAILED: Expected 5 enemies, got {enemy_count}")
+            except Exception as e:
+                print(f"❌ Unexpected error: {e}")
+                all_tests_passed = False
                 continue
-                
-            print(f"✅ Got exactly 5 enemies")
-            success_count += 1
-            
-            # Analyze tier distribution
-            tier_1_enemies = ["Thug", "Gangster", "Criminal", "Villain", "Bandit"]
-            tier_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-            
-            print("Spawned enemies:")
-            for enemy in data:
-                enemy_name = enemy.get('name', 'Unknown')
-                enemy_level = enemy.get('level', 'Unknown')
-                print(f"  - {enemy_name} (Level {enemy_level})")
-                
-                # Determine tier based on enemy name
-                if enemy_name in tier_1_enemies:
-                    tier_counts[1] += 1
-                elif enemy_name in ["Assassin", "Thief", "Hoodlum", "Pirate", "Bully"]:
-                    tier_counts[2] += 1
-                elif enemy_name in ["Offender", "Hood", "Mobster", "Gangsta", "Hooligan"]:
-                    tier_counts[3] += 1
-                elif enemy_name in ["Goon", "Ruffian", "Gang Banger", "Tough Guy", "Gorilla"]:
-                    tier_counts[4] += 1
-                elif enemy_name in ["Punk", "Rough Neck", "Rowdy Person", "Yardie", "Perpetrator"]:
-                    tier_counts[5] += 1
-                
-                all_enemies.append({
-                    'name': enemy_name,
-                    'level': enemy_level,
-                    'attempt': i
-                })
-            
-            print(f"Tier distribution for attempt {i}:")
-            for tier, count in tier_counts.items():
-                print(f"  Tier {tier}: {count} enemies")
-                
-            # Check if lower tiers are more common
-            if tier_counts[1] >= tier_counts[2] and tier_counts[1] >= tier_counts[3]:
-                print("✅ Lower tier enemies (Tier 1) appear most frequently")
-            else:
-                print("⚠️  Lower tier enemies not most frequent")
-                
-        except Exception as e:
-            print(f"❌ ERROR in attempt {i}: {str(e)}")
-    
-    print(f"\n=== SUMMARY: High-level player test ===")
-    print(f"Successful attempts: {success_count}/3")
-    
-    if all_enemies:
-        enemy_name_counts = Counter([e['name'] for e in all_enemies])
-        print("\nOverall enemy name distribution:")
-        for name, count in enemy_name_counts.most_common():
-            print(f"  {name}: {count}")
-    
-    return success_count >= 2  # At least 2 out of 3 attempts should succeed
-
-def test_level_1_player():
-    """Test that level 1 player gets exactly 5 Tier 1 enemies only"""
-    print("\n=== TEST 3: Level 1 player gets only Tier 1 enemies ===")
-    
-    url = f"{BASE_URL}/monsters/spawn"
-    params = {
-        "latitude": 42.111,
-        "longitude": -75.222,
-        "player_level": 1
-    }
-    
-    try:
-        response = requests.get(url, params=params)
-        print(f"Request: GET {url} with params {params}")
-        print(f"Response Status: {response.status_code}")
         
-        if response.status_code != 200:
-            print(f"❌ FAILED: Expected status 200, got {response.status_code}")
-            print(f"Response: {response.text}")
-            return False
+        # Summary for this player level
+        total_monsters += len(level_monsters)
+        total_violations += len(level_violations)
         
-        data = response.json()
-        enemy_count = len(data)
+        print(f"\n  📊 Level {player_level} Summary:")
+        print(f"    Total monsters spawned: {len(level_monsters)}")
+        print(f"    Level violations: {len(level_violations)}")
         
-        print(f"Number of enemies returned: {enemy_count}")
-        
-        if enemy_count != 5:
-            print(f"❌ FAILED: Expected exactly 5 enemies, got {enemy_count}")
-            return False
-        
-        print("✅ PASSED: Exactly 5 enemies spawned")
-        
-        # Check that all enemies are Tier 1
-        tier_1_enemies = ["Thug", "Gangster", "Criminal", "Villain", "Bandit"]
-        all_tier_1 = True
-        
-        print("\nSpawned enemies:")
-        for i, enemy in enumerate(data, 1):
-            enemy_name = enemy.get('name', 'Unknown')
-            enemy_level = enemy.get('level', 'Unknown')
-            print(f"  {i}. {enemy_name} (Level {enemy_level})")
-            
-            if enemy_name not in tier_1_enemies:
-                all_tier_1 = False
-                print(f"    ❌ ERROR: {enemy_name} is not a Tier 1 enemy!")
-        
-        if all_tier_1:
-            print("✅ PASSED: All enemies are Tier 1 (Thug, Bandit, Villain, Criminal, Gangster)")
-            return True
+        if level_violations:
+            print(f"    ❌ CRITICAL FAILURES:")
+            for violation in level_violations:
+                print(f"      - {violation}")
+            all_tests_passed = False
         else:
-            print("❌ FAILED: Some enemies are not Tier 1")
-            return False
+            print(f"    ✅ ALL MONSTERS PROPERLY CAPPED")
+        
+        # Show monster distribution for this level
+        if level_monsters:
+            level_distribution = {}
+            for monster in level_monsters:
+                level = monster["level"]
+                level_distribution[level] = level_distribution.get(level, 0) + 1
             
-    except Exception as e:
-        print(f"❌ ERROR: {str(e)}")
-        return False
-
-def run_enemy_spawning_tests():
-    """Run all enemy spawning tests"""
-    print("🎯 ENEMY SPAWNING SYSTEM TESTING")
-    print("=" * 50)
+            print(f"    📈 Level Distribution: {dict(sorted(level_distribution.items()))}")
+            
+            # Show monster name variety
+            names = set(monster["name"] for monster in level_monsters)
+            print(f"    🎭 Enemy Types: {sorted(names)}")
     
-    results = []
+    print("\n" + "=" * 80)
+    print("🎯 FINAL ENEMY LEVEL CAP TEST RESULTS")
+    print("=" * 80)
+    print(f"Total monsters tested: {total_monsters}")
+    print(f"Total level violations: {total_violations}")
     
-    # Test 1: Exactly 5 enemies in new area
-    results.append(test_exact_5_enemies_new_area())
-    
-    # Test 2: Level distribution for high-level player
-    results.append(test_level_distribution_high_level_player())
-    
-    # Test 3: Level 1 player gets only Tier 1 enemies
-    results.append(test_level_1_player())
-    
-    # Final summary
-    print("\n" + "=" * 50)
-    print("🏆 FINAL TEST RESULTS")
-    print("=" * 50)
-    
-    passed = sum(results)
-    total = len(results)
-    
-    test_names = [
-        "Exactly 5 enemies spawn in new area",
-        "Lower level enemies more frequent (high-level player)",
-        "Level 1 player gets only Tier 1 enemies"
-    ]
-    
-    for i, (result, name) in enumerate(zip(results, test_names)):
-        status = "✅ PASSED" if result else "❌ FAILED"
-        print(f"{i+1}. {name}: {status}")
-    
-    print(f"\nOverall: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 ALL TESTS PASSED - Enemy spawning system working correctly!")
+    if all_tests_passed and total_violations == 0:
+        print("✅ ALL TESTS PASSED - Enemy level cap working correctly!")
+        print("✅ NO enemies spawned above player level across all test scenarios")
         return True
     else:
-        print(f"⚠️  {total - passed} test(s) failed - Enemy spawning system needs fixes")
+        print("❌ TEST FAILURES DETECTED")
+        print(f"❌ Found {total_violations} enemies spawning above player level")
+        print("❌ Enemy level cap logic has CRITICAL ISSUES")
         return False
 
+def test_edge_cases():
+    """Test edge cases for enemy level capping"""
+    
+    print("\n🔬 TESTING EDGE CASES")
+    print("=" * 80)
+    
+    edge_cases = [
+        {"level": 1, "description": "Minimum level player"},
+        {"level": 11, "description": "Boss unlock threshold"}, 
+        {"level": 21, "description": "Tier 2 boss threshold"},
+        {"level": 50, "description": "Mid-tier player"},
+        {"level": 100, "description": "Maximum level player"}
+    ]
+    
+    test_lat = 40.7589  # Slightly different coordinates for edge cases
+    test_lng = -73.9851
+    
+    all_edge_tests_passed = True
+    
+    for case in edge_cases:
+        player_level = case["level"]
+        description = case["description"]
+        
+        print(f"\n🧪 Edge Case: {description} (Level {player_level})")
+        
+        try:
+            response = requests.get(
+                f"{BACKEND_URL}/monsters/spawn",
+                params={
+                    "latitude": test_lat,
+                    "longitude": test_lng,
+                    "player_level": player_level
+                },
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                print(f"❌ HTTP {response.status_code}: {response.text[:200]}")
+                all_edge_tests_passed = False
+                continue
+            
+            monsters = response.json()
+            if not monsters:
+                print("⚠️  No monsters spawned (this can happen in edge cases)")
+                continue
+            
+            violations = []
+            max_level = 0
+            
+            for monster in monsters:
+                monster_level = monster.get("level", 0)
+                monster_name = monster.get("name", "Unknown")
+                max_level = max(max_level, monster_level)
+                
+                if monster_level > player_level:
+                    violations.append(f"{monster_name} (Level {monster_level})")
+            
+            if violations:
+                print(f"❌ VIOLATIONS found: {', '.join(violations)}")
+                all_edge_tests_passed = False
+            else:
+                print(f"✅ All monsters properly capped (max level found: {max_level})")
+                
+        except Exception as e:
+            print(f"❌ Test failed: {e}")
+            all_edge_tests_passed = False
+    
+    return all_edge_tests_passed
+
+def main():
+    """Run all enemy level cap tests"""
+    
+    print("🚀 ENEMY LEVEL CAP TESTING SUITE")
+    print("Testing that enemies never spawn at levels higher than player level")
+    print("Backend URL:", BACKEND_URL)
+    print("=" * 80)
+    
+    # Run main test suite
+    main_tests_passed = test_enemy_level_cap()
+    
+    # Run edge case tests
+    edge_tests_passed = test_edge_cases()
+    
+    # Final result
+    print("\n" + "🏁 OVERALL TEST RESULTS" + " " * 50)
+    print("=" * 80)
+    
+    if main_tests_passed and edge_tests_passed:
+        print("🎉 ALL ENEMY LEVEL CAP TESTS PASSED!")
+        print("✅ Enemy spawning logic correctly caps levels at player level")
+        print("✅ System is working as specified in review request")
+        sys.exit(0)
+    else:
+        print("💥 ENEMY LEVEL CAP TESTS FAILED!")
+        print("❌ Critical issues found with enemy level capping logic")
+        print("❌ Some enemies are spawning above player level")
+        sys.exit(1)
+
 if __name__ == "__main__":
-    success = run_enemy_spawning_tests()
-    sys.exit(0 if success else 1)
+    main()
