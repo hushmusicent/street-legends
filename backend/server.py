@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import math
 from passlib.context import CryptContext
@@ -1589,7 +1589,7 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
                     "reputation": int(3 * reward_mult)
                 },
                 time_limit_minutes=60,
-                expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 2)
+                expires_at=datetime.utcnow() + timedelta(hours=4)
             )
             
             mission_dict = mission.dict()
@@ -1630,7 +1630,7 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
                     "reputation": int(5 * reward_mult)
                 },
                 time_limit_minutes=60,
-                expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 2)
+                expires_at=datetime.utcnow() + timedelta(hours=4)
             )
             
             mission_dict = mission.dict()
