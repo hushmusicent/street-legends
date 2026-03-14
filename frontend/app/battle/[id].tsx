@@ -68,7 +68,7 @@ export default function BattleScreen() {
     if (!id || !playerId || actionLoading) return;
     setActionLoading(true);
     try {
-      const result = await battleAction(id, playerId, action, skillId);
+      const result = await battleAction(id, action, skillId);
       setBattle(result);
       setCurrentBattle(result);
 
