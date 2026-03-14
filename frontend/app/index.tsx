@@ -110,8 +110,8 @@ export default function Index() {
       <OptionsModal
         visible={showOptions}
         onClose={() => setShowOptions(false)}
-        onToggleMute={toggleMute}
-        isMuted={isMuted}
+        onToggleMute={() => {}}
+        isMuted={false}
         showQuit={false}
       />
     </View>
