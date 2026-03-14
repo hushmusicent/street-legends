@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useGameStore } from '../../stores/gameStore';
@@ -106,6 +107,13 @@ export default function CharacterScreen() {
   useEffect(() => {
     if (playerId) loadAllData();
   }, [playerId]);
+
+  // Refresh data when screen comes into focus (important after capturing territories)
+  useFocusEffect(
+    useCallback(() => {
+      if (playerId) loadAllData();
+    }, [playerId])
+  );
 
   // Refresh data when switching tabs
   useEffect(() => {
