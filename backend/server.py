@@ -1012,46 +1012,67 @@ async def get_leaderboard(limit: int = 20):
 # ============== MONSTER ENDPOINTS ==============
 @api_router.get("/monsters/spawn")
 async def spawn_monsters(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn monsters near a location - 1 new enemy every 5 minutes, max 10 per area"""
-    position = Position(latitude=latitude, longitude=longitude)
+    """Spawn monsters tied to the territory grid. 5 enemies per new territory cell, 1 more every 5 minutes (max 10)."""
+    import math
+    
+    LAT_M = 111000.0
+    LNG_M = math.cos(math.radians(latitude)) * 111000.0
+    cell_lat = TERRITORY_CELL_SIZE_M / LAT_M
+    cell_lng = TERRITORY_CELL_SIZE_M / LNG_M
+    
+    # Find which territory cell the player is in
+    player_row = int(latitude / cell_lat)
+    player_col = int(longitude / cell_lng)
+    if longitude < 0:
+        player_col -= 1
+    
+    cell_id = f"spawn_{player_row}_{player_col}"
     
     # Clean up expired monsters
     await db.monsters.delete_many({"expires_at": {"$lt": datetime.utcnow()}})
     
-    # Check existing monsters nearby (within 500m)
-    existing = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(100)
-    nearby = [m for m in existing if calculate_distance(position, Position(**m["position"])) < 500]
-    nearby_count = len(nearby)
+    # Get existing monsters in this cell + neighboring cells (3x3 grid around player)
+    cell_ids = []
+    for dr in range(-1, 2):
+        for dc in range(-1, 2):
+            cell_ids.append(f"spawn_{player_row + dr}_{player_col + dc}")
     
-    # Max 10 per area
-    if nearby_count >= 10:
-        # Already at max, return existing
-        all_monsters = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(50)
-        return [serialize_doc(m) for m in all_monsters if calculate_distance(position, Position(**m["position"])) < 500]
+    existing = await db.monsters.find({
+        "cell_id": {"$in": cell_ids},
+        "expires_at": {"$gt": datetime.utcnow()}
+    }).to_list(100)
     
-    # Determine how many to spawn
+    # Monsters in the CURRENT cell
+    current_cell_monsters = [m for m in existing if m.get("cell_id") == cell_id]
+    nearby_count = len(current_cell_monsters)
+    
+    # Determine how many to spawn in current cell
     spawn_count = 0
     if nearby_count == 0:
-        # New area — always spawn exactly 5 enemies
+        # New territory cell — spawn exactly 5 enemies
         spawn_count = 5
     elif nearby_count < 10:
-        # Existing area — spawn 1 every 5 minutes
-        most_recent = max(nearby, key=lambda m: m.get("spawn_time", datetime.min))
+        # Existing cell — spawn 1 every 5 minutes
+        most_recent = max(current_cell_monsters, key=lambda m: m.get("spawn_time", datetime.min))
         last_spawn_time = most_recent.get("spawn_time", datetime.min)
         if isinstance(last_spawn_time, str):
             last_spawn_time = datetime.fromisoformat(last_spawn_time)
         elapsed = (datetime.utcnow() - last_spawn_time).total_seconds()
-        if elapsed >= 300:  # 5 minutes
+        if elapsed >= 300:
             spawn_count = 1
     
-    # Cap so we don't exceed 10
     spawn_count = min(spawn_count, 10 - nearby_count)
     
-    spawned = []
+    # Spawn new monsters within this territory cell's bounds
     if spawn_count > 0:
         weighted_enemies = get_eligible_enemies(player_level)
         if not weighted_enemies:
             weighted_enemies = [(ENEMY_TIERS[0], 1)]
+        
+        cell_center_lat = (player_row + 0.5) * cell_lat
+        cell_center_lng = (player_col + 0.5) * cell_lng
+        half_cell_lat = cell_lat / 2
+        half_cell_lng = cell_lng / 2
         
         for _ in range(spawn_count):
             enemies, weights = zip(*weighted_enemies)
@@ -1059,11 +1080,11 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
             
             monster_level = random.randint(template["level_min"], template["level_max"])
             
-            offset_lat = random.uniform(-0.003, 0.003)
-            offset_lon = random.uniform(-0.003, 0.003)
+            # Offset within territory cell bounds
+            offset_lat = random.uniform(-half_cell_lat * 0.8, half_cell_lat * 0.8)
+            offset_lon = random.uniform(-half_cell_lng * 0.8, half_cell_lng * 0.8)
             
             enemy_stats = calculate_enemy_stats(monster_level, template["is_boss"])
-            
             enemy_type = "boss" if template["is_boss"] else "humanoid"
             description = await generate_ai_content("monster", {
                 "name": template["name"],
@@ -1077,23 +1098,23 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
                 monster_type=enemy_type,
                 level=monster_level,
                 stats=enemy_stats,
-                position=Position(latitude=latitude + offset_lat, longitude=longitude + offset_lon),
+                position=Position(latitude=cell_center_lat + offset_lat, longitude=cell_center_lng + offset_lon),
                 loot_cash=monster_level * random.randint(10, 25) * (3 if template["is_boss"] else 1),
                 loot_xp=monster_level * random.randint(15, 30) * (3 if template["is_boss"] else 1),
                 expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 1)
             )
             
-            await db.monsters.insert_one(monster.dict())
-            spawned.append(monster)
+            monster_dict = monster.dict()
+            monster_dict["cell_id"] = cell_id
+            await db.monsters.insert_one(monster_dict)
     
-    # Return all nearby monsters
-    all_monsters = await db.monsters.find({"expires_at": {"$gt": datetime.utcnow()}}).to_list(50)
-    nearby_monsters = [
-        serialize_doc(m) for m in all_monsters 
-        if calculate_distance(position, Position(**m["position"])) < 500
-    ]
+    # Return all monsters in current + neighboring cells (visible area)
+    all_nearby = await db.monsters.find({
+        "cell_id": {"$in": cell_ids},
+        "expires_at": {"$gt": datetime.utcnow()}
+    }).to_list(100)
     
-    return nearby_monsters
+    return [serialize_doc(m) for m in all_nearby]
 
 @api_router.get("/monsters/{monster_id}")
 async def get_monster(monster_id: str):
