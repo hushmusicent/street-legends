@@ -8,6 +8,7 @@ import {
   Alert,
   Platform,
   Share,
+  Clipboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,21 +27,41 @@ interface OptionsModalProps {
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
   const { clearPlayer } = useGameStore();
 
+  const shareMessage = '🎮 Check out Street Legends - A GTA-style GPS RPG game! Fight enemies, capture territories, and build your criminal empire in real life locations! Download now: https://heist-map-game.preview.emergentagent.com';
+
   const handleShare = async () => {
     try {
-      const result = await Share.share({
-        message: '🎮 Check out Street Empire - A GTA-style GPS RPG game! Fight enemies, capture territories, and build your criminal empire in real life locations! Download now: https://street-empire.app',
-        title: 'Street Empire - GPS RPG Game',
-      });
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          console.log('Shared with activity type:', result.activityType);
+      // For web, try Web Share API first, then fallback to clipboard
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && navigator.share) {
+          await navigator.share({
+            title: 'Street Legends - GPS RPG Game',
+            text: shareMessage,
+            url: 'https://heist-map-game.preview.emergentagent.com',
+          });
         } else {
+          // Fallback to clipboard for web browsers without share API
+          await Clipboard.setString(shareMessage);
+          Alert.alert('Link Copied!', 'The game link has been copied to your clipboard. Share it with your friends!');
+        }
+      } else {
+        // Native share for mobile
+        const result = await Share.share({
+          message: shareMessage,
+          title: 'Street Legends - GPS RPG Game',
+        });
+        if (result.action === Share.sharedAction) {
           console.log('Shared successfully');
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', 'Could not share the game link');
+      // Final fallback - try clipboard
+      try {
+        await Clipboard.setString(shareMessage);
+        Alert.alert('Link Copied!', 'The game link has been copied to your clipboard.');
+      } catch (clipErr) {
+        Alert.alert('Share Failed', 'Could not share the game link. Please copy this link manually: https://heist-map-game.preview.emergentagent.com');
+      }
     }
   };
 

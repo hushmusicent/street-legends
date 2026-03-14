@@ -1233,7 +1233,7 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
                 position=Position(latitude=cell_center_lat + offset_lat, longitude=cell_center_lng + offset_lon),
                 loot_cash=monster_level * random.randint(10, 25) * (3 if template["is_boss"] else 1),
                 loot_xp=monster_level * random.randint(15, 30) * (3 if template["is_boss"] else 1),
-                expires_at=datetime.utcnow().replace(hour=datetime.utcnow().hour + 1)
+                expires_at=datetime.utcnow() + timedelta(hours=1)
             )
             
             monster_dict = monster.dict()
