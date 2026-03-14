@@ -1205,15 +1205,26 @@ async def battle_action(battle_id: str, action: BattleAction):
         raise HTTPException(status_code=404, detail="Battle not found")
     
     if battle["status"] != "active":
-        return battle
+        return serialize_doc(battle)
     
     player = await db.players.find_one({"id": battle["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
     
     if battle["enemy_type"] == "monster":
         enemy = await db.monsters.find_one({"id": battle["enemy_id"]})
+        if not enemy:
+            # Monster expired or was deleted, end the battle
+            await db.battles.update_one(
+                {"id": battle_id},
+                {"$set": {"status": "fled", "combat_log": battle["combat_log"] + ["Enemy has fled!"]}}
+            )
+            return serialize_doc(await db.battles.find_one({"id": battle_id}))
         enemy_stats = enemy["stats"]
     else:
         enemy = await db.players.find_one({"id": battle["enemy_id"]})
+        if not enemy:
+            raise HTTPException(status_code=404, detail="Enemy player not found")
         enemy_stats = enemy["stats"]
     
     player_stats = player["stats"]
@@ -1280,7 +1291,7 @@ async def battle_action(battle_id: str, action: BattleAction):
                 {"id": battle_id},
                 {"$set": {"status": "fled", "combat_log": combat_log + ["You fled from battle!"]}}
             )
-            return await db.battles.find_one({"id": battle_id})
+            return serialize_doc(await db.battles.find_one({"id": battle_id}))
         else:
             combat_log.append("Failed to flee!")
     
