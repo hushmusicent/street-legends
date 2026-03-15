@@ -273,6 +273,26 @@ export default function FitnessScreen() {
               <Text style={[styles.pedWarningText, {color: '#4caf50'}]}>Step counter active</Text>
             </View>
           )}
+          
+          {/* Manual sync button */}
+          <TouchableOpacity 
+            style={styles.syncButton}
+            onPress={async () => {
+              if (!playerId || steps === 0) return;
+              try {
+                await updateSteps(playerId, steps);
+                setTimeout(() => {
+                  triggerMissionRefresh();
+                }, 300);
+                Alert.alert('Steps Synced!', `${steps.toLocaleString()} steps synced to your active missions.`);
+              } catch (e) {
+                Alert.alert('Sync Failed', 'Could not sync steps. Try again.');
+              }
+            }}
+          >
+            <Ionicons name="sync" size={16} color="#fff" />
+            <Text style={styles.syncButtonText}>SYNC TO MISSIONS</Text>
+          </TouchableOpacity>
           {Platform.OS === 'web' && (
             <View style={styles.pedWarning}>
               <Ionicons name="phone-portrait" size={14} color="#3498db" />
@@ -543,5 +563,22 @@ const styles = StyleSheet.create({
   progressFill: {
     height: 6,
     borderRadius: 3,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#e74c3c',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  syncButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });
