@@ -5,10 +5,10 @@ import { useGameStore } from '../stores/gameStore';
 
 // Sound effect URLs (GTA-style gun sounds)
 const SOUND_URLS = {
-  // Battle sounds - Gun themed
-  attack: 'https://assets.mixkit.co/active_storage/sfx/2751/2751-preview.mp3', // Gunshot
-  criticalHit: 'https://assets.mixkit.co/active_storage/sfx/1662/1662-preview.mp3', // Shotgun blast
-  miss: 'https://assets.mixkit.co/active_storage/sfx/2763/2763-preview.mp3', // Ricochet
+  // Battle sounds - Custom uploaded sounds
+  attack: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/3i9okyhw_Regular_Attack.mp3', // Regular attack
+  criticalHit: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/q05riiz5_Critical_Attack.mp3', // Critical attack
+  miss: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/6lvtbvdm_Missed_Attack.mp3', // Missed attack
   enemyDeath: 'https://assets.mixkit.co/active_storage/sfx/1661/1661-preview.mp3', // Body drop
   victory: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Win fanfare
   defeat: 'https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3', // Lose sound
