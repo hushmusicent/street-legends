@@ -69,11 +69,6 @@ export default function BattleScreen() {
     if (!id || !playerId || actionLoading) return;
     setActionLoading(true);
     
-    // Play action sound
-    if (action === 'attack' || action === 'skill') {
-      SFX.attack();
-    }
-    
     try {
       const result = await battleAction(id, action, skillId);
       setBattle(result);
