@@ -3,26 +3,26 @@ import { useCallback, useRef, useEffect } from 'react';
 import { Platform } from 'react-native';
 import { useGameStore } from '../stores/gameStore';
 
-// Sound effect URLs (using free sound effects)
+// Sound effect URLs (GTA-style gun sounds)
 const SOUND_URLS = {
-  // Battle sounds
-  attack: 'https://assets.mixkit.co/active_storage/sfx/2785/2785-preview.mp3',
-  criticalHit: 'https://assets.mixkit.co/active_storage/sfx/2788/2788-preview.mp3',
-  miss: 'https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3',
-  enemyDeath: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
-  victory: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
-  defeat: 'https://assets.mixkit.co/active_storage/sfx/2658/2658-preview.mp3',
-  playerHit: 'https://assets.mixkit.co/active_storage/sfx/2357/2357-preview.mp3',
+  // Battle sounds - Gun themed
+  attack: 'https://assets.mixkit.co/active_storage/sfx/2751/2751-preview.mp3', // Gunshot
+  criticalHit: 'https://assets.mixkit.co/active_storage/sfx/1662/1662-preview.mp3', // Shotgun blast
+  miss: 'https://assets.mixkit.co/active_storage/sfx/2763/2763-preview.mp3', // Ricochet
+  enemyDeath: 'https://assets.mixkit.co/active_storage/sfx/1661/1661-preview.mp3', // Body drop
+  victory: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Win fanfare
+  defeat: 'https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3', // Lose sound
+  playerHit: 'https://assets.mixkit.co/active_storage/sfx/2785/2785-preview.mp3', // Impact hit
   
-  // UI sounds
-  buttonClick: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
-  levelUp: 'https://assets.mixkit.co/active_storage/sfx/1997/1997-preview.mp3',
-  collectMoney: 'https://assets.mixkit.co/active_storage/sfx/888/888-preview.mp3',
-  missionAccept: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
-  missionComplete: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
-  error: 'https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3',
-  equip: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3',
-  purchase: 'https://assets.mixkit.co/active_storage/sfx/888/888-preview.mp3',
+  // UI sounds - Street style
+  buttonClick: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3', // Click
+  levelUp: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3', // Level up celebration
+  collectMoney: 'https://assets.mixkit.co/active_storage/sfx/2001/2001-preview.mp3', // Cash register
+  missionAccept: 'https://assets.mixkit.co/active_storage/sfx/2866/2866-preview.mp3', // Phone notification
+  missionComplete: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Success
+  error: 'https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3', // Error buzz
+  equip: 'https://assets.mixkit.co/active_storage/sfx/2754/2754-preview.mp3', // Gun cock/reload
+  purchase: 'https://assets.mixkit.co/active_storage/sfx/2001/2001-preview.mp3', // Cash sound
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
