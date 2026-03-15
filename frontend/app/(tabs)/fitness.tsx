@@ -106,13 +106,19 @@ export default function FitnessScreen() {
           console.log('Step history unavailable:', e);
         }
 
-        pedSub = Pedometer.watchStepCount((result) => {
+        pedSub = Pedometer.watchStepCount(async (result) => {
           const newSteps = baseStepsRef.current + result.steps;
           setSteps(newSteps);
           if (playerId) {
-            updateSteps(playerId, newSteps).then(() => {
-              triggerMissionRefresh();
-            }).catch(() => {});
+            try {
+              await updateSteps(playerId, newSteps);
+              // Small delay to ensure backend has updated mission progress
+              setTimeout(() => {
+                triggerMissionRefresh();
+              }, 300);
+            } catch (e) {
+              console.log('Failed to sync steps:', e);
+            }
           }
         });
         subscriptionRef.current = pedSub;
@@ -141,7 +147,7 @@ export default function FitnessScreen() {
         // Watch location changes to estimate steps from distance
         locSub = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.High, distanceInterval: 5, timeInterval: 3000 },
-          (newLoc) => {
+          async (newLoc) => {
             if (lastLocationRef.current) {
               const dist = getDistance(
                 lastLocationRef.current.lat, lastLocationRef.current.lng,
@@ -152,9 +158,15 @@ export default function FitnessScreen() {
                 gpsStepsRef.current += newStepsDelta;
                 setSteps(gpsStepsRef.current);
                 if (playerId) {
-                  updateSteps(playerId, gpsStepsRef.current).then(() => {
-                    triggerMissionRefresh();
-                  }).catch(() => {});
+                  try {
+                    await updateSteps(playerId, gpsStepsRef.current);
+                    // Small delay to ensure backend has updated mission progress
+                    setTimeout(() => {
+                      triggerMissionRefresh();
+                    }, 300);
+                  } catch (e) {
+                    console.log('Failed to sync steps:', e);
+                  }
                 }
               }
             }
