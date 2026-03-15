@@ -656,6 +656,7 @@ export default function MapScreen() {
                   if (!playerId) return;
                   try {
                     const result = await eatAtRestaurant(selectedMarker.data.id, playerId);
+                    SFX.eating();
                     showGameToast({
                       type: 'success',
                       title: `${selectedMarker.data.name}`,
@@ -667,6 +668,7 @@ export default function MapScreen() {
                     setPlayer(updatedPlayer);
                     setSelectedMarker(null);
                   } catch (err: any) {
+                    SFX.error();
                     showGameToast({
                       type: 'warning',
                       title: 'Not Hungry Yet',
@@ -706,6 +708,7 @@ export default function MapScreen() {
                   if (!playerId) return;
                   try {
                     const result = await visitNightclub(selectedMarker.data.id, playerId);
+                    SFX.glassToast();
                     showGameToast({
                       type: 'success',
                       title: `${selectedMarker.data.name}`,
@@ -717,6 +720,7 @@ export default function MapScreen() {
                     setPlayer(updatedPlayer);
                     setSelectedMarker(null);
                   } catch (err: any) {
+                    SFX.error();
                     showGameToast({
                       type: 'warning',
                       title: 'Too Soon!',

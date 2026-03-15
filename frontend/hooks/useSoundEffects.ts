@@ -23,6 +23,10 @@ const SOUND_URLS = {
   error: 'https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3', // Error buzz
   equip: 'https://assets.mixkit.co/active_storage/sfx/2754/2754-preview.mp3', // Gun cock/reload
   purchase: 'https://assets.mixkit.co/active_storage/sfx/2001/2001-preview.mp3', // Cash sound
+  
+  // Location sounds
+  eating: 'https://assets.mixkit.co/active_storage/sfx/2940/2940-preview.mp3', // Eating/munching
+  glassToast: 'https://assets.mixkit.co/active_storage/sfx/2891/2891-preview.mp3', // Glass clinking toast
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -167,6 +171,10 @@ export const SFX = {
   error: () => playSound('error', 0.3),
   equip: () => playSound('equip', 0.4),
   purchase: () => playSound('purchase', 0.4),
+  
+  // Location sounds
+  eating: () => playSound('eating', 0.5),
+  glassToast: () => playSound('glassToast', 0.5),
 };
 
 export default useSoundEffects;
