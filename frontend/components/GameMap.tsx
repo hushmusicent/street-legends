@@ -193,12 +193,47 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // API: Update territories (squares on map)
     var territoryLayers = [];
+    var territoryIds = new Set();
     window.updateTerritories = function(territories) {
-      // Remove old territory layers
-      territoryLayers.forEach(function(layer) { map.removeLayer(layer); });
-      territoryLayers = [];
+      // Create a set of new territory IDs
+      var newIds = new Set(territories.map(function(t) { return t.id; }));
       
+      // Remove layers that are no longer in the new data
+      var layersToRemove = [];
+      territoryLayers.forEach(function(layer, index) {
+        if (!newIds.has(layer._territoryId)) {
+          map.removeLayer(layer);
+          layersToRemove.push(index);
+        }
+      });
+      
+      // Remove from array (in reverse to maintain indices)
+      for (var i = layersToRemove.length - 1; i >= 0; i--) {
+        territoryLayers.splice(layersToRemove[i], 1);
+      }
+      
+      // Update existing and add new territories
       territories.forEach(function(t) {
+        // Skip if we already have this territory displayed
+        if (territoryIds.has(t.id)) {
+          // Update existing - find and update the rectangle
+          territoryLayers.forEach(function(layer) {
+            if (layer._territoryId === t.id && layer._isRect) {
+              var color = t.color || '#e74c3c';
+              var isOwned = !!t.owner_id;
+              layer.setStyle({
+                color: color,
+                fillColor: color,
+                fillOpacity: isOwned ? 0.35 : 0.2,
+                dashArray: isOwned ? null : '8, 10',
+              });
+            }
+          });
+          return;
+        }
+        
+        // Add new territory
+        territoryIds.add(t.id);
         var color = t.color || '#e74c3c';
         var isOwned = !!t.owner_id;
         var ownerPic = t.owner_pic || '';
@@ -225,6 +260,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
           weight: 3,
           dashArray: isOwned ? null : '8, 10',
         });
+        rect._territoryId = t.id;
+        rect._isRect = true;
         rect.on('click', function() {
           sendMessage({ type: 'territory', id: t.id });
         });
@@ -245,6 +282,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             iconAnchor: [22, 52],
           });
           var picMarker = L.marker([t.location.latitude, t.location.longitude], { icon: picIcon, interactive: true, zIndexOffset: 500 });
+          picMarker._territoryId = t.id;
           picMarker.on('click', function() {
             sendMessage({ type: 'territory', id: t.id });
           });
@@ -262,11 +300,19 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
           iconAnchor: [0, -labelOffset],
         });
         var label = L.marker([t.location.latitude, t.location.longitude], { icon: labelIcon, interactive: true });
+        label._territoryId = t.id;
         label.on('click', function() {
           sendMessage({ type: 'territory', id: t.id });
         });
         label.addTo(map);
         territoryLayers.push(label);
+      });
+      
+      // Clean up territoryIds that are no longer in the data
+      territoryIds.forEach(function(id) {
+        if (!newIds.has(id)) {
+          territoryIds.delete(id);
+        }
       });
     };
 
