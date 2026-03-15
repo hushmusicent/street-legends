@@ -74,7 +74,7 @@ export default function BattleScreen() {
       setBattle(result);
       setCurrentBattle(result);
       
-      // Parse combat log for sound effects
+      // Parse combat log for sound effects - only use custom sounds
       const lastLogs = result.combat_log?.slice(-2) || [];
       for (const log of lastLogs) {
         const logLower = log.toLowerCase();
@@ -82,19 +82,13 @@ export default function BattleScreen() {
           SFX.criticalHit();
         } else if (logLower.includes('missed')) {
           SFX.miss();
-        } else if (logLower.includes('attacks for') && !logLower.includes('you')) {
-          // Enemy hit player
-          SFX.playerHit();
+        } else if (logLower.includes('damage') && !logLower.includes('critical') && !logLower.includes('missed')) {
+          // Regular attack that landed
+          SFX.attack();
         }
       }
 
       if (result.status !== 'active') {
-        if (result.status === 'won') {
-          SFX.victory();
-        } else if (result.status === 'lost') {
-          SFX.defeat();
-        }
-        
         if (playerId) {
           const playerData = await getPlayer(playerId);
           setPlayer(playerData);

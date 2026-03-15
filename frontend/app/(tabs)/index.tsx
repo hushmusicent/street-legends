@@ -37,7 +37,6 @@ import {
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
-import { SFX } from '../../hooks/useSoundEffects';
 
 // Calculate distance between two points in meters
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -341,12 +340,10 @@ export default function MapScreen() {
     if (!playerId || !selectedTerritory) return;
     try {
       const result = await collectTerritoryIncome(selectedTerritory.id, playerId);
-      SFX.collectMoney();
       Alert.alert('Income Collected!', result.message);
       const updatedPlayer = await getPlayer(playerId);
       setPlayer(updatedPlayer);
     } catch (error: any) {
-      SFX.error();
       Alert.alert('Error', error?.response?.data?.detail || 'Failed to collect income');
     }
   }, [playerId, selectedTerritory]);
@@ -354,19 +351,16 @@ export default function MapScreen() {
   const handleStartBattle = useCallback(async (monster: Monster) => {
     if (!playerId) return;
     try {
-      SFX.buttonClick();
       const battle = await startBattle(playerId, 'monster', monster.id);
       setCurrentBattle(battle);
       setSelectedMarker(null);
       router.push(`/battle/${battle.id}`);
     } catch (error: any) {
-      SFX.error();
       Alert.alert('Error', error.response?.data?.detail || 'Failed to start battle');
     }
   }, [playerId]);
 
   const handleStartMission = useCallback((mission: Mission) => {
-    SFX.missionAccept();
     setSelectedMarker(null);
     router.push(`/mission/${mission.id}`);
   }, []);
@@ -374,13 +368,11 @@ export default function MapScreen() {
   const handlePvPChallenge = useCallback(async (targetPlayer: NearbyPlayer) => {
     if (!playerId) return;
     try {
-      SFX.buttonClick();
       const battle = await startBattle(playerId, 'player', targetPlayer.id);
       setCurrentBattle(battle);
       setSelectedMarker(null);
       router.push(`/battle/${battle.id}`);
     } catch (error: any) {
-      SFX.error();
       Alert.alert('Error', error.response?.data?.detail || 'Failed to start PvP');
     }
   }, [playerId]);
@@ -656,7 +648,6 @@ export default function MapScreen() {
                   if (!playerId) return;
                   try {
                     const result = await eatAtRestaurant(selectedMarker.data.id, playerId);
-                    SFX.eating();
                     showGameToast({
                       type: 'success',
                       title: `${selectedMarker.data.name}`,
@@ -668,7 +659,6 @@ export default function MapScreen() {
                     setPlayer(updatedPlayer);
                     setSelectedMarker(null);
                   } catch (err: any) {
-                    SFX.error();
                     showGameToast({
                       type: 'warning',
                       title: 'Not Hungry Yet',
@@ -708,7 +698,6 @@ export default function MapScreen() {
                   if (!playerId) return;
                   try {
                     const result = await visitNightclub(selectedMarker.data.id, playerId);
-                    SFX.glassToast();
                     showGameToast({
                       type: 'success',
                       title: `${selectedMarker.data.name}`,
@@ -720,7 +709,6 @@ export default function MapScreen() {
                     setPlayer(updatedPlayer);
                     setSelectedMarker(null);
                   } catch (err: any) {
-                    SFX.error();
                     showGameToast({
                       type: 'warning',
                       title: 'Too Soon!',

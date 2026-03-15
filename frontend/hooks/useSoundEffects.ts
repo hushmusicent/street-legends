@@ -3,30 +3,12 @@ import { useCallback, useRef, useEffect } from 'react';
 import { Platform } from 'react-native';
 import { useGameStore } from '../stores/gameStore';
 
-// Sound effect URLs (GTA-style gun sounds)
+// Sound effect URLs - Only custom uploaded battle sounds
 const SOUND_URLS = {
   // Battle sounds - Custom uploaded sounds
-  attack: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/3i9okyhw_Regular_Attack.mp3', // Regular attack
-  criticalHit: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/q05riiz5_Critical_Attack.mp3', // Critical attack
-  miss: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/6lvtbvdm_Missed_Attack.mp3', // Missed attack
-  enemyDeath: 'https://assets.mixkit.co/active_storage/sfx/1661/1661-preview.mp3', // Body drop
-  victory: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Win fanfare
-  defeat: 'https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3', // Lose sound
-  playerHit: 'https://assets.mixkit.co/active_storage/sfx/2785/2785-preview.mp3', // Impact hit
-  
-  // UI sounds - Street style
-  buttonClick: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3', // Click
-  levelUp: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3', // Level up celebration
-  collectMoney: 'https://assets.mixkit.co/active_storage/sfx/2001/2001-preview.mp3', // Cash register
-  missionAccept: 'https://assets.mixkit.co/active_storage/sfx/2866/2866-preview.mp3', // Phone notification
-  missionComplete: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Success
-  error: 'https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3', // Error buzz
-  equip: 'https://assets.mixkit.co/active_storage/sfx/2754/2754-preview.mp3', // Gun cock/reload
-  purchase: 'https://assets.mixkit.co/active_storage/sfx/2001/2001-preview.mp3', // Cash sound
-  
-  // Location sounds
-  eating: 'https://assets.mixkit.co/active_storage/sfx/2940/2940-preview.mp3', // Eating/munching
-  glassToast: 'https://assets.mixkit.co/active_storage/sfx/2891/2891-preview.mp3', // Glass clinking toast
+  attack: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/3i9okyhw_Regular_Attack.mp3',
+  criticalHit: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/q05riiz5_Critical_Attack.mp3',
+  miss: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/6lvtbvdm_Missed_Attack.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -153,28 +135,11 @@ export const useSoundEffects = () => {
   return { play, isMuted };
 };
 
-// Convenience functions for common sounds
+// Convenience functions for battle sounds only
 export const SFX = {
-  attack: () => playSound('attack', 0.4),
+  attack: () => playSound('attack', 0.5),
   criticalHit: () => playSound('criticalHit', 0.6),
-  miss: () => playSound('miss', 0.3),
-  enemyDeath: () => playSound('enemyDeath', 0.5),
-  victory: () => playSound('victory', 0.6),
-  defeat: () => playSound('defeat', 0.5),
-  playerHit: () => playSound('playerHit', 0.4),
-  
-  buttonClick: () => playSound('buttonClick', 0.2),
-  levelUp: () => playSound('levelUp', 0.6),
-  collectMoney: () => playSound('collectMoney', 0.4),
-  missionAccept: () => playSound('missionAccept', 0.4),
-  missionComplete: () => playSound('missionComplete', 0.5),
-  error: () => playSound('error', 0.3),
-  equip: () => playSound('equip', 0.4),
-  purchase: () => playSound('purchase', 0.4),
-  
-  // Location sounds
-  eating: () => playSound('eating', 0.5),
-  glassToast: () => playSound('glassToast', 0.5),
+  miss: () => playSound('miss', 0.4),
 };
 
 export default useSoundEffects;
