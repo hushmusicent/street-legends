@@ -37,6 +37,7 @@ import {
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
+import { SFX } from '../../hooks/useSoundEffects';
 
 // Calculate distance between two points in meters
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -648,6 +649,7 @@ export default function MapScreen() {
                   if (!playerId) return;
                   try {
                     const result = await eatAtRestaurant(selectedMarker.data.id, playerId);
+                    SFX.restaurant();
                     showGameToast({
                       type: 'success',
                       title: `${selectedMarker.data.name}`,
@@ -698,6 +700,7 @@ export default function MapScreen() {
                   if (!playerId) return;
                   try {
                     const result = await visitNightclub(selectedMarker.data.id, playerId);
+                    SFX.nightclub();
                     showGameToast({
                       type: 'success',
                       title: `${selectedMarker.data.name}`,
