@@ -20,6 +20,7 @@ import { HealthBar } from '../../components/HealthBar';
 import { GameButton } from '../../components/GameButton';
 import { Battle, Skill } from '../../types/game';
 import { getEnemyBattleImage } from '../../assets/enemyImages';
+import { SFX } from '../../hooks/useSoundEffects';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COMPACT = SCREEN_HEIGHT < 750;
@@ -67,12 +68,38 @@ export default function BattleScreen() {
   const executeAction = async (action: string, skillId?: string) => {
     if (!id || !playerId || actionLoading) return;
     setActionLoading(true);
+    
+    // Play action sound
+    if (action === 'attack' || action === 'skill') {
+      SFX.attack();
+    }
+    
     try {
       const result = await battleAction(id, action, skillId);
       setBattle(result);
       setCurrentBattle(result);
+      
+      // Parse combat log for sound effects
+      const lastLogs = result.combat_log?.slice(-2) || [];
+      for (const log of lastLogs) {
+        const logLower = log.toLowerCase();
+        if (logLower.includes('critical')) {
+          SFX.criticalHit();
+        } else if (logLower.includes('missed')) {
+          SFX.miss();
+        } else if (logLower.includes('attacks for') && !logLower.includes('you')) {
+          // Enemy hit player
+          SFX.playerHit();
+        }
+      }
 
       if (result.status !== 'active') {
+        if (result.status === 'won') {
+          SFX.victory();
+        } else if (result.status === 'lost') {
+          SFX.defeat();
+        }
+        
         if (playerId) {
           const playerData = await getPlayer(playerId);
           setPlayer(playerData);
@@ -100,6 +127,7 @@ export default function BattleScreen() {
         }
       }
     } catch (error: any) {
+      SFX.error();
       Alert.alert('Error', error?.response?.data?.detail || 'Action failed');
     } finally {
       setActionLoading(false);

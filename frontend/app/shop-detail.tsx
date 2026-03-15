@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { buyFromShop, getPlayer } from '../services/api';
+import { SFX } from '../hooks/useSoundEffects';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -59,10 +60,12 @@ export default function ShopDetailScreen() {
     if (!playerId || !player) return;
 
     if (player.cash < item.shop_price) {
+      SFX.error();
       Alert.alert('Not Enough Cash', `You need $${item.shop_price} but only have $${player.cash}.`);
       return;
     }
 
+    SFX.buttonClick();
     Alert.alert('Buy Item', `Buy ${item.name} for $${item.shop_price}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -73,8 +76,10 @@ export default function ShopDetailScreen() {
             await buyFromShop(playerId, item.id, item.shop_price);
             const p = await getPlayer(playerId);
             setPlayer(p);
+            SFX.purchase();
             Alert.alert('Purchased!', `${item.name} added to your inventory!`);
           } catch (error: any) {
+            SFX.error();
             Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
           } finally {
             setBuying(null);
