@@ -392,6 +392,7 @@ export default function MapScreen() {
       type: 'monster' as const,
       level: m.level,
       name: m.name,
+      isBoss: m.is_boss || false,
     })),
     ...nearbyMissions.map((m) => ({
       id: m.id,

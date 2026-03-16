@@ -748,6 +748,7 @@ class Monster(BaseModel):
     loot_items: List[str] = Field(default_factory=list)
     spawn_time: datetime = Field(default_factory=datetime.utcnow)
     expires_at: datetime
+    is_boss: bool = False
 
 class Equipment(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1233,7 +1234,8 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
                 position=Position(latitude=cell_center_lat + offset_lat, longitude=cell_center_lng + offset_lon),
                 loot_cash=monster_level * random.randint(10, 25) * (3 if template["is_boss"] else 1),
                 loot_xp=monster_level * random.randint(15, 30) * (3 if template["is_boss"] else 1),
-                expires_at=datetime.utcnow() + timedelta(hours=1)
+                expires_at=datetime.utcnow() + timedelta(hours=1),
+                is_boss=template["is_boss"]
             )
             
             monster_dict = monster.dict()

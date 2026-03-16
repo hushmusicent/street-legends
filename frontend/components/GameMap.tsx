@@ -23,6 +23,7 @@ interface MapMarker {
   level?: number;
   name?: string;
   icon?: string;
+  isBoss?: boolean;
 }
 
 interface MapTerritory {
@@ -359,20 +360,29 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(155,89,182,0.9);color:#fff;padding:1px 6px;border-radius:4px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + ncName + '</div>' +
                 '</div>';
             } else if (enemyImg) {
-              var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#ff6b35;color:#fff;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
-              var nameBadge = m.name ? '<div style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:1px 5px;border-radius:4px;font-size:8px;font-weight:bold;white-space:nowrap;z-index:10;">' + m.name + '</div>' : '';
-              markerHTML = '<div style="width:42px;height:58px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
-                '<div style="width:38px;height:38px;border-radius:50%;overflow:hidden;border:3px solid #ff6b35;box-shadow:0 2px 8px rgba(255,107,53,0.5);background:#1a1a1a;">' +
+              var isBoss = m.isBoss || false;
+              var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:' + (isBoss ? '#FFD700' : '#ff6b35') + ';color:' + (isBoss ? '#000' : '#fff') + ';padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
+              var nameBadge = m.name ? '<div style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:' + (isBoss ? 'rgba(255,215,0,0.9)' : 'rgba(0,0,0,0.75)') + ';color:' + (isBoss ? '#000' : '#fff') + ';padding:1px 5px;border-radius:4px;font-size:8px;font-weight:bold;white-space:nowrap;z-index:10;">' + m.name + '</div>' : '';
+              var crownHTML = isBoss ? '<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:16px;z-index:20;">\\u{1F451}</div>' : '';
+              var borderRadius = isBoss ? '8px' : '50%';
+              var borderColor = isBoss ? '#FFD700' : '#ff6b35';
+              var shadowColor = isBoss ? 'rgba(255,215,0,0.7)' : 'rgba(255,107,53,0.5)';
+              markerHTML = '<div style="width:' + (isBoss ? '48px' : '42px') + ';height:' + (isBoss ? '68px' : '58px') + ';position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                crownHTML +
+                '<div style="width:' + (isBoss ? '44px' : '38px') + ';height:' + (isBoss ? '44px' : '38px') + ';border-radius:' + borderRadius + ';overflow:hidden;border:3px solid ' + borderColor + ';box-shadow:0 2px 12px ' + shadowColor + ';background:#1a1a1a;' + (isBoss ? 'margin-top:2px;' : '') + '">' +
                 '<img src="' + enemyImg + '" style="width:100%;height:100%;object-fit:cover;" /></div>' + lvlBadge + nameBadge + '</div>';
             } else {
               markerHTML = '<div style="background:' + color + ';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;position:relative;">' + icon + levelHTML + '</div>';
             }
             
+            var isBossMarker = (m.type === 'monster' && m.isBoss);
+            var markerWidth = (m.type === 'restaurant' || m.type === 'nightclub') ? 48 : (isBossMarker ? 48 : (enemyImg ? 42 : 32));
+            var markerHeight = (m.type === 'restaurant' || m.type === 'nightclub') ? 62 : (isBossMarker ? 68 : (enemyImg ? 58 : 32));
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,
-              iconSize: [(m.type === 'restaurant' || m.type === 'nightclub') ? 48 : (enemyImg ? 42 : 32), (m.type === 'restaurant' || m.type === 'nightclub') ? 62 : (enemyImg ? 58 : 32)],
-              iconAnchor: [(m.type === 'restaurant' || m.type === 'nightclub') ? 24 : (enemyImg ? 21 : 16), (m.type === 'restaurant' || m.type === 'nightclub') ? 31 : (enemyImg ? 29 : 16)]
+              iconSize: [markerWidth, markerHeight],
+              iconAnchor: [markerWidth/2, (m.type === 'restaurant' || m.type === 'nightclub') ? 31 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))]
             });
             var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);
             marker.on('click', (function(id, type) {
