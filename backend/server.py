@@ -2715,11 +2715,11 @@ def generate_territory_cell(row: int, col: int, cell_lat: float, cell_lng: float
     name_idx = seed % len(TERRITORY_NAMES)
     boss_idx = seed % len(TERRITORY_BOSS_NAMES)
     
-    # Boss scales with zone difficulty
-    zone_level = max(1, player_level + rng.randint(-2, 3))
-    boss_hp = 60 + zone_level * 15
-    boss_atk = 8 + zone_level * 3
-    boss_def = 5 + zone_level * 2
+    # Boss scales with zone difficulty (reduced stats for easier conquering)
+    zone_level = max(1, player_level + rng.randint(-2, 2))
+    boss_hp = 40 + zone_level * 8  # Reduced from 60 + 15*level
+    boss_atk = 5 + zone_level * 2  # Reduced from 8 + 3*level
+    boss_def = 3 + zone_level * 1  # Reduced from 5 + 2*level
     daily_income = 20 + zone_level * 10
     
     territory_id = f"terr_{row}_{col}"
@@ -2750,6 +2750,7 @@ def generate_territory_cell(row: int, col: int, cell_lat: float, cell_lng: float
         },
         "owner_id": None,
         "owner_name": None,
+        "owner_pic": None,
     }
 
 @api_router.get("/territories/nearby")
