@@ -12,6 +12,10 @@ const SOUND_URLS = {
   // Location sounds - Custom uploaded sounds
   restaurant: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/wf1fljj6_Restaurant.mp3',
   nightclub: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/9td6dqpm_Night_Club.mp3',
+  gunShop: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/ga1bfhgv_Gun_Shop.mp3',
+  // Mission sounds - Custom uploaded sounds
+  bountyMission: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/m730rzhk_Bounty_Missions.mp3',
+  phoneMission: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/8n4qehpc_Phone_Booth_Missions.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -145,6 +149,9 @@ export const SFX = {
   miss: () => playSound('miss', 0.4),
   restaurant: () => playSound('restaurant', 0.5),
   nightclub: () => playSound('nightclub', 0.5),
+  gunShop: () => playSound('gunShop', 0.5),
+  bountyMission: () => playSound('bountyMission', 0.5),
+  phoneMission: () => playSound('phoneMission', 0.5),
 };
 
 export default useSoundEffects;

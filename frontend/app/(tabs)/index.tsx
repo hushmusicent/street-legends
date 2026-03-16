@@ -362,6 +362,12 @@ export default function MapScreen() {
   }, [playerId]);
 
   const handleStartMission = useCallback((mission: Mission) => {
+    // Play different sound based on mission type
+    if (mission.mission_type === 'bounty') {
+      SFX.bountyMission();
+    } else {
+      SFX.phoneMission();
+    }
     setSelectedMarker(null);
     router.push(`/mission/${mission.id}`);
   }, []);
@@ -615,6 +621,7 @@ export default function MapScreen() {
               <TouchableOpacity 
                 style={[styles.actionButton, {backgroundColor: '#FF6F00'}]} 
                 onPress={() => {
+                  SFX.gunShop();
                   setSelectedMarker(null);
                   router.push({ pathname: '/shop-detail', params: { shopData: JSON.stringify(selectedMarker.data) } });
                 }}
