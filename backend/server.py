@@ -578,7 +578,7 @@ def get_player_tier(player_level: int) -> int:
 def get_eligible_enemies(player_level: int):
     """Get enemies at player's level and up to 1 level higher.
     Lower level enemies spawn MORE frequently than higher level ones.
-    Bosses only spawn from player's current tier and are very rare."""
+    Bosses spawn from player's current tier and lower tiers."""
     current_tier = get_player_tier(player_level)
     
     # Include enemies whose level_min is at or below player_level + 1
@@ -591,11 +591,10 @@ def get_eligible_enemies(player_level: int):
     weighted = []
     for e in eligible:
         if e["is_boss"]:
-            # Bosses are VERY rare and only spawn from player's current tier
-            # Boss must be from player's tier and player must be at/above boss level
-            if e["tier"] == current_tier and player_level >= e["level_min"]:
-                # Very low weight - about 1 in 50 chance per spawn
-                weighted.append((e, 0.5))
+            # Bosses spawn from current tier and all lower tiers
+            # Boss must be from player's tier or below and player must be at/above boss level
+            if e["tier"] <= current_tier and player_level >= e["level_min"]:
+                weighted.append((e, 2))
         else:
             # Lower tier enemies spawn more often
             # Tier 1 = weight 10, Tier 2 = weight 9, Tier 3 = weight 8... T10=1
