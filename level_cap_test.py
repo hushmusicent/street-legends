@@ -6,7 +6,7 @@ import sys
 import random
 
 # Backend URL from environment
-BACKEND_URL = "https://heist-map-game.preview.emergentagent.com/api"
+BACKEND_URL = "https://street-empire-test.preview.emergentagent.com/api"
 
 def test_detailed_level_cap_verification():
     """More detailed test to verify level capping with multiple spawns to ensure we see variety"""

@@ -6,7 +6,7 @@ Use skills to win battle and test bounty progress
 import requests
 import time
 
-BACKEND_URL = "https://heist-map-game.preview.emergentagent.com"
+BACKEND_URL = "https://street-empire-test.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def main():

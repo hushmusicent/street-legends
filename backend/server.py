@@ -505,70 +505,70 @@ ENEMY_TIERS = [
     {"tier": 1, "name": "Criminal", "level_min": 5, "level_max": 6, "is_boss": False},
     {"tier": 1, "name": "Villain", "level_min": 7, "level_max": 8, "is_boss": False},
     {"tier": 1, "name": "Bandit", "level_min": 9, "level_max": 10, "is_boss": False},
-    {"tier": 1, "name": "Super Thug", "level_min": 11, "level_max": 11, "is_boss": True},
-    # Tier 2 (Levels 11-20, Boss at 21)
+    {"tier": 1, "name": "The Kingpin", "level_min": 8, "level_max": 10, "is_boss": True},
+    # Tier 2 (Levels 11-20)
     {"tier": 2, "name": "Assassin", "level_min": 11, "level_max": 12, "is_boss": False},
     {"tier": 2, "name": "Thief", "level_min": 13, "level_max": 14, "is_boss": False},
     {"tier": 2, "name": "Hoodlum", "level_min": 15, "level_max": 16, "is_boss": False},
     {"tier": 2, "name": "Pirate", "level_min": 17, "level_max": 18, "is_boss": False},
     {"tier": 2, "name": "Bully", "level_min": 19, "level_max": 20, "is_boss": False},
-    {"tier": 2, "name": "Super Bully", "level_min": 21, "level_max": 21, "is_boss": True},
-    # Tier 3 (Levels 21-30, Boss at 31)
+    {"tier": 2, "name": "Vinnie The Viper", "level_min": 18, "level_max": 20, "is_boss": True},
+    # Tier 3 (Levels 21-30)
     {"tier": 3, "name": "Offender", "level_min": 21, "level_max": 22, "is_boss": False},
     {"tier": 3, "name": "Hood", "level_min": 23, "level_max": 24, "is_boss": False},
     {"tier": 3, "name": "Mobster", "level_min": 25, "level_max": 26, "is_boss": False},
     {"tier": 3, "name": "Gangsta", "level_min": 27, "level_max": 28, "is_boss": False},
     {"tier": 3, "name": "Hooligan", "level_min": 29, "level_max": 30, "is_boss": False},
-    {"tier": 3, "name": "Super Hood", "level_min": 31, "level_max": 31, "is_boss": True},
-    # Tier 4 (Levels 31-40, Boss at 41)
+    {"tier": 3, "name": "Don Corleone", "level_min": 28, "level_max": 30, "is_boss": True},
+    # Tier 4 (Levels 31-40)
     {"tier": 4, "name": "Goon", "level_min": 31, "level_max": 32, "is_boss": False},
     {"tier": 4, "name": "Ruffian", "level_min": 33, "level_max": 34, "is_boss": False},
     {"tier": 4, "name": "Gang Banger", "level_min": 35, "level_max": 36, "is_boss": False},
     {"tier": 4, "name": "Tough Guy", "level_min": 37, "level_max": 38, "is_boss": False},
     {"tier": 4, "name": "Gorilla", "level_min": 39, "level_max": 40, "is_boss": False},
-    {"tier": 4, "name": "Super Goon", "level_min": 41, "level_max": 41, "is_boss": True},
-    # Tier 5 (Levels 41-50, Boss at 51)
+    {"tier": 4, "name": "El Chapo", "level_min": 38, "level_max": 40, "is_boss": True},
+    # Tier 5 (Levels 41-50)
     {"tier": 5, "name": "Punk", "level_min": 41, "level_max": 42, "is_boss": False},
     {"tier": 5, "name": "Rough Neck", "level_min": 43, "level_max": 44, "is_boss": False},
     {"tier": 5, "name": "Rowdy Person", "level_min": 45, "level_max": 46, "is_boss": False},
     {"tier": 5, "name": "Yardie", "level_min": 47, "level_max": 48, "is_boss": False},
     {"tier": 5, "name": "Perpetrator", "level_min": 49, "level_max": 50, "is_boss": False},
-    {"tier": 5, "name": "Super Punk", "level_min": 51, "level_max": 51, "is_boss": True},
-    # Tier 6 (Levels 51-60, Boss at 61)
+    {"tier": 5, "name": "Tony Montana", "level_min": 48, "level_max": 50, "is_boss": True},
+    # Tier 6 (Levels 51-60)
     {"tier": 6, "name": "Vigilante", "level_min": 51, "level_max": 52, "is_boss": False},
     {"tier": 6, "name": "Scoundrel", "level_min": 53, "level_max": 54, "is_boss": False},
     {"tier": 6, "name": "Robber", "level_min": 55, "level_max": 56, "is_boss": False},
     {"tier": 6, "name": "Toughie", "level_min": 57, "level_max": 58, "is_boss": False},
     {"tier": 6, "name": "Felon", "level_min": 59, "level_max": 60, "is_boss": False},
-    {"tier": 6, "name": "Super Felon", "level_min": 61, "level_max": 61, "is_boss": True},
-    # Tier 7 (Levels 61-70, Boss at 71)
+    {"tier": 6, "name": "Pablo Escobar", "level_min": 58, "level_max": 60, "is_boss": True},
+    # Tier 7 (Levels 61-70)
     {"tier": 7, "name": "Outlaw", "level_min": 61, "level_max": 62, "is_boss": False},
     {"tier": 7, "name": "Crook", "level_min": 63, "level_max": 64, "is_boss": False},
     {"tier": 7, "name": "Cutthroat", "level_min": 65, "level_max": 66, "is_boss": False},
     {"tier": 7, "name": "Brigade", "level_min": 67, "level_max": 68, "is_boss": False},
     {"tier": 7, "name": "Mafioso", "level_min": 69, "level_max": 70, "is_boss": False},
-    {"tier": 7, "name": "Super Outlaw", "level_min": 71, "level_max": 71, "is_boss": True},
-    # Tier 8 (Levels 71-80, Boss at 81)
+    {"tier": 7, "name": "The Joker", "level_min": 68, "level_max": 70, "is_boss": True},
+    # Tier 8 (Levels 71-80)
     {"tier": 8, "name": "Perp", "level_min": 71, "level_max": 72, "is_boss": False},
     {"tier": 8, "name": "Mugger", "level_min": 73, "level_max": 74, "is_boss": False},
     {"tier": 8, "name": "LawBreaker", "level_min": 75, "level_max": 76, "is_boss": False},
     {"tier": 8, "name": "Racketeer", "level_min": 77, "level_max": 78, "is_boss": False},
     {"tier": 8, "name": "Desperado", "level_min": 79, "level_max": 80, "is_boss": False},
-    {"tier": 8, "name": "Super Mugger", "level_min": 81, "level_max": 81, "is_boss": True},
-    # Tier 9 (Levels 81-90, Boss at 91)
+    {"tier": 8, "name": "Bane", "level_min": 78, "level_max": 80, "is_boss": True},
+    # Tier 9 (Levels 81-90)
     {"tier": 9, "name": "Highway Man", "level_min": 81, "level_max": 82, "is_boss": False},
     {"tier": 9, "name": "Gunman", "level_min": 83, "level_max": 84, "is_boss": False},
     {"tier": 9, "name": "Vandal", "level_min": 85, "level_max": 86, "is_boss": False},
     {"tier": 9, "name": "Pick Pocket", "level_min": 87, "level_max": 88, "is_boss": False},
     {"tier": 9, "name": "Swindler", "level_min": 89, "level_max": 90, "is_boss": False},
-    {"tier": 9, "name": "Super Vandal", "level_min": 91, "level_max": 91, "is_boss": True},
-    # Tier 10 (Levels 91-100, Boss at 101)
+    {"tier": 9, "name": "Thanos", "level_min": 88, "level_max": 90, "is_boss": True},
+    # Tier 10 (Levels 91-100)
     {"tier": 10, "name": "Malefactor", "level_min": 91, "level_max": 92, "is_boss": False},
     {"tier": 10, "name": "Bravo", "level_min": 93, "level_max": 94, "is_boss": False},
     {"tier": 10, "name": "Delinquent", "level_min": 95, "level_max": 96, "is_boss": False},
     {"tier": 10, "name": "Maniac", "level_min": 97, "level_max": 98, "is_boss": False},
     {"tier": 10, "name": "Psycho", "level_min": 99, "level_max": 100, "is_boss": False},
-    {"tier": 10, "name": "Super Psycho", "level_min": 101, "level_max": 101, "is_boss": True},
+    {"tier": 10, "name": "The Godfather", "level_min": 98, "level_max": 100, "is_boss": True},
 ]
 
 def get_player_tier(player_level: int) -> int:
@@ -594,7 +594,8 @@ def get_eligible_enemies(player_level: int):
             # Bosses spawn from current tier and all lower tiers
             # Boss must be from player's tier or below and player must be at/above boss level
             if e["tier"] <= current_tier and player_level >= e["level_min"]:
-                weighted.append((e, 2))
+                # Bosses have weight 5 - makes them more common than before but still rarer than regular enemies
+                weighted.append((e, 5))
         else:
             # Lower tier enemies spawn more often
             # Tier 1 = weight 10, Tier 2 = weight 9, Tier 3 = weight 8... T10=1
@@ -617,8 +618,8 @@ def get_eligible_enemies(player_level: int):
 
 def calculate_enemy_stats(enemy_level: int, is_boss: bool) -> dict:
     """Calculate enemy stats based on level and boss status"""
-    # Base stats scale with level, bosses get a significant multiplier
-    boss_mult = 2.0 if is_boss else 1.0
+    # Base stats scale with level, bosses get a smaller multiplier (easier)
+    boss_mult = 1.3 if is_boss else 1.0
     health = int((80 + enemy_level * 18) * boss_mult)
     attack = int((8 + enemy_level * 3.2) * boss_mult)
     defense = int((5 + enemy_level * 1.8) * boss_mult)
