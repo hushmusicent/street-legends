@@ -597,18 +597,21 @@ def get_eligible_enemies(player_level: int):
                 # Bosses have weight 5 - makes them more common than before but still rarer than regular enemies
                 weighted.append((e, 5))
         else:
-            # Lower tier enemies spawn more often
-            # Tier 1 = weight 10, Tier 2 = weight 9, Tier 3 = weight 8... T10=1
-            tier_weight = max(1, 11 - e["tier"])
-            
-            # Boost even more for much lower tiers (they're the common street thugs)
-            tier_diff = current_tier - e["tier"]
-            if tier_diff >= 3:
-                tier_weight += 3  # Extra common for enemies 3+ tiers below
-            elif tier_diff >= 1:
-                tier_weight += 1  # Slightly boosted for lower tiers
-            
-            weighted.append((e, tier_weight))
+            # Only include regular enemies if player can actually fight them at appropriate level
+            # Skip enemies whose level_min would be higher than what player should face
+            if e["level_min"] <= player_level + 1:
+                # Lower tier enemies spawn more often
+                # Tier 1 = weight 10, Tier 2 = weight 9, Tier 3 = weight 8... T10=1
+                tier_weight = max(1, 11 - e["tier"])
+                
+                # Boost even more for much lower tiers (they're the common street thugs)
+                tier_diff = current_tier - e["tier"]
+                if tier_diff >= 3:
+                    tier_weight += 3  # Extra common for enemies 3+ tiers below
+                elif tier_diff >= 1:
+                    tier_weight += 1  # Slightly boosted for lower tiers
+                
+                weighted.append((e, tier_weight))
     
     if not weighted:
         # Fallback to first tier (only the lowest level enemy)
@@ -1214,7 +1217,9 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
             
             # Cap the monster level to player level + 1 for slight challenge
             max_enemy_level = min(template["level_max"], player_level + 1)
-            monster_level = random.randint(template["level_min"], max_enemy_level)
+            # Ensure level_min doesn't exceed our cap
+            min_enemy_level = min(template["level_min"], max_enemy_level)
+            monster_level = random.randint(min_enemy_level, max_enemy_level)
             
             # Offset within territory cell bounds
             offset_lat = random.uniform(-half_cell_lat * 0.8, half_cell_lat * 0.8)
