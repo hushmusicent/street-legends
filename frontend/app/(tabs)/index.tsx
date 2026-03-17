@@ -404,10 +404,18 @@ export default function MapScreen() {
       
       if (result.success) {
         // Success! Show green toast
-        showGameToast(result.message, 'success');
+        showGameToast({
+          type: 'success',
+          title: 'HEIST SUCCESS!',
+          message: result.message,
+        });
       } else {
         // Busted! Show red toast
-        showGameToast(result.message, 'error');
+        showGameToast({
+          type: 'error',
+          title: 'BUSTED!',
+          message: result.message,
+        });
       }
       
       // Refresh player data
