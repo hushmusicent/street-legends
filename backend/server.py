@@ -3120,9 +3120,9 @@ async def get_owned_territories(player_id: str):
 # ============== FITNESS TRACKER ==============
 
 STEP_GOALS = [
-    {"goal": 3000, "reward_type": "xp", "reward_value": 200, "label": "Walker", "description": "Earn 200 XP"},
-    {"goal": 6000, "reward_type": "xp", "reward_value": 500, "label": "Jogger", "description": "Earn 500 XP"},
-    {"goal": 10000, "reward_type": "xp_and_buff", "reward_value": 1000, "label": "Runner", "description": "Earn 1000 XP + Attack Boost"},
+    {"goal": 5000, "reward_type": "xp", "reward_value": 200, "label": "Walker", "description": "Earn 200 XP"},
+    {"goal": 10000, "reward_type": "xp", "reward_value": 500, "label": "Jogger", "description": "Earn 500 XP"},
+    {"goal": 50000, "reward_type": "xp_and_buff", "reward_value": 1000, "label": "Runner", "description": "Earn 1000 XP + Attack Boost"},
 ]
 
 @api_router.get("/fitness/{player_id}")
