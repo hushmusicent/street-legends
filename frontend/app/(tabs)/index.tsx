@@ -33,6 +33,8 @@ import {
   eatAtRestaurant,
   spawnNightclubs,
   visitNightclub,
+  spawnBanks,
+  robBank,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -77,10 +79,13 @@ export default function MapScreen() {
   const [nearbyShops, setNearbyShops] = useState<any[]>([]);
   const [nearbyRestaurants, setNearbyRestaurants] = useState<any[]>([]);
   const [nearbyNightclubs, setNearbyNightclubs] = useState<any[]>([]);
+  const [nearbyBanks, setNearbyBanks] = useState<any[]>([]);
   const [territories, setTerritories] = useState<any[]>([]);
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
+  const [selectedBank, setSelectedBank] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
+  const [robbingBank, setRobbingBank] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -257,6 +262,7 @@ export default function MapScreen() {
         getNearbyTerritories(currentPosition.latitude, currentPosition.longitude, player.level),
         spawnRestaurants(currentPosition.latitude, currentPosition.longitude, player.level),
         spawnNightclubs(currentPosition.latitude, currentPosition.longitude, player.level),
+        spawnBanks(currentPosition.latitude, currentPosition.longitude, player.level),
       ]);
 
       const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -266,6 +272,7 @@ export default function MapScreen() {
       const terrs = results[4].status === 'fulfilled' ? results[4].value : [];
       const restaurants = results[5].status === 'fulfilled' ? results[5].value : [];
       const nightclubs = results[6].status === 'fulfilled' ? results[6].value : [];
+      const banks = results[7].status === 'fulfilled' ? results[7].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
@@ -274,8 +281,9 @@ export default function MapScreen() {
       setTerritories(terrs);
       setNearbyRestaurants(restaurants);
       setNearbyNightclubs(nightclubs);
+      setNearbyBanks(banks);
       
-      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants, nightclubs } };
+      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants, nightclubs, banks } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
@@ -384,6 +392,33 @@ export default function MapScreen() {
     }
   }, [playerId]);
 
+  const handleRobBank = useCallback(async () => {
+    if (!playerId || !selectedBank || robbingBank) return;
+    setRobbingBank(true);
+    try {
+      const result = await robBank(selectedBank.id, playerId);
+      
+      if (result.success) {
+        // Success! Play cash sound and show green toast
+        SFX.cashRegister();
+        showGameToast(result.message, 'success');
+      } else {
+        // Busted! Play police siren and show red toast
+        SFX.policeSiren();
+        showGameToast(result.message, 'error');
+      }
+      
+      // Refresh player data
+      const updatedPlayer = await getPlayer(playerId);
+      setPlayer(updatedPlayer);
+      setSelectedBank(null);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Bank robbery failed');
+    } finally {
+      setRobbingBank(false);
+    }
+  }, [playerId, selectedBank, robbingBank]);
+
   // Memoize markers to prevent re-renders
   const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
@@ -428,7 +463,14 @@ export default function MapScreen() {
       name: nc.name,
       icon: nc.icon,
     })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs]);
+    ...nearbyBanks.map((b) => ({
+      id: b.id,
+      coordinate: { latitude: b.latitude, longitude: b.longitude },
+      type: 'bank' as const,
+      name: b.name,
+      icon: '🏦',
+    })),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -449,8 +491,11 @@ export default function MapScreen() {
     } else if (marker.type === 'nightclub') {
       const nightclub = nearbyNightclubs.find((nc) => nc.id === marker.id);
       if (nightclub) setSelectedMarker({ type: 'nightclub', data: nightclub });
+    } else if (marker.type === 'bank') {
+      const bank = nearbyBanks.find((b) => b.id === marker.id);
+      if (bank) setSelectedBank(bank);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks]);
 
   if (loading) {
     return (
@@ -839,6 +884,73 @@ export default function MapScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Bank Robbery Modal */}
+      <Modal
+        visible={!!selectedBank}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedBank(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedBank(null)}>
+          <Pressable style={styles.terrModal} onPress={(e) => e.stopPropagation()}>
+            <TouchableOpacity style={styles.terrClose} onPress={() => setSelectedBank(null)}>
+              <Ionicons name="close" size={22} color="#666" />
+            </TouchableOpacity>
+
+            {selectedBank && (
+              <>
+                <View style={styles.terrHeader}>
+                  <Text style={styles.bankIcon}>🏦</Text>
+                  <View style={styles.terrHeaderText}>
+                    <Text style={styles.terrName}>{selectedBank.name}</Text>
+                    <Text style={styles.terrSubtitle}>Bank Robbery Mission</Text>
+                  </View>
+                </View>
+
+                <View style={styles.terrStats}>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="cash-outline" size={16} color="#f39c12" />
+                    <Text style={styles.terrStatLabel}>Potential Loot:</Text>
+                    <Text style={styles.terrStatValue}>${selectedBank.min_reward} - ${selectedBank.max_reward}</Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="warning-outline" size={16} color="#e74c3c" />
+                    <Text style={styles.terrStatLabel}>Risk Level:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#e74c3c' }]}>50% Chance of Getting Caught</Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="time-outline" size={16} color="#888" />
+                    <Text style={styles.terrStatLabel}>Cooldown:</Text>
+                    <Text style={styles.terrStatValue}>30 minutes</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.bankWarning}>
+                  ⚠️ If caught, you will lose money as a fine!
+                </Text>
+
+                <View style={styles.terrActions}>
+                  <TouchableOpacity
+                    style={[styles.terrBtn, { backgroundColor: '#e74c3c' }]}
+                    onPress={handleRobBank}
+                    disabled={robbingBank}
+                  >
+                    {robbingBank ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="flash" size={18} color="#fff" />
+                        <Text style={styles.terrBtnText}>ROB THE BANK</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -912,4 +1024,16 @@ const styles = StyleSheet.create({
   terrActions: { marginTop: 4 },
   terrBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
   terrBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 1 },
+  
+  // Bank Modal  
+  bankIcon: { fontSize: 40 },
+  bankWarning: { color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12, padding: 10, backgroundColor: 'rgba(243,156,18,0.1)', borderRadius: 8 },
+  terrName: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  terrSubtitle: { color: '#888', fontSize: 12, marginTop: 2 },
+  terrHeaderText: { marginLeft: 12, flex: 1 },
+  terrStats: { backgroundColor: '#222', borderRadius: 12, padding: 12, marginBottom: 12 },
+  terrStatRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
+  terrStatLabel: { color: '#888', fontSize: 12, flex: 1 },
+  terrStatValue: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  terrClose: { position: 'absolute', top: 12, right: 12, zIndex: 10 },
 });

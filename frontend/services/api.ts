@@ -310,4 +310,15 @@ export const visitNightclub = async (nightclubId: string, playerId: string) => {
   return response.data;
 };
 
+// ============== BANKS ==============
+export const spawnBanks = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/banks/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const robBank = async (bankId: string, playerId: string) => {
+  const response = await api.post(`/banks/${bankId}/rob?player_id=${playerId}`);
+  return response.data;
+};
+
 export default api;

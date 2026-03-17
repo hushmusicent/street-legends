@@ -2519,6 +2519,152 @@ async def visit_nightclub(nightclub_id: str, player_id: str):
     }
 
 
+# ============== BANK ROBBERY SYSTEM ==============
+
+BANK_NAMES = [
+    "Fleeca Bank", "Maze Bank", "Bank of Liberty", "Pacific Standard",
+    "Blaine County Savings", "Lombank", "The Exchange", "Union Depository",
+    "First National", "Capitol Trust", "Broker Savings", "Algonquin Trust",
+]
+
+BANK_ICONS = ["🏦", "💰", "🏛️", "💵"]
+
+
+@api_router.get("/banks/spawn")
+async def spawn_banks(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn banks near a location — very rare, only 25% of areas have one"""
+    # Use a grid-based seed so the same area always gives the same result
+    grid_lat = round(latitude * 200) / 200  # ~500m grid cells
+    grid_lng = round(longitude * 200) / 200
+    area_seed = hash(f"bank_{grid_lat}_{grid_lng}")
+    rng = random.Random(area_seed)
+    
+    # Only spawn in ~25% of areas (banks are rare)
+    if rng.random() > 0.25:
+        return []
+    
+    # Check if banks already exist nearby in DB
+    existing = await db.banks.find({
+        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
+        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
+    }).to_list(10)
+    
+    if existing:
+        for bank in existing:
+            bank.pop("_id", None)
+        return existing
+    
+    # Spawn 1 bank in this area
+    lat_offset = rng.uniform(-0.003, 0.003)
+    lng_offset = rng.uniform(-0.003, 0.003)
+    
+    # Bank rewards scale with player level
+    base_reward = 500 + (player_level * 100)
+    
+    bank = {
+        "id": str(uuid.uuid4()),
+        "name": rng.choice(BANK_NAMES),
+        "icon": rng.choice(BANK_ICONS),
+        "latitude": latitude + lat_offset,
+        "longitude": longitude + lng_offset,
+        "min_reward": int(base_reward * 0.5),
+        "max_reward": int(base_reward * 1.5),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.banks.insert_one(bank)
+    bank.pop("_id", None)
+    return [bank]
+
+
+@api_router.post("/banks/{bank_id}/rob")
+async def rob_bank(bank_id: str, player_id: str):
+    """Attempt to rob a bank — 50/50 chance of success or getting caught"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    bank = await db.banks.find_one({"id": bank_id})
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    
+    # Check cooldown (30 minutes per player per bank)
+    cooldown_key = f"bank_cooldowns.{bank_id}"
+    last_rob = player.get("bank_cooldowns", {}).get(bank_id)
+    if last_rob:
+        try:
+            last_dt = datetime.fromisoformat(last_rob)
+            mins_since = (datetime.utcnow() - last_dt).total_seconds() / 60
+            if mins_since < 30:
+                remaining = round(30 - mins_since, 1)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"The heat is still on from your last job here! Wait {remaining} minutes."
+                )
+        except (ValueError, TypeError):
+            pass
+    
+    player_level = player.get("level", 1)
+    player_cash = player.get("cash", 0)
+    
+    # Calculate rewards based on player level
+    base_reward = 500 + (player_level * 100)
+    min_reward = int(base_reward * 0.5)
+    max_reward = int(base_reward * 1.5)
+    
+    # 50/50 chance of success
+    success = random.random() < 0.5
+    
+    if success:
+        # Successful heist!
+        loot = random.randint(min_reward, max_reward)
+        new_cash = player_cash + loot
+        
+        await db.players.update_one(
+            {"id": player_id},
+            {
+                "$set": {
+                    "cash": new_cash,
+                    f"bank_cooldowns.{bank_id}": datetime.utcnow().isoformat(),
+                },
+                "$inc": {"stats.banks_robbed": 1}
+            }
+        )
+        
+        return {
+            "success": True,
+            "message": f"💰 HEIST SUCCESS! You escaped from {bank['name']} with ${loot}!",
+            "bank_name": bank["name"],
+            "loot": loot,
+            "cash": new_cash,
+        }
+    else:
+        # Caught by cops!
+        fine = random.randint(min_reward // 2, min_reward)
+        # Can't go below 0
+        new_cash = max(0, player_cash - fine)
+        actual_fine = player_cash - new_cash
+        
+        await db.players.update_one(
+            {"id": player_id},
+            {
+                "$set": {
+                    "cash": new_cash,
+                    f"bank_cooldowns.{bank_id}": datetime.utcnow().isoformat(),
+                },
+                "$inc": {"stats.times_caught": 1}
+            }
+        )
+        
+        return {
+            "success": False,
+            "message": f"🚔 BUSTED! The cops caught you at {bank['name']}! You paid ${actual_fine} in fines.",
+            "bank_name": bank["name"],
+            "fine": actual_fine,
+            "cash": new_cash,
+        }
+
+
 # ============== EQUIPMENT ENDPOINTS ==============
 
 @api_router.get("/items")
