@@ -16,6 +16,8 @@ const SOUND_URLS = {
   // Mission sounds - Custom uploaded sounds
   bountyMission: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/m730rzhk_Bounty_Missions.mp3',
   phoneMission: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/8n4qehpc_Phone_Booth_Missions.mp3',
+  // Bank mission sound
+  bankMission: 'https://customer-assets.emergentagent.com/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/q19r3g3d_Bank_missions.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -152,6 +154,7 @@ export const SFX = {
   gunShop: () => playSound('gunShop', 0.5),
   bountyMission: () => playSound('bountyMission', 0.5),
   phoneMission: () => playSound('phoneMission', 0.5),
+  bankMission: () => playSound('bankMission', 0.6),
 };
 
 export default useSoundEffects;

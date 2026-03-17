@@ -395,16 +395,18 @@ export default function MapScreen() {
   const handleRobBank = useCallback(async () => {
     if (!playerId || !selectedBank || robbingBank) return;
     setRobbingBank(true);
+    
+    // Play bank mission sound when starting the robbery
+    SFX.bankMission();
+    
     try {
       const result = await robBank(selectedBank.id, playerId);
       
       if (result.success) {
-        // Success! Play cash sound and show green toast
-        SFX.cashRegister();
+        // Success! Show green toast
         showGameToast(result.message, 'success');
       } else {
-        // Busted! Play police siren and show red toast
-        SFX.policeSiren();
+        // Busted! Show red toast
         showGameToast(result.message, 'error');
       }
       
