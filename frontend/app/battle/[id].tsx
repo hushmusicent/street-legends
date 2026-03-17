@@ -59,7 +59,14 @@ export default function BattleScreen() {
     if (!playerId) return;
     try {
       const data = await getPlayerSkills(playerId);
-      setSkills(data);
+      // New API returns { skills: [...], equipped_skills: [...], ... }
+      // We need only equipped skills for battle
+      const skillsArray = data.skills || data;
+      // Filter to only equipped skills (or fall back to unlocked for backwards compatibility)
+      const equippedSkills = Array.isArray(skillsArray) 
+        ? skillsArray.filter((s: any) => s.equipped || s.unlocked)
+        : [];
+      setSkills(equippedSkills);
     } catch (error) {
       console.error('Failed to load skills:', error);
     }
@@ -244,7 +251,7 @@ export default function BattleScreen() {
               </View>
               <ScrollView style={styles.skillsScroll} showsVerticalScrollIndicator={false}>
                 <View style={styles.skillsGrid}>
-                  {skills.filter((s) => s.unlocked).map((skill) => (
+                  {skills.map((skill) => (
                     <TouchableOpacity
                       key={skill.id}
                       style={[
@@ -259,10 +266,10 @@ export default function BattleScreen() {
                       <Text style={styles.skillCost}>{skill.cost} EN</Text>
                     </TouchableOpacity>
                   ))}
-                  {skills.filter((s) => s.unlocked).length === 0 && (
+                  {skills.length === 0 && (
                     <View style={styles.noSkills}>
                       <Ionicons name="alert-circle-outline" size={24} color="#666" />
-                      <Text style={styles.noSkillsText}>No skills unlocked yet</Text>
+                      <Text style={styles.noSkillsText}>No skills equipped</Text>
                     </View>
                   )}
                 </View>
