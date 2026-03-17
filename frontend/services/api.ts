@@ -175,6 +175,22 @@ export const buyFromShop = async (playerId: string, itemId: string, shopPrice: n
   return response.data;
 };
 
+// Skill Shop APIs
+export const buySkill = async (playerId: string, skillId: string): Promise<any> => {
+  const response = await api.post(`/shop/buy-skill?player_id=${playerId}&skill_id=${skillId}`);
+  return response.data;
+};
+
+export const equipSkill = async (playerId: string, skillId: string): Promise<any> => {
+  const response = await api.post(`/players/${playerId}/equip-skill?skill_id=${skillId}`);
+  return response.data;
+};
+
+export const unequipSkill = async (playerId: string, skillId: string): Promise<any> => {
+  const response = await api.post(`/players/${playerId}/unequip-skill?skill_id=${skillId}`);
+  return response.data;
+};
+
 // Auth APIs
 export const registerAccount = async (
   username: string,

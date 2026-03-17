@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
-import { buyFromShop, getPlayer } from '../services/api';
+import { buyFromShop, getPlayer, buySkill } from '../services/api';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -41,10 +41,25 @@ interface ShopItem {
   shop_price: number;
 }
 
+interface ShopSkill {
+  id: string;
+  name: string;
+  description: string;
+  unlock_level: number;
+  cost: number;
+  value: number;
+  shop_price: number;
+  damage_mult?: number;
+  heal_percent?: number;
+  defense_buff?: number;
+  item_type: string;
+}
+
 export default function ShopDetailScreen() {
   const { shopData } = useLocalSearchParams<{ shopData: string }>();
   const { player, playerId, setPlayer } = useGameStore();
   const [buying, setBuying] = useState<string | null>(null);
+  const [buyingSkill, setBuyingSkill] = useState<string | null>(null);
 
   let shop: any = null;
   try {
@@ -54,6 +69,7 @@ export default function ShopDetailScreen() {
   }
 
   const stock: ShopItem[] = shop.stock || [];
+  const skillsForSale: ShopSkill[] = shop.skills_for_sale || [];
 
   const handleBuy = async (item: ShopItem) => {
     if (!playerId || !player) return;
@@ -78,6 +94,35 @@ export default function ShopDetailScreen() {
             Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
           } finally {
             setBuying(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleBuySkill = async (skill: ShopSkill) => {
+    if (!playerId || !player) return;
+
+    if (player.cash < skill.shop_price) {
+      Alert.alert('Not Enough Cash', `You need $${skill.shop_price} but only have $${player.cash}.`);
+      return;
+    }
+
+    Alert.alert('Buy Skill', `Buy ${skill.name} for $${skill.shop_price}?\n\n${skill.description}`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Buy',
+        onPress: async () => {
+          try {
+            setBuyingSkill(skill.id);
+            await buySkill(playerId, skill.id);
+            const p = await getPlayer(playerId);
+            setPlayer(p);
+            Alert.alert('Skill Purchased!', `${skill.name} learned! Go to Character > Skills to equip it.`);
+          } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
+          } finally {
+            setBuyingSkill(null);
           }
         },
       },
@@ -134,6 +179,67 @@ export default function ShopDetailScreen() {
 
       {/* Stock */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Skills Section */}
+        {skillsForSale.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>SKILLS FOR SALE ({skillsForSale.length})</Text>
+            {skillsForSale.map((skill, idx) => {
+              const canBuy = (player?.cash || 0) >= skill.shop_price && (player?.level || 0) >= skill.unlock_level;
+              const isBuying = buyingSkill === skill.id;
+              const originalPrice = skill.value;
+              const isOnSale = skill.shop_price < originalPrice;
+
+              return (
+                <View key={`skill-${skill.id}-${idx}`} style={[styles.itemCard, { borderLeftColor: '#9c27b0', borderLeftWidth: 3 }]}>
+                  <View style={[styles.itemIcon, { backgroundColor: 'rgba(156,39,176,0.15)' }]}>
+                    <Ionicons name="flash" size={24} color="#9c27b0" />
+                  </View>
+
+                  <View style={styles.itemInfo}>
+                    <View style={styles.itemRow}>
+                      <Text style={[styles.itemName, { color: '#9c27b0' }]}>{skill.name}</Text>
+                      <Text style={[styles.rarityTag, { color: '#9c27b0' }]}>SKILL</Text>
+                    </View>
+                    <Text style={styles.itemDesc} numberOfLines={2}>{skill.description}</Text>
+                    <View style={styles.statsRow}>
+                      <Text style={styles.statText}>Cost: {skill.cost} Energy</Text>
+                      {skill.damage_mult && <Text style={[styles.statText, { color: '#f44336' }]}>{skill.damage_mult}x DMG</Text>}
+                      {skill.heal_percent && <Text style={[styles.statText, { color: '#4caf50' }]}>{Math.round(skill.heal_percent * 100)}% Heal</Text>}
+                      {skill.defense_buff && <Text style={[styles.statText, { color: '#2196f3' }]}>{skill.defense_buff}x DEF</Text>}
+                    </View>
+                    {(player?.level || 0) < skill.unlock_level && (
+                      <Text style={styles.levelReq}>Requires Lv.{skill.unlock_level}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.priceCol}>
+                    {isOnSale && (
+                      <Text style={styles.originalPrice}>${originalPrice}</Text>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.buyBtn, { backgroundColor: '#9c27b0' }, !canBuy && styles.buyBtnDisabled]}
+                      onPress={() => canBuy && handleBuySkill(skill)}
+                      disabled={!canBuy || isBuying}
+                    >
+                      {isBuying ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="cash" size={13} color={canBuy ? '#fff' : '#555'} />
+                          <Text style={[styles.buyBtnText, !canBuy && styles.buyBtnTextDisabled]}>
+                            ${skill.shop_price}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+            <View style={{ height: 16 }} />
+          </>
+        )}
+
         <Text style={styles.sectionTitle}>AVAILABLE STOCK ({stock.length})</Text>
 
         {stock.map((item, idx) => {

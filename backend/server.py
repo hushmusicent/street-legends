@@ -629,13 +629,156 @@ def calculate_enemy_stats(enemy_level: int, is_boss: bool) -> dict:
     return {"health": health, "max_health": health, "attack": attack, "defense": defense}
 
 SKILLS = {
-    "heavy_strike": {"name": "Heavy Strike", "damage_mult": 1.5, "cost": 10, "unlock_level": 1},
-    "quick_shot": {"name": "Quick Shot", "damage_mult": 1.2, "cost": 5, "unlock_level": 1},
-    "defensive_stance": {"name": "Defensive Stance", "defense_buff": 2.0, "cost": 8, "unlock_level": 3},
-    "critical_aim": {"name": "Critical Aim", "crit_chance": 0.5, "cost": 15, "unlock_level": 5},
-    "heal": {"name": "Street Medicine", "heal_percent": 0.3, "cost": 20, "unlock_level": 7},
-    "rage": {"name": "Rage Mode", "damage_mult": 2.0, "cost": 25, "unlock_level": 10},
-    "execute": {"name": "Execute", "damage_mult": 3.0, "cost": 40, "unlock_level": 15}
+    # Level 1 - Starter skills (players start with these 2)
+    "heavy_strike": {"name": "Heavy Strike", "damage_mult": 1.5, "cost": 10, "unlock_level": 1, "value": 0, "description": "A powerful melee attack dealing 1.5x damage."},
+    "quick_shot": {"name": "Quick Shot", "damage_mult": 1.2, "cost": 5, "unlock_level": 1, "value": 0, "description": "A fast ranged attack dealing 1.2x damage."},
+    
+    # Level 3
+    "defensive_stance": {"name": "Defensive Stance", "defense_buff": 2.0, "cost": 8, "unlock_level": 3, "value": 100, "description": "Double your defense for this turn."},
+    
+    # Level 5
+    "critical_aim": {"name": "Critical Aim", "crit_chance": 0.5, "cost": 15, "unlock_level": 5, "value": 150, "description": "50% chance of guaranteed critical hit."},
+    
+    # Level 7
+    "heal": {"name": "Street Medicine", "heal_percent": 0.3, "cost": 20, "unlock_level": 7, "value": 200, "description": "Heal 30% of your max health."},
+    
+    # Level 9
+    "rage": {"name": "Rage Mode", "damage_mult": 2.0, "cost": 25, "unlock_level": 9, "value": 250, "description": "Unleash fury for 2x damage."},
+    
+    # Level 11
+    "counter_strike": {"name": "Counter Strike", "damage_mult": 1.8, "defense_buff": 1.5, "cost": 18, "unlock_level": 11, "value": 350, "description": "Attack while boosting defense."},
+    
+    # Level 13
+    "blinding_flash": {"name": "Blinding Flash", "stun_chance": 0.4, "damage_mult": 1.3, "cost": 20, "unlock_level": 13, "value": 400, "description": "40% chance to stun enemy, 1.3x damage."},
+    
+    # Level 15
+    "execute": {"name": "Execute", "damage_mult": 3.0, "cost": 40, "unlock_level": 15, "value": 500, "description": "Devastating finisher dealing 3x damage."},
+    
+    # Level 17
+    "iron_skin": {"name": "Iron Skin", "defense_buff": 3.0, "cost": 22, "unlock_level": 17, "value": 550, "description": "Triple your defense temporarily."},
+    
+    # Level 19
+    "adrenaline_rush": {"name": "Adrenaline Rush", "damage_mult": 1.6, "heal_percent": 0.15, "cost": 28, "unlock_level": 19, "value": 600, "description": "Attack for 1.6x and heal 15%."},
+    
+    # Level 21
+    "double_tap": {"name": "Double Tap", "damage_mult": 2.2, "cost": 30, "unlock_level": 21, "value": 700, "description": "Two quick shots for 2.2x total damage."},
+    
+    # Level 23
+    "smoke_bomb": {"name": "Smoke Bomb", "defense_buff": 2.5, "heal_percent": 0.1, "cost": 25, "unlock_level": 23, "value": 750, "description": "Create cover, boost defense 2.5x and heal 10%."},
+    
+    # Level 25
+    "berserker": {"name": "Berserker", "damage_mult": 2.5, "cost": 35, "unlock_level": 25, "value": 850, "description": "Wild attack dealing 2.5x damage."},
+    
+    # Level 27
+    "tactical_reload": {"name": "Tactical Reload", "heal_percent": 0.25, "cost": 18, "unlock_level": 27, "value": 900, "description": "Quick recovery healing 25% HP."},
+    
+    # Level 29
+    "armor_pierce": {"name": "Armor Pierce", "damage_mult": 2.0, "ignore_defense": True, "cost": 32, "unlock_level": 29, "value": 1000, "description": "Attack that ignores enemy defense."},
+    
+    # Level 31
+    "venomous_strike": {"name": "Venomous Strike", "damage_mult": 1.5, "poison": 0.1, "cost": 28, "unlock_level": 31, "value": 1100, "description": "Poison attack, deals damage over time."},
+    
+    # Level 33
+    "battle_cry": {"name": "Battle Cry", "damage_mult": 1.8, "defense_buff": 1.3, "cost": 30, "unlock_level": 33, "value": 1200, "description": "Boost morale: 1.8x damage + defense."},
+    
+    # Level 35
+    "headshot": {"name": "Headshot", "damage_mult": 3.5, "crit_chance": 0.3, "cost": 45, "unlock_level": 35, "value": 1400, "description": "Precision shot for 3.5x damage."},
+    
+    # Level 37
+    "fortress": {"name": "Fortress", "defense_buff": 4.0, "cost": 35, "unlock_level": 37, "value": 1500, "description": "Quadruple your defense."},
+    
+    # Level 39
+    "lifesteal": {"name": "Lifesteal", "damage_mult": 1.8, "lifesteal": 0.3, "cost": 38, "unlock_level": 39, "value": 1650, "description": "Drain 30% of damage dealt as health."},
+    
+    # Level 41
+    "chain_attack": {"name": "Chain Attack", "damage_mult": 2.8, "cost": 42, "unlock_level": 41, "value": 1800, "description": "Multiple hits dealing 2.8x total."},
+    
+    # Level 43
+    "medic": {"name": "Combat Medic", "heal_percent": 0.4, "cost": 30, "unlock_level": 43, "value": 1900, "description": "Advanced healing for 40% HP."},
+    
+    # Level 45
+    "rampage": {"name": "Rampage", "damage_mult": 3.0, "cost": 50, "unlock_level": 45, "value": 2100, "description": "Unstoppable assault for 3x damage."},
+    
+    # Level 47
+    "evasion": {"name": "Evasion", "defense_buff": 5.0, "cost": 40, "unlock_level": 47, "value": 2250, "description": "5x defense through expert dodging."},
+    
+    # Level 49
+    "assassinate": {"name": "Assassinate", "damage_mult": 4.0, "cost": 55, "unlock_level": 49, "value": 2500, "description": "Silent killer dealing 4x damage."},
+    
+    # Level 51
+    "blood_pact": {"name": "Blood Pact", "damage_mult": 2.5, "lifesteal": 0.4, "cost": 48, "unlock_level": 51, "value": 2700, "description": "2.5x damage, steal 40% as HP."},
+    
+    # Level 53
+    "titanium_shell": {"name": "Titanium Shell", "defense_buff": 6.0, "heal_percent": 0.1, "cost": 45, "unlock_level": 53, "value": 2900, "description": "6x defense + 10% heal."},
+    
+    # Level 55
+    "obliterate": {"name": "Obliterate", "damage_mult": 4.5, "cost": 60, "unlock_level": 55, "value": 3200, "description": "Devastating blow for 4.5x damage."},
+    
+    # Level 57
+    "regenerate": {"name": "Regenerate", "heal_percent": 0.5, "cost": 40, "unlock_level": 57, "value": 3400, "description": "Powerful healing for 50% HP."},
+    
+    # Level 59
+    "phantom_strike": {"name": "Phantom Strike", "damage_mult": 3.5, "ignore_defense": True, "cost": 55, "unlock_level": 59, "value": 3700, "description": "Ghostly attack ignores all defense."},
+    
+    # Level 61
+    "war_machine": {"name": "War Machine", "damage_mult": 3.0, "defense_buff": 2.0, "cost": 52, "unlock_level": 61, "value": 4000, "description": "3x damage + 2x defense."},
+    
+    # Level 63
+    "drain_life": {"name": "Drain Life", "damage_mult": 2.0, "lifesteal": 0.5, "cost": 50, "unlock_level": 63, "value": 4300, "description": "2x damage, drain 50% as HP."},
+    
+    # Level 65
+    "massacre": {"name": "Massacre", "damage_mult": 5.0, "cost": 70, "unlock_level": 65, "value": 4700, "description": "Brutal assault for 5x damage."},
+    
+    # Level 67
+    "diamond_armor": {"name": "Diamond Armor", "defense_buff": 8.0, "cost": 55, "unlock_level": 67, "value": 5000, "description": "8x defense, nearly invincible."},
+    
+    # Level 69
+    "phoenix_heal": {"name": "Phoenix Heal", "heal_percent": 0.6, "cost": 50, "unlock_level": 69, "value": 5400, "description": "Rise again with 60% HP restored."},
+    
+    # Level 71
+    "annihilate": {"name": "Annihilate", "damage_mult": 5.5, "cost": 75, "unlock_level": 71, "value": 5800, "description": "Destructive force for 5.5x damage."},
+    
+    # Level 73
+    "vampire": {"name": "Vampire", "damage_mult": 3.0, "lifesteal": 0.6, "cost": 60, "unlock_level": 73, "value": 6200, "description": "3x damage, steal 60% as HP."},
+    
+    # Level 75
+    "juggernaut": {"name": "Juggernaut", "damage_mult": 4.0, "defense_buff": 3.0, "cost": 65, "unlock_level": 75, "value": 6700, "description": "Unstoppable: 4x damage + 3x defense."},
+    
+    # Level 77
+    "omega_heal": {"name": "Omega Heal", "heal_percent": 0.7, "defense_buff": 2.0, "cost": 55, "unlock_level": 77, "value": 7200, "description": "Ultimate heal: 70% HP + 2x defense."},
+    
+    # Level 79
+    "death_blow": {"name": "Death Blow", "damage_mult": 6.0, "cost": 80, "unlock_level": 79, "value": 7800, "description": "Fatal strike dealing 6x damage."},
+    
+    # Level 81
+    "eternal_guard": {"name": "Eternal Guard", "defense_buff": 10.0, "cost": 65, "unlock_level": 81, "value": 8400, "description": "Legendary 10x defense boost."},
+    
+    # Level 83
+    "soul_reaper": {"name": "Soul Reaper", "damage_mult": 5.0, "lifesteal": 0.7, "cost": 75, "unlock_level": 83, "value": 9100, "description": "5x damage, drain 70% as HP."},
+    
+    # Level 85
+    "armageddon": {"name": "Armageddon", "damage_mult": 7.0, "cost": 90, "unlock_level": 85, "value": 9800, "description": "Apocalyptic power for 7x damage."},
+    
+    # Level 87
+    "immortal": {"name": "Immortal", "heal_percent": 0.8, "defense_buff": 5.0, "cost": 70, "unlock_level": 87, "value": 10600, "description": "God mode: 80% heal + 5x defense."},
+    
+    # Level 89
+    "extinction": {"name": "Extinction", "damage_mult": 8.0, "ignore_defense": True, "cost": 100, "unlock_level": 89, "value": 11500, "description": "8x damage that ignores all defense."},
+    
+    # Level 91
+    "divine_shield": {"name": "Divine Shield", "defense_buff": 15.0, "heal_percent": 0.3, "cost": 80, "unlock_level": 91, "value": 12500, "description": "Godlike 15x defense + 30% heal."},
+    
+    # Level 93
+    "apocalypse": {"name": "Apocalypse", "damage_mult": 9.0, "cost": 110, "unlock_level": 93, "value": 13600, "description": "End times: 9x damage devastation."},
+    
+    # Level 95
+    "titan_soul": {"name": "Titan Soul", "damage_mult": 7.0, "defense_buff": 5.0, "lifesteal": 0.5, "cost": 100, "unlock_level": 95, "value": 14800, "description": "Titan power: 7x dmg, 5x def, 50% steal."},
+    
+    # Level 97
+    "rebirth": {"name": "Rebirth", "heal_percent": 1.0, "cost": 90, "unlock_level": 97, "value": 16000, "description": "Full health restoration."},
+    
+    # Level 99
+    "godslayer": {"name": "Godslayer", "damage_mult": 10.0, "ignore_defense": True, "lifesteal": 0.5, "cost": 120, "unlock_level": 99, "value": 18000, "description": "Ultimate skill: 10x dmg, ignore def, 50% steal."},
 }
 
 # ============== TERRITORY SYSTEM ==============
@@ -716,7 +859,9 @@ class Player(BaseModel):
     guild_id: Optional[str] = None
     equipment: Dict[str, Optional[str]] = Field(default_factory=lambda: {"weapon": None, "armor": None, "accessory": None, "vehicle": None})
     inventory: List[str] = Field(default_factory=list)
-    skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])
+    owned_skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])  # All skills player owns
+    equipped_skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])  # Max 4 skills equipped for battle
+    skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])  # Legacy field for backwards compatibility
     wins: int = 0
     losses: int = 0
     missions_completed: int = 0
@@ -1391,6 +1536,12 @@ async def battle_action(battle_id: str, action: BattleAction):
         skill = SKILLS.get(action.skill_id)
         if not skill:
             raise HTTPException(status_code=400, detail="Invalid skill")
+        
+        # Check if skill is equipped (only equipped skills can be used in battle)
+        equipped_skills = player.get("equipped_skills", player.get("owned_skills", player.get("skills", ["heavy_strike", "quick_shot"])))
+        if action.skill_id not in equipped_skills:
+            raise HTTPException(status_code=400, detail="Skill not equipped. Equip it first to use in battle.")
+        
         if skill["cost"] > player_energy:
             raise HTTPException(status_code=400, detail="Not enough energy")
         
@@ -2082,6 +2233,23 @@ async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
             priced_item["shop_price"] = max(5, int(item["value"] * price_mult))
             priced_stock.append(priced_item)
         
+        # Add skills to gun shops
+        skills_for_sale = []
+        if shop_type == "gun_shop":
+            # Get skills available at player's level that have a value (purchasable)
+            available_skills = [
+                {"id": skill_id, **skill, "item_type": "skill"} 
+                for skill_id, skill in SKILLS.items() 
+                if skill["unlock_level"] <= player_level and skill.get("value", 0) > 0
+            ]
+            # Pick 3-5 random skills to sell
+            if available_skills:
+                skill_count = min(random.randint(3, 5), len(available_skills))
+                skills_for_sale = random.sample(available_skills, skill_count)
+                # Apply price multiplier to skills
+                for skill in skills_for_sale:
+                    skill["shop_price"] = max(50, int(skill["value"] * price_mult))
+        
         shop = {
             "id": str(uuid.uuid4()),
             "name": shop_name,
@@ -2090,6 +2258,7 @@ async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
             "longitude": longitude + lng_offset,
             "price_multiplier": price_mult,
             "stock": priced_stock,
+            "skills_for_sale": skills_for_sale,
             "level": player_level,
         }
         shops.append(shop)
@@ -2548,28 +2717,174 @@ async def get_chat_messages(channel: str, limit: int = 50):
 # ============== SKILLS ENDPOINT ==============
 @api_router.get("/skills")
 async def get_all_skills():
-    """Get all available skills"""
-    return SKILLS
+    """Get all available skills with their details"""
+    skills_list = []
+    for skill_id, skill in SKILLS.items():
+        skills_list.append({
+            "id": skill_id,
+            **skill
+        })
+    # Sort by unlock level
+    skills_list.sort(key=lambda s: s["unlock_level"])
+    return skills_list
 
 @api_router.get("/players/{player_id}/skills")
 async def get_player_skills(player_id: str):
-    """Get ALL skills - unlocked ones are usable, locked ones show what's coming"""
+    """Get player's owned skills and equipped skills"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
+    # Get owned skills (default to starter skills for backwards compatibility)
+    owned_skills = player.get("owned_skills", player.get("skills", ["heavy_strike", "quick_shot"]))
+    equipped_skills = player.get("equipped_skills", owned_skills[:4])
+    player_level = player.get("level", 1)
+    
+    # Build response with all skills info
     all_skills = []
     for skill_id, skill in SKILLS.items():
-        is_unlocked = player["level"] >= skill["unlock_level"]
+        is_owned = skill_id in owned_skills
+        is_equipped = skill_id in equipped_skills
+        can_unlock = player_level >= skill["unlock_level"]
+        
         all_skills.append({
             "id": skill_id,
             **skill,
-            "unlocked": is_unlocked,
+            "owned": is_owned,
+            "equipped": is_equipped,
+            "can_unlock": can_unlock,
         })
     
-    # Sort: unlocked first, then by unlock_level
-    all_skills.sort(key=lambda s: (0 if s["unlocked"] else 1, s["unlock_level"]))
-    return all_skills
+    # Sort: equipped first, then owned, then by unlock_level
+    all_skills.sort(key=lambda s: (0 if s["equipped"] else 1, 0 if s["owned"] else 1, s["unlock_level"]))
+    
+    return {
+        "skills": all_skills,
+        "owned_skills": owned_skills,
+        "equipped_skills": equipped_skills,
+        "max_equipped": 4
+    }
+
+@api_router.get("/shop/skills")
+async def get_skill_shop(player_level: int = 1):
+    """Get skills available to buy at the shop based on player level"""
+    available_skills = []
+    for skill_id, skill in SKILLS.items():
+        # Only show skills that are at or below player level and have a value (can be purchased)
+        if skill["unlock_level"] <= player_level and skill.get("value", 0) > 0:
+            available_skills.append({
+                "id": skill_id,
+                **skill
+            })
+    
+    # Sort by unlock level
+    available_skills.sort(key=lambda s: s["unlock_level"])
+    return available_skills
+
+@api_router.post("/shop/buy-skill")
+async def buy_skill(player_id: str, skill_id: str):
+    """Buy a skill from the shop"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    skill = SKILLS.get(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    # Check if player already owns the skill
+    owned_skills = player.get("owned_skills", player.get("skills", ["heavy_strike", "quick_shot"]))
+    if skill_id in owned_skills:
+        raise HTTPException(status_code=400, detail="You already own this skill")
+    
+    # Check level requirement
+    if player.get("level", 1) < skill["unlock_level"]:
+        raise HTTPException(status_code=400, detail=f"Requires level {skill['unlock_level']}")
+    
+    # Check if skill can be purchased (starter skills are free)
+    skill_price = skill.get("value", 0)
+    if skill_price <= 0:
+        raise HTTPException(status_code=400, detail="This skill cannot be purchased")
+    
+    # Check cash
+    if player.get("cash", 0) < skill_price:
+        raise HTTPException(status_code=400, detail=f"Not enough cash. Need ${skill_price}")
+    
+    # Purchase the skill
+    await db.players.update_one(
+        {"id": player_id},
+        {
+            "$inc": {"cash": -skill_price},
+            "$push": {"owned_skills": skill_id}
+        }
+    )
+    
+    return {"message": f"Purchased {skill['name']}!", "skill": skill}
+
+@api_router.post("/players/{player_id}/equip-skill")
+async def equip_skill(player_id: str, skill_id: str):
+    """Equip a skill (max 4 skills can be equipped)"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    skill = SKILLS.get(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    # Check if player owns the skill
+    owned_skills = player.get("owned_skills", player.get("skills", ["heavy_strike", "quick_shot"]))
+    if skill_id not in owned_skills:
+        raise HTTPException(status_code=400, detail="You don't own this skill")
+    
+    # Get current equipped skills
+    equipped_skills = player.get("equipped_skills", owned_skills[:4])
+    
+    # Check if already equipped
+    if skill_id in equipped_skills:
+        raise HTTPException(status_code=400, detail="Skill is already equipped")
+    
+    # Check max equipped limit (4)
+    if len(equipped_skills) >= 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 skills can be equipped. Unequip a skill first.")
+    
+    # Equip the skill
+    await db.players.update_one(
+        {"id": player_id},
+        {"$push": {"equipped_skills": skill_id}}
+    )
+    
+    return {"message": f"Equipped {skill['name']}!"}
+
+@api_router.post("/players/{player_id}/unequip-skill")
+async def unequip_skill(player_id: str, skill_id: str):
+    """Unequip a skill"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    skill = SKILLS.get(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    # Get current equipped skills
+    equipped_skills = player.get("equipped_skills", [])
+    
+    # Check if equipped
+    if skill_id not in equipped_skills:
+        raise HTTPException(status_code=400, detail="Skill is not equipped")
+    
+    # Must have at least 1 skill equipped
+    if len(equipped_skills) <= 1:
+        raise HTTPException(status_code=400, detail="You must have at least 1 skill equipped")
+    
+    # Unequip the skill
+    await db.players.update_one(
+        {"id": player_id},
+        {"$pull": {"equipped_skills": skill_id}}
+    )
+    
+    return {"message": f"Unequipped {skill['name']}!"}
 
 # ============== CONSUMABLE SHOP ENDPOINTS ==============
 

@@ -33,6 +33,8 @@ import {
   sellItem,
   collectTerritoryIncome,
   getTerritoryIncomePreview,
+  equipSkill,
+  unequipSkill,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -413,7 +415,13 @@ export default function CharacterScreen() {
           />
         )}
         {activeTab === 'skills' && (
-          <SkillsTab skills={skills} classColor={classColor} playerLevel={player.level} />
+          <SkillsTab 
+            skills={skills} 
+            classColor={classColor} 
+            playerLevel={player.level} 
+            playerId={playerId || ''}
+            onRefresh={loadData}
+          />
         )}
       </ScrollView>
 
@@ -841,11 +849,17 @@ function SkillsTab({
   skills,
   classColor,
   playerLevel,
+  playerId,
+  onRefresh,
 }: {
-  skills: Skill[];
+  skills: any;
   classColor: string;
   playerLevel: number;
+  playerId: string;
+  onRefresh: () => void;
 }) {
+  const [equipping, setEquipping] = useState<string | null>(null);
+  
   const SKILL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
     heavy_strike: 'hammer',
     quick_shot: 'flash',
@@ -854,72 +868,241 @@ function SkillsTab({
     heal: 'medkit',
     rage: 'flame',
     execute: 'skull',
+    counter_strike: 'sync',
+    blinding_flash: 'flashlight',
+    iron_skin: 'body',
+    adrenaline_rush: 'pulse',
+    double_tap: 'git-compare',
+    smoke_bomb: 'cloud',
+    berserker: 'bonfire',
+    tactical_reload: 'reload',
+    armor_pierce: 'arrow-forward',
+    venomous_strike: 'bug',
+    battle_cry: 'megaphone',
+    headshot: 'locate',
+    fortress: 'business',
+    lifesteal: 'heart-half',
+    chain_attack: 'link',
+    medic: 'bandage',
+    rampage: 'thunderstorm',
+    evasion: 'footsteps',
+    assassinate: 'cut',
+    blood_pact: 'water',
+    titanium_shell: 'hardware-chip',
+    obliterate: 'nuclear',
+    regenerate: 'leaf',
+    phantom_strike: 'eye-off',
+    war_machine: 'construct',
+    drain_life: 'nutrition',
+    massacre: 'warning',
+    diamond_armor: 'diamond',
+    phoenix_heal: 'sunny',
+    annihilate: 'planet',
+    vampire: 'moon',
+    juggernaut: 'fitness',
+    omega_heal: 'sparkles',
+    death_blow: 'hand-left',
+    eternal_guard: 'infinite',
+    soul_reaper: 'logo-snapchat',
+    armageddon: 'flame',
+    immortal: 'star',
+    extinction: 'skull',
+    divine_shield: 'ribbon',
+    apocalypse: 'globe',
+    titan_soul: 'trophy',
+    rebirth: 'refresh-circle',
+    godslayer: 'flash',
   };
 
-  if (skills.length === 0) {
+  const handleEquip = async (skillId: string) => {
+    try {
+      setEquipping(skillId);
+      await equipSkill(playerId, skillId);
+      onRefresh();
+      Alert.alert('Success', 'Skill equipped!');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to equip skill');
+    } finally {
+      setEquipping(null);
+    }
+  };
+
+  const handleUnequip = async (skillId: string) => {
+    try {
+      setEquipping(skillId);
+      await unequipSkill(playerId, skillId);
+      onRefresh();
+      Alert.alert('Success', 'Skill unequipped!');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to unequip skill');
+    } finally {
+      setEquipping(null);
+    }
+  };
+
+  // Handle both old format (array) and new format (object with skills array)
+  const skillsList = Array.isArray(skills) ? skills : (skills?.skills || []);
+  const equippedSkills = skills?.equipped_skills || [];
+  const maxEquipped = skills?.max_equipped || 4;
+
+  if (skillsList.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="flash-outline" size={64} color="#333" />
         <Text style={styles.emptyStateTitle}>No Skills Yet</Text>
-        <Text style={styles.emptyStateText}>Level up to unlock powerful abilities!</Text>
+        <Text style={styles.emptyStateText}>Buy skills from Gun Shops to unlock powerful abilities!</Text>
       </View>
     );
   }
 
+  // Separate equipped, owned but not equipped, and not owned skills
+  const equippedList = skillsList.filter((s: any) => s.equipped);
+  const ownedNotEquipped = skillsList.filter((s: any) => s.owned && !s.equipped);
+  const notOwned = skillsList.filter((s: any) => !s.owned && s.can_unlock);
+  const locked = skillsList.filter((s: any) => !s.owned && !s.can_unlock);
+
   return (
-    <View>
-      <Text style={styles.sectionTitle}>ABILITIES</Text>
-      {skills.map((skill) => {
-        const unlocked = skill.unlocked !== undefined ? skill.unlocked : playerLevel >= skill.unlock_level;
-        return (
-          <View key={skill.id} style={[styles.skillRow, !unlocked && styles.skillLocked]}>
-            <View style={[styles.skillIconWrap, { backgroundColor: unlocked ? `${classColor}20` : '#1a1a1a' }]}>
-              <Ionicons
-                name={SKILL_ICONS[skill.id] || 'flash'}
-                size={24}
-                color={unlocked ? classColor : '#444'}
-              />
+    <ScrollView>
+      {/* Equipped Skills */}
+      <View style={styles.skillSectionHeader}>
+        <Text style={styles.sectionTitle}>EQUIPPED ({equippedList.length}/{maxEquipped})</Text>
+        <Text style={styles.skillSectionSubtitle}>Active in battle</Text>
+      </View>
+      {equippedList.map((skill: any) => (
+        <View key={skill.id} style={[styles.skillRow, { borderLeftColor: classColor, borderLeftWidth: 3 }]}>
+          <View style={[styles.skillIconWrap, { backgroundColor: `${classColor}20` }]}>
+            <Ionicons
+              name={SKILL_ICONS[skill.id] || 'flash'}
+              size={24}
+              color={classColor}
+            />
+          </View>
+          <View style={styles.skillInfo}>
+            <Text style={styles.skillName}>{skill.name}</Text>
+            <View style={styles.skillDetails}>
+              {skill.damage_mult && <Text style={styles.skillStat}>{skill.damage_mult}x DMG</Text>}
+              {skill.defense_buff && <Text style={[styles.skillStat, { color: '#2196f3' }]}>{skill.defense_buff}x DEF</Text>}
+              {skill.heal_percent && <Text style={[styles.skillStat, { color: '#4caf50' }]}>{Math.round(skill.heal_percent * 100)}% Heal</Text>}
+              {skill.lifesteal && <Text style={[styles.skillStat, { color: '#e91e63' }]}>{Math.round(skill.lifesteal * 100)}% Steal</Text>}
+              <Text style={styles.skillCost}>{skill.cost} EN</Text>
             </View>
-            <View style={styles.skillInfo}>
-              <Text style={[styles.skillName, !unlocked && { color: '#555' }]}>{skill.name}</Text>
-              <View style={styles.skillDetails}>
-                {skill.damage_mult && (
-                  <Text style={styles.skillStat}>
-                    {skill.damage_mult}x DMG
-                  </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.skillActionBtn, { backgroundColor: '#f44336' }]}
+            onPress={() => handleUnequip(skill.id)}
+            disabled={equipping === skill.id}
+          >
+            {equipping === skill.id ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.skillActionText}>REMOVE</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ))}
+
+      {/* Owned but not equipped */}
+      {ownedNotEquipped.length > 0 && (
+        <>
+          <View style={styles.skillSectionHeader}>
+            <Text style={styles.sectionTitle}>OWNED SKILLS ({ownedNotEquipped.length})</Text>
+            <Text style={styles.skillSectionSubtitle}>Tap to equip</Text>
+          </View>
+          {ownedNotEquipped.map((skill: any) => (
+            <View key={skill.id} style={[styles.skillRow, { borderLeftColor: '#4caf50', borderLeftWidth: 3 }]}>
+              <View style={[styles.skillIconWrap, { backgroundColor: 'rgba(76,175,80,0.2)' }]}>
+                <Ionicons
+                  name={SKILL_ICONS[skill.id] || 'flash'}
+                  size={24}
+                  color="#4caf50"
+                />
+              </View>
+              <View style={styles.skillInfo}>
+                <Text style={styles.skillName}>{skill.name}</Text>
+                <View style={styles.skillDetails}>
+                  {skill.damage_mult && <Text style={styles.skillStat}>{skill.damage_mult}x DMG</Text>}
+                  {skill.defense_buff && <Text style={[styles.skillStat, { color: '#2196f3' }]}>{skill.defense_buff}x DEF</Text>}
+                  {skill.heal_percent && <Text style={[styles.skillStat, { color: '#4caf50' }]}>{Math.round(skill.heal_percent * 100)}% Heal</Text>}
+                  {skill.lifesteal && <Text style={[styles.skillStat, { color: '#e91e63' }]}>{Math.round(skill.lifesteal * 100)}% Steal</Text>}
+                  <Text style={styles.skillCost}>{skill.cost} EN</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.skillActionBtn, { backgroundColor: classColor }]}
+                onPress={() => handleEquip(skill.id)}
+                disabled={equipping === skill.id || equippedList.length >= maxEquipped}
+              >
+                {equipping === skill.id ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.skillActionText}>EQUIP</Text>
                 )}
-                {skill.defense_buff && (
-                  <Text style={[styles.skillStat, { color: '#2196f3' }]}>
-                    {skill.defense_buff}x DEF
-                  </Text>
-                )}
-                {skill.heal_percent && (
-                  <Text style={[styles.skillStat, { color: '#4caf50' }]}>
-                    {Math.round(skill.heal_percent * 100)}% Heal
-                  </Text>
-                )}
-                {skill.crit_chance && (
-                  <Text style={[styles.skillStat, { color: '#ff9800' }]}>
-                    {Math.round(skill.crit_chance * 100)}% Crit
-                  </Text>
-                )}
-                <Text style={styles.skillCost}>{skill.cost} Energy</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+
+      {/* Available to buy */}
+      {notOwned.length > 0 && (
+        <>
+          <View style={styles.skillSectionHeader}>
+            <Text style={styles.sectionTitle}>AVAILABLE ({notOwned.length})</Text>
+            <Text style={styles.skillSectionSubtitle}>Buy from Gun Shops</Text>
+          </View>
+          {notOwned.slice(0, 5).map((skill: any) => (
+            <View key={skill.id} style={[styles.skillRow, styles.skillLocked]}>
+              <View style={[styles.skillIconWrap, { backgroundColor: '#1a1a1a' }]}>
+                <Ionicons
+                  name={SKILL_ICONS[skill.id] || 'flash'}
+                  size={24}
+                  color="#666"
+                />
+              </View>
+              <View style={styles.skillInfo}>
+                <Text style={[styles.skillName, { color: '#666' }]}>{skill.name}</Text>
+                <Text style={styles.skillDesc} numberOfLines={1}>{skill.description}</Text>
+                <View style={styles.skillDetails}>
+                  {skill.damage_mult && <Text style={[styles.skillStat, { color: '#555' }]}>{skill.damage_mult}x DMG</Text>}
+                  <Text style={[styles.skillCost, { color: '#555' }]}>{skill.cost} EN</Text>
+                </View>
+              </View>
+              <View style={styles.priceBadge}>
+                <Ionicons name="cart" size={12} color="#f39c12" />
+                <Text style={styles.priceText}>${skill.value}</Text>
               </View>
             </View>
-            {!unlocked ? (
+          ))}
+        </>
+      )}
+
+      {/* Locked skills preview */}
+      {locked.length > 0 && (
+        <>
+          <View style={styles.skillSectionHeader}>
+            <Text style={styles.sectionTitle}>LOCKED ({locked.length})</Text>
+            <Text style={styles.skillSectionSubtitle}>Level up to unlock</Text>
+          </View>
+          {locked.slice(0, 3).map((skill: any) => (
+            <View key={skill.id} style={[styles.skillRow, styles.skillLocked]}>
+              <View style={[styles.skillIconWrap, { backgroundColor: '#1a1a1a' }]}>
+                <Ionicons name="lock-closed" size={24} color="#444" />
+              </View>
+              <View style={styles.skillInfo}>
+                <Text style={[styles.skillName, { color: '#444' }]}>{skill.name}</Text>
+                <Text style={[styles.skillDesc, { color: '#333' }]} numberOfLines={1}>{skill.description}</Text>
+              </View>
               <View style={styles.lockBadge}>
                 <Ionicons name="lock-closed" size={14} color="#666" />
                 <Text style={styles.lockText}>Lv.{skill.unlock_level}</Text>
               </View>
-            ) : (
-              <View style={[styles.unlockBadge, { backgroundColor: `${classColor}20` }]}>
-                <Ionicons name="checkmark" size={16} color={classColor} />
-              </View>
-            )}
-          </View>
-        );
-      })}
-    </View>
+            </View>
+          ))}
+        </>
+      )}
+      
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
@@ -1175,6 +1358,46 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  skillSectionHeader: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  skillSectionSubtitle: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  skillActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  skillActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  skillDesc: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  priceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(243, 156, 18, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  priceText: {
+    color: '#f39c12',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   // Empty State
