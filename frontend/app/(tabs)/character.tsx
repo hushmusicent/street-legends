@@ -420,7 +420,7 @@ export default function CharacterScreen() {
             classColor={classColor} 
             playerLevel={player.level} 
             playerId={playerId || ''}
-            onRefresh={loadData}
+            onRefresh={loadAllData}
           />
         )}
       </ScrollView>
