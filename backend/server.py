@@ -2197,14 +2197,21 @@ async def list_guilds(limit: int = 20):
 async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
     """Spawn random shops near a location - only shows items available at player's level"""
     shops = []
-    num_shops = random.randint(1, 2)
+    num_shops = random.randint(2, 3)  # Always spawn 2-3 shops
+    
+    # Ensure at least one gun shop spawns (for skills)
+    shop_types_to_spawn = ["gun_shop"]
+    remaining_types = [t for t in SHOP_TYPES.keys() if t != "gun_shop"]
+    for _ in range(num_shops - 1):
+        shop_types_to_spawn.append(random.choice(remaining_types))
+    random.shuffle(shop_types_to_spawn)
     
     for i in range(num_shops):
         # Random offset within ~500m
         lat_offset = random.uniform(-0.004, 0.004)
         lng_offset = random.uniform(-0.004, 0.004)
         
-        shop_type = random.choice(list(SHOP_TYPES.keys()))
+        shop_type = shop_types_to_spawn[i] if i < len(shop_types_to_spawn) else random.choice(list(SHOP_TYPES.keys()))
         shop_config = SHOP_TYPES[shop_type]
         shop_name = random.choice(SHOP_NAMES)
         
