@@ -1043,62 +1043,12 @@ function SkillsTab({
         </>
       )}
 
-      {/* Available to buy */}
-      {notOwned.length > 0 && (
-        <>
-          <View style={styles.skillSectionHeader}>
-            <Text style={styles.sectionTitle}>AVAILABLE ({notOwned.length})</Text>
-            <Text style={styles.skillSectionSubtitle}>Buy from Gun Shops</Text>
-          </View>
-          {notOwned.slice(0, 5).map((skill: any) => (
-            <View key={skill.id} style={[styles.skillRow, styles.skillLocked]}>
-              <View style={[styles.skillIconWrap, { backgroundColor: '#1a1a1a' }]}>
-                <Ionicons
-                  name={SKILL_ICONS[skill.id] || 'flash'}
-                  size={24}
-                  color="#666"
-                />
-              </View>
-              <View style={styles.skillInfo}>
-                <Text style={[styles.skillName, { color: '#666' }]}>{skill.name}</Text>
-                <Text style={styles.skillDesc} numberOfLines={1}>{skill.description}</Text>
-                <View style={styles.skillDetails}>
-                  {skill.damage_mult && <Text style={[styles.skillStat, { color: '#555' }]}>{skill.damage_mult}x DMG</Text>}
-                  <Text style={[styles.skillCost, { color: '#555' }]}>{skill.cost} EN</Text>
-                </View>
-              </View>
-              <View style={styles.priceBadge}>
-                <Ionicons name="cart" size={12} color="#f39c12" />
-                <Text style={styles.priceText}>${skill.value}</Text>
-              </View>
-            </View>
-          ))}
-        </>
-      )}
-
-      {/* Locked skills preview */}
-      {locked.length > 0 && (
-        <>
-          <View style={styles.skillSectionHeader}>
-            <Text style={styles.sectionTitle}>LOCKED ({locked.length})</Text>
-            <Text style={styles.skillSectionSubtitle}>Level up to unlock</Text>
-          </View>
-          {locked.slice(0, 3).map((skill: any) => (
-            <View key={skill.id} style={[styles.skillRow, styles.skillLocked]}>
-              <View style={[styles.skillIconWrap, { backgroundColor: '#1a1a1a' }]}>
-                <Ionicons name="lock-closed" size={24} color="#444" />
-              </View>
-              <View style={styles.skillInfo}>
-                <Text style={[styles.skillName, { color: '#444' }]}>{skill.name}</Text>
-                <Text style={[styles.skillDesc, { color: '#333' }]} numberOfLines={1}>{skill.description}</Text>
-              </View>
-              <View style={styles.lockBadge}>
-                <Ionicons name="lock-closed" size={14} color="#666" />
-                <Text style={styles.lockText}>Lv.{skill.unlock_level}</Text>
-              </View>
-            </View>
-          ))}
-        </>
+      {/* Hint to buy more skills */}
+      {ownedNotEquipped.length === 0 && equippedList.length < 4 && (
+        <View style={styles.skillHint}>
+          <Ionicons name="storefront-outline" size={20} color="#888" />
+          <Text style={styles.skillHintText}>Buy more skills from Gun Shops!</Text>
+        </View>
       )}
       
       <View style={{ height: 40 }} />
@@ -1398,6 +1348,18 @@ const styles = StyleSheet.create({
     color: '#f39c12',
     fontSize: 12,
     fontWeight: '700',
+  },
+  skillHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 20,
+    marginTop: 10,
+  },
+  skillHintText: {
+    color: '#888',
+    fontSize: 13,
   },
 
   // Empty State
