@@ -282,6 +282,18 @@ export default function MissionScreen() {
         <View style={styles.actions}>
           {completed ? (
             <GameButton title="BACK TO MAP" onPress={handleExit} />
+          ) : goalComplete && accepted ? (
+            <>
+              <GameButton
+                title={completing ? 'CLAIMING...' : 'CLAIM REWARD'}
+                onPress={handleComplete}
+                disabled={completing}
+                variant="success"
+              />
+              <TouchableOpacity style={styles.declineBtn} onPress={handleExit}>
+                <Text style={styles.declineBtnText}>BACK TO MAP</Text>
+              </TouchableOpacity>
+            </>
           ) : !accepted ? (
             <>
               <GameButton
@@ -291,17 +303,6 @@ export default function MissionScreen() {
               />
               <TouchableOpacity style={styles.declineBtn} onPress={handleExit}>
                 <Text style={styles.declineBtnText}>DECLINE</Text>
-              </TouchableOpacity>
-            </>
-          ) : goalComplete ? (
-            <>
-              <GameButton
-                title={completing ? 'CLAIMING...' : 'CLAIM REWARD'}
-                onPress={handleComplete}
-                disabled={completing}
-              />
-              <TouchableOpacity style={styles.declineBtn} onPress={handleExit}>
-                <Text style={styles.declineBtnText}>BACK TO MAP</Text>
               </TouchableOpacity>
             </>
           ) : (
