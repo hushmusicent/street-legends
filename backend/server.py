@@ -447,40 +447,40 @@ CONSUMABLE_ITEMS = {
     # --- Special: Extra Max Health (TEMPORARY) ---
     "heart_implant_mk1": {
         "id": "heart_implant_mk1", "name": "Health Implant Mk1", "category": "extra_health",
-        "description": "Cybernetic heart boost. +10 Max HP for 5 battles.",
+        "description": "Cybernetic heart boost. +25% Max HP for 5 battles.",
         "icon": "heart", "rarity": "rare",
-        "effect": {"temp_max_health": 10, "duration_battles": 5}, "price": 200, "level_requirement": 5,
+        "effect": {"temp_max_health_percent": 0.25, "duration_battles": 5}, "price": 200, "level_requirement": 5,
     },
     "heart_implant_mk2": {
         "id": "heart_implant_mk2", "name": "Health Implant Mk2", "category": "extra_health",
-        "description": "Advanced cyber-heart. +25 Max HP for 5 battles.",
+        "description": "Advanced cyber-heart. +50% Max HP for 5 battles.",
         "icon": "heart", "rarity": "epic",
-        "effect": {"temp_max_health": 25, "duration_battles": 5}, "price": 500, "level_requirement": 8,
+        "effect": {"temp_max_health_percent": 0.50, "duration_battles": 5}, "price": 500, "level_requirement": 8,
     },
     "heart_implant_mk3": {
         "id": "heart_implant_mk3", "name": "Health Implant Mk3", "category": "extra_health",
-        "description": "Legendary bio-mod. +50 Max HP for 5 battles.",
+        "description": "Legendary bio-mod. DOUBLES Max HP for 5 battles.",
         "icon": "heart", "rarity": "legendary",
-        "effect": {"temp_max_health": 50, "duration_battles": 5}, "price": 1000, "level_requirement": 12,
+        "effect": {"temp_max_health_percent": 1.0, "duration_battles": 5}, "price": 1000, "level_requirement": 12,
     },
     # --- Special: Extra Max Energy (TEMPORARY) ---
     "neural_booster_mk1": {
         "id": "neural_booster_mk1", "name": "Neural Booster Mk1", "category": "extra_energy",
-        "description": "Brain chip boost. +10 Max Energy for 5 battles.",
+        "description": "Brain chip boost. +25% Max Energy for 5 battles.",
         "icon": "flash", "rarity": "rare",
-        "effect": {"temp_max_energy": 10, "duration_battles": 5}, "price": 200, "level_requirement": 5,
+        "effect": {"temp_max_energy_percent": 0.25, "duration_battles": 5}, "price": 200, "level_requirement": 5,
     },
     "neural_booster_mk2": {
         "id": "neural_booster_mk2", "name": "Neural Booster Mk2", "category": "extra_energy",
-        "description": "Advanced neural link. +25 Max Energy for 5 battles.",
+        "description": "Advanced neural link. +50% Max Energy for 5 battles.",
         "icon": "flash", "rarity": "epic",
-        "effect": {"temp_max_energy": 25, "duration_battles": 5}, "price": 500, "level_requirement": 8,
+        "effect": {"temp_max_energy_percent": 0.50, "duration_battles": 5}, "price": 500, "level_requirement": 8,
     },
     "neural_booster_mk3": {
         "id": "neural_booster_mk3", "name": "Neural Booster Mk3", "category": "extra_energy",
-        "description": "Legendary neuro-mod. +50 Max Energy for 5 battles.",
+        "description": "Legendary neuro-mod. DOUBLES Max Energy for 5 battles.",
         "icon": "flash", "rarity": "legendary",
-        "effect": {"temp_max_energy": 50, "duration_battles": 5}, "price": 1000, "level_requirement": 12,
+        "effect": {"temp_max_energy_percent": 1.0, "duration_battles": 5}, "price": 1000, "level_requirement": 12,
     },
 }
 
@@ -3100,7 +3100,7 @@ async def buy_consumable(player_id: str, item_id: str):
         update_ops.setdefault("$set", {})["stats.energy"] = max_en
         messages.append("Fully restored Energy")
     
-    # Temporary max health boost
+    # Temporary max health boost (flat amount - legacy)
     if "temp_max_health" in effect:
         amount = effect["temp_max_health"]
         duration = effect.get("duration_battles", 5)
@@ -3110,13 +3110,38 @@ async def buy_consumable(player_id: str, item_id: str):
             "name": item["name"],
             "type": "max_health",
             "amount": amount,
+            "percent": 0,
             "battles_remaining": duration,
             "icon": "heart",
         }
         update_ops.setdefault("$push", {})["active_buffs"] = buff
         messages.append(f"+{amount} Max HP for {duration} battles")
     
-    # Temporary max energy boost
+    # Temporary max health boost (percentage-based)
+    if "temp_max_health_percent" in effect:
+        percent = effect["temp_max_health_percent"]
+        duration = effect.get("duration_battles", 5)
+        # Calculate actual amount based on player's base max health
+        base_max_hp = player.get("stats", {}).get("max_health", 100)
+        amount = int(base_max_hp * percent)
+        percent_display = int(percent * 100)
+        buff = {
+            "id": f"{item_id}_{str(uuid.uuid4())[:8]}",
+            "item_id": item_id,
+            "name": item["name"],
+            "type": "max_health",
+            "amount": amount,
+            "percent": percent,
+            "battles_remaining": duration,
+            "icon": "heart",
+        }
+        update_ops.setdefault("$push", {})["active_buffs"] = buff
+        if percent >= 1.0:
+            messages.append(f"DOUBLED Max HP (+{amount}) for {duration} battles!")
+        else:
+            messages.append(f"+{percent_display}% Max HP (+{amount}) for {duration} battles")
+    
+    # Temporary max energy boost (flat amount - legacy)
     if "temp_max_energy" in effect:
         amount = effect["temp_max_energy"]
         duration = effect.get("duration_battles", 5)
@@ -3126,11 +3151,36 @@ async def buy_consumable(player_id: str, item_id: str):
             "name": item["name"],
             "type": "max_energy",
             "amount": amount,
+            "percent": 0,
             "battles_remaining": duration,
             "icon": "flash",
         }
         update_ops.setdefault("$push", {})["active_buffs"] = buff
         messages.append(f"+{amount} Max Energy for {duration} battles")
+    
+    # Temporary max energy boost (percentage-based)
+    if "temp_max_energy_percent" in effect:
+        percent = effect["temp_max_energy_percent"]
+        duration = effect.get("duration_battles", 5)
+        # Calculate actual amount based on player's base max energy
+        base_max_energy = player.get("stats", {}).get("max_energy", 100)
+        amount = int(base_max_energy * percent)
+        percent_display = int(percent * 100)
+        buff = {
+            "id": f"{item_id}_{str(uuid.uuid4())[:8]}",
+            "item_id": item_id,
+            "name": item["name"],
+            "type": "max_energy",
+            "amount": amount,
+            "percent": percent,
+            "battles_remaining": duration,
+            "icon": "flash",
+        }
+        update_ops.setdefault("$push", {})["active_buffs"] = buff
+        if percent >= 1.0:
+            messages.append(f"DOUBLED Max Energy (+{amount}) for {duration} battles!")
+        else:
+            messages.append(f"+{percent_display}% Max Energy (+{amount}) for {duration} battles")
     
     await db.players.update_one({"id": player_id}, update_ops)
     
