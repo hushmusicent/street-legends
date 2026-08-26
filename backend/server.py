@@ -1103,6 +1103,58 @@ async def login(data: AuthLogin):
     
     return Player(**player)
 
+# ============== ACCOUNT DELETION ==============
+class DeleteAccountRequest(BaseModel):
+    username: str
+
+@api_router.post("/account/delete-request")
+async def request_account_deletion(data: DeleteAccountRequest):
+    """
+    Submit a request to delete an account.
+    For privacy, we don't reveal if the account exists.
+    """
+    username = data.username.strip().lower()
+    
+    # Find the player by username or character name
+    player = await db.players.find_one({
+        "$or": [
+            {"username": username},
+            {"name": {"$regex": f"^{data.username.strip()}$", "$options": "i"}}
+        ]
+    })
+    
+    if player:
+        player_id = player.get("id")
+        
+        # Store deletion request for processing
+        deletion_request = {
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "username": username,
+            "requested_at": datetime.utcnow(),
+            "status": "pending",
+            "scheduled_deletion": datetime.utcnow() + timedelta(days=30)
+        }
+        await db.deletion_requests.insert_one(deletion_request)
+        
+        # For immediate deletion (can be changed to scheduled):
+        # Delete all player data
+        await db.players.delete_one({"id": player_id})
+        await db.territories.delete_many({"owner_id": player_id})
+        await db.battles.delete_many({"player_id": player_id})
+        await db.missions.delete_many({"player_id": player_id})
+        
+        # Clear owner from territories they owned
+        await db.territories.update_many(
+            {"owner_id": player_id},
+            {"$set": {"owner_id": None, "owner_name": None, "owner_pic": None}}
+        )
+        
+        logger.info(f"Account deletion processed for player: {player_id}")
+    
+    # Always return success for privacy (don't reveal if account exists)
+    return {"status": "success", "message": "If an account exists with this username, it will be deleted within 30 days."}
+
 # ============== PLAYER ENDPOINTS ==============
 @api_router.get("/")
 async def root():
