@@ -800,6 +800,7 @@ export default function MapScreen() {
       >
         <Pressable style={styles.terrOverlay} onPress={() => { setSelectedTerritory(null); setTerritoryBattleLog([]); }}>
           <Pressable style={styles.terrModal} onPress={() => {}}>
+            <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
             {selectedTerritory && (
               <>
                 {/* Header */}
@@ -848,7 +849,7 @@ export default function MapScreen() {
 
                 {/* Battle Log */}
                 {territoryBattleLog.length > 0 && (
-                  <ScrollView style={styles.terrBattleLog}>
+                  <ScrollView style={styles.terrBattleLog} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
                     {territoryBattleLog.map((line, idx) => (
                       <Text key={idx} style={[
                         styles.terrLogLine,
@@ -891,6 +892,7 @@ export default function MapScreen() {
                 </View>
               </>
             )}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1026,7 +1028,7 @@ const styles = StyleSheet.create({
   terrInfoValue: { color: '#fff', fontSize: 13, fontWeight: '700' },
   terrBossRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(231,76,60,0.1)', padding: 10, borderRadius: 10, marginBottom: 12 },
   terrBossText: { color: '#e74c3c', fontSize: 12, fontWeight: '600', flex: 1 },
-  terrBattleLog: { maxHeight: 180, backgroundColor: '#111', borderRadius: 10, padding: 10, marginBottom: 12 },
+  terrBattleLog: { maxHeight: 200, backgroundColor: '#111', borderRadius: 10, padding: 10, marginBottom: 12, flexGrow: 0 },
   terrLogLine: { color: '#aaa', fontSize: 11, marginBottom: 3, fontFamily: 'monospace' },
   terrLogVictory: { color: '#4caf50', fontWeight: '700' },
   terrLogDefeat: { color: '#e74c3c', fontWeight: '700' },
