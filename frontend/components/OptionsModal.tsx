@@ -141,6 +141,21 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
             <Text style={styles.shareText}>SHARE GAME</Text>
           </TouchableOpacity>
 
+          <View style={styles.divider} />
+
+          {/* How to Play */}
+          <TouchableOpacity 
+            style={styles.howToPlayRow} 
+            onPress={() => {
+              onClose();
+              setTimeout(() => router.push('/instructions'), 300);
+            }} 
+            activeOpacity={0.7}
+          >
+            <Ionicons name="help-circle" size={22} color="#f59e0b" />
+            <Text style={styles.howToPlayText}>HOW TO PLAY</Text>
+          </TouchableOpacity>
+
           {/* Quit Game */}
           {showQuit && (
             <>
@@ -260,6 +275,23 @@ const styles = StyleSheet.create({
   },
   shareText: {
     color: '#3498db',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  howToPlayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  howToPlayText: {
+    color: '#f59e0b',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,

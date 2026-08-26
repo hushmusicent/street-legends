@@ -104,6 +104,10 @@ export default function Index() {
           <Ionicons name="settings-sharp" size={22} color="#888" />
           <Text style={styles.optionsBtnText}>OPTIONS</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.howToPlayBtn} onPress={() => handleNavigate('/instructions')} activeOpacity={0.7}>
+          <Ionicons name="help-circle" size={22} color="#f59e0b" />
+          <Text style={styles.howToPlayBtnText}>HOW TO PLAY</Text>
+        </TouchableOpacity>
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
 
@@ -217,6 +221,24 @@ const styles = StyleSheet.create({
   },
   optionsBtnText: {
     color: '#888',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  howToPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f59e0b40',
+    backgroundColor: '#f59e0b10',
+  },
+  howToPlayBtnText: {
+    color: '#f59e0b',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 2,

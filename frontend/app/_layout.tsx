@@ -26,6 +26,7 @@ export default function RootLayout() {
           <Stack.Screen name="mission/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
           <Stack.Screen name="delete-account" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="instructions" options={{ presentation: 'modal' }} />
         </Stack>
         <GameToastProvider />
       </View>
