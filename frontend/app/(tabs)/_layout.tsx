@@ -130,7 +130,7 @@ export default function TabLayout() {
 
       {/* Floating Gear Icon */}
       <TouchableOpacity
-        style={[styles.gearButton, { top: insets.top + 8 }]}
+        style={[styles.gearButton, { top: insets.top + 56 }]}
         onPress={() => setOptionsVisible(true)}
         activeOpacity={0.7}
       >
@@ -177,7 +177,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
-    zIndex: 999,
+    zIndex: 9999,
+    elevation: 999,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
       },
       android: {
-        elevation: 6,
+        elevation: 999,
       },
       default: {},
     }),

@@ -800,7 +800,6 @@ export default function MapScreen() {
       >
         <Pressable style={styles.terrOverlay} onPress={() => { setSelectedTerritory(null); setTerritoryBattleLog([]); }}>
           <Pressable style={styles.terrModal} onPress={() => {}}>
-            <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
             {selectedTerritory && (
               <>
                 {/* Header */}
@@ -892,7 +891,6 @@ export default function MapScreen() {
                 </View>
               </>
             )}
-            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1014,7 +1012,7 @@ const styles = StyleSheet.create({
   actionButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Territory Modal
-  terrOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  terrOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', zIndex: 9999 },
   terrModal: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '75%' },
   terrHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 4, paddingLeft: 12, marginBottom: 16 },
   terrHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
@@ -1038,6 +1036,7 @@ const styles = StyleSheet.create({
   terrBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 1 },
   
   // Bank Modal  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', zIndex: 9999 },
   bankIcon: { fontSize: 40 },
   bankWarning: { color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12, padding: 10, backgroundColor: 'rgba(243,156,18,0.1)', borderRadius: 8 },
   terrName: { color: '#fff', fontSize: 18, fontWeight: '800' },
