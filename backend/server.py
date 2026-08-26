@@ -1224,12 +1224,14 @@ async def upload_profile_pic(player_id: str, data: ProfilePicUpload):
     )
     
     # Also update profile pic on any territories this player owns
-    await db.territories.update_many(
+    result = await db.territories.update_many(
         {"owner_id": player_id},
         {"$set": {"owner_pic": data.image}}
     )
     
-    return {"message": "Profile picture updated"}
+    print(f"[PROFILE_PIC_UPLOAD] Player {player_id}: Updated {result.modified_count} territories with new profile pic")
+    
+    return {"message": "Profile picture updated", "territories_updated": result.modified_count}
 
 @api_router.get("/players/{player_id}/profile-pic")
 async def get_profile_pic(player_id: str):
@@ -1238,6 +1240,50 @@ async def get_profile_pic(player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return {"profile_pic": player.get("profile_pic", None)}
+
+
+@api_router.get("/debug/territory-sync/{player_id}")
+async def debug_territory_sync(player_id: str):
+    """Debug endpoint to check territory owner_pic sync status"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    has_profile_pic = bool(player.get("profile_pic"))
+    profile_pic_length = len(player.get("profile_pic", "")) if player.get("profile_pic") else 0
+    
+    # Get all territories owned by this player
+    territories = await db.territories.find({"owner_id": player_id}).to_list(100)
+    
+    territory_status = []
+    for t in territories:
+        territory_status.append({
+            "id": t.get("id"),
+            "name": t.get("name"),
+            "has_owner_pic": bool(t.get("owner_pic")),
+            "owner_pic_length": len(t.get("owner_pic", "")) if t.get("owner_pic") else 0,
+        })
+    
+    # Try to force sync now
+    if has_profile_pic and territories:
+        sync_result = await db.territories.update_many(
+            {"owner_id": player_id},
+            {"$set": {"owner_pic": player.get("profile_pic")}}
+        )
+        synced_count = sync_result.modified_count
+    else:
+        synced_count = 0
+    
+    return {
+        "player_id": player_id,
+        "player_name": player.get("name"),
+        "has_profile_pic": has_profile_pic,
+        "profile_pic_length": profile_pic_length,
+        "territories_owned": len(territories),
+        "territories": territory_status,
+        "force_synced": synced_count,
+    }
+
 
 @api_router.get("/players/nearby/{player_id}")
 async def get_nearby_players(player_id: str, radius: float = 500):
