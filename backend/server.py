@@ -444,41 +444,41 @@ CONSUMABLE_ITEMS = {
         "icon": "fast-food", "rarity": "epic",
         "effect": {"restore_health_full": True, "restore_energy_full": True}, "price": 1000, "level_requirement": 8,
     },
-    # --- Special: Extra Max Health (PERMANENT) ---
+    # --- Special: Extra Max Health ---
     "heart_implant_mk1": {
         "id": "heart_implant_mk1", "name": "Health Implant Mk1", "category": "extra_health",
-        "description": "Cybernetic heart boost. +25% Max HP permanently.",
+        "description": "Cybernetic heart boost. +25% Max HP.",
         "icon": "heart", "rarity": "rare",
         "effect": {"permanent_max_health_percent": 0.25}, "price": 200, "level_requirement": 5,
     },
     "heart_implant_mk2": {
         "id": "heart_implant_mk2", "name": "Health Implant Mk2", "category": "extra_health",
-        "description": "Advanced cyber-heart. +50% Max HP permanently.",
+        "description": "Advanced cyber-heart. +50% Max HP.",
         "icon": "heart", "rarity": "epic",
         "effect": {"permanent_max_health_percent": 0.50}, "price": 500, "level_requirement": 8,
     },
     "heart_implant_mk3": {
         "id": "heart_implant_mk3", "name": "Health Implant Mk3", "category": "extra_health",
-        "description": "Legendary bio-mod. DOUBLES Max HP permanently.",
+        "description": "Legendary bio-mod. DOUBLES Max HP.",
         "icon": "heart", "rarity": "legendary",
         "effect": {"permanent_max_health_percent": 1.0}, "price": 1000, "level_requirement": 12,
     },
-    # --- Special: Extra Max Energy (PERMANENT) ---
+    # --- Special: Extra Max Energy ---
     "neural_booster_mk1": {
         "id": "neural_booster_mk1", "name": "Neural Booster Mk1", "category": "extra_energy",
-        "description": "Brain chip boost. +25% Max Energy permanently.",
+        "description": "Brain chip boost. +25% Max Energy.",
         "icon": "flash", "rarity": "rare",
         "effect": {"permanent_max_energy_percent": 0.25}, "price": 200, "level_requirement": 5,
     },
     "neural_booster_mk2": {
         "id": "neural_booster_mk2", "name": "Neural Booster Mk2", "category": "extra_energy",
-        "description": "Advanced neural link. +50% Max Energy permanently.",
+        "description": "Advanced neural link. +50% Max Energy.",
         "icon": "flash", "rarity": "epic",
         "effect": {"permanent_max_energy_percent": 0.50}, "price": 500, "level_requirement": 8,
     },
     "neural_booster_mk3": {
         "id": "neural_booster_mk3", "name": "Neural Booster Mk3", "category": "extra_energy",
-        "description": "Legendary neuro-mod. DOUBLES Max Energy permanently.",
+        "description": "Legendary neuro-mod. DOUBLES Max Energy.",
         "icon": "flash", "rarity": "legendary",
         "effect": {"permanent_max_energy_percent": 1.0}, "price": 1000, "level_requirement": 12,
     },
@@ -3197,7 +3197,7 @@ async def buy_consumable(player_id: str, item_id: str):
         if percent >= 1.0:
             messages.append(f"DOUBLED Max HP! (+{bonus} = {new_max_hp} total)")
         else:
-            messages.append(f"+{percent_display}% Max HP permanently! (+{bonus} = {new_max_hp} total)")
+            messages.append(f"+{percent_display}% Max HP! (+{bonus} = {new_max_hp} total)")
     
     # Permanent max energy boost (percentage-based)
     if "permanent_max_energy_percent" in effect:
@@ -3214,7 +3214,7 @@ async def buy_consumable(player_id: str, item_id: str):
         if percent >= 1.0:
             messages.append(f"DOUBLED Max Energy! (+{bonus} = {new_max_energy} total)")
         else:
-            messages.append(f"+{percent_display}% Max Energy permanently! (+{bonus} = {new_max_energy} total)")
+            messages.append(f"+{percent_display}% Max Energy! (+{bonus} = {new_max_energy} total)")
     
     await db.players.update_one({"id": player_id}, update_ops)
     
