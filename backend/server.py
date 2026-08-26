@@ -3359,6 +3359,19 @@ async def get_nearby_territories(latitude: float, longitude: float, player_level
     
     # Fetch all territories for this area
     all_terrs = await db.territories.find({"id": {"$in": territory_ids}}).to_list(length=25)
+    
+    # Sync owner_pic for territories that have owners but missing pic
+    for terr in all_terrs:
+        if terr.get("owner_id") and not terr.get("owner_pic"):
+            owner = await db.players.find_one({"id": terr["owner_id"]}, {"profile_pic": 1})
+            if owner and owner.get("profile_pic"):
+                # Update the territory with the owner's current profile pic
+                await db.territories.update_one(
+                    {"id": terr["id"]},
+                    {"$set": {"owner_pic": owner["profile_pic"]}}
+                )
+                terr["owner_pic"] = owner["profile_pic"]
+    
     return [serialize_doc(t) for t in all_terrs]
 
 
