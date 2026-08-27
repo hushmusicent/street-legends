@@ -52,6 +52,9 @@ interface Block {
   rotation: number;
   type: 'wood' | 'ice' | 'stone'; // Block material type
   shape: 'square' | 'plank_h' | 'plank_v' | 'pillar'; // Block shape
+  mass: number; // Higher mass = harder to move
+  friction: number; // Higher friction = resists sliding
+  hitCount: number; // Track number of hits before breaking
 }
 
 interface Enemy {
@@ -144,12 +147,21 @@ export default function CastleLevelsScreen() {
     
     const fortX = 350;
     
+    // Material properties - higher values = more resistant
+    const materialProps = {
+      wood: { mass: 2.0, friction: 0.7, hitsToBreak: 1 },
+      ice: { mass: 1.0, friction: 0.3, hitsToBreak: 1 },
+      stone: { mass: 5.0, friction: 0.9, hitsToBreak: 2 },
+    };
+    
     // Helper to create blocks
     const addBlock = (x: number, y: number, type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar') => {
       let width = 40, height = 40;
       if (shape === 'plank_h') { width = 80; height = 20; }
       if (shape === 'plank_v') { width = 20; height = 80; }
       if (shape === 'pillar') { width = 15; height = 100; }
+      
+      const props = materialProps[type];
       
       newBlocks.push({
         id: `block-${newBlocks.length}`,
@@ -159,6 +171,9 @@ export default function CastleLevelsScreen() {
         velocityX: 0, velocityY: 0,
         falling: false, rotation: 0,
         type, shape,
+        mass: props.mass,
+        friction: props.friction,
+        hitCount: 0,
       });
     };
     
@@ -496,9 +511,9 @@ export default function CastleLevelsScreen() {
       setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
     }
 
-    // Update blocks
+    // Update blocks - solid physics, no chain reactions
     setBlocks(prev => {
-      const updatedBlocks = prev.map(block => {
+      return prev.map(block => {
         if (block.destroyed && block.y >= GROUND_Y + 100) return block;
         
         const ballX = ballPositionRef.current.x;
@@ -506,33 +521,68 @@ export default function CastleLevelsScreen() {
         const ballActive = ballPositionRef.current.active;
         const ball = cannonballRef.current;
         
-        if (!block.destroyed && !block.falling && ballActive) {
+        // Only direct cannonball hits can damage blocks
+        if (!block.destroyed && !block.falling && ballActive && ball) {
           if (checkBallRectCollision(ballX, ballY, block)) {
+            // Calculate impact force
+            const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
             const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
-            const impactForce = ball ? Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY) : 10;
             
-            return {
-              ...block,
-              destroyed: true,
-              falling: true,
-              velocityX: -Math.cos(impactAngle) * impactForce * 0.6 + (Math.random() - 0.5) * 4,
-              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * 0.4) - 5 - Math.random() * 3,
-            };
+            // Force needed to move this block based on mass
+            const forceThreshold = block.mass * 3;
+            
+            // Increment hit count
+            const newHitCount = block.hitCount + 1;
+            
+            // Check if impact is strong enough to move the block
+            if (impactForce > forceThreshold) {
+              // Stone blocks need multiple hits
+              const hitsNeeded = block.type === 'stone' ? 2 : 1;
+              
+              if (newHitCount >= hitsNeeded) {
+                // Block is destroyed and falls
+                // Reduce velocity transfer based on block mass
+                const velocityTransfer = Math.max(0.1, 0.5 / block.mass);
+                return {
+                  ...block,
+                  destroyed: true,
+                  falling: true,
+                  hitCount: newHitCount,
+                  velocityX: -Math.cos(impactAngle) * impactForce * velocityTransfer,
+                  velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityTransfer * 0.5) - 2,
+                };
+              } else {
+                // Block takes damage but doesn't fall (for stone)
+                return {
+                  ...block,
+                  hitCount: newHitCount,
+                  // Small nudge based on impact
+                  velocityX: -Math.cos(impactAngle) * 0.5,
+                  velocityY: 0,
+                };
+              }
+            } else {
+              // Weak hit - just track it
+              return { ...block, hitCount: newHitCount };
+            }
           }
         }
         
+        // Physics for falling/destroyed blocks
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
           let newVelY = block.velocityY + GRAVITY * 0.8;
-          let newVelX = block.velocityX * 0.98;
-          let newRotation = block.rotation + block.velocityX * 2;
+          // Apply friction - higher friction = faster slowdown
+          let newVelX = block.velocityX * (1 - block.friction * 0.1);
+          let newRotation = block.rotation + block.velocityX * 1.5;
           
+          // Ground collision
           if (newY > GROUND_Y - 10) {
             newY = GROUND_Y - 10;
-            newVelY = -newVelY * 0.3;
-            newVelX *= 0.7;
-            if (Math.abs(newVelY) < 1) newVelY = 0;
+            newVelY = -newVelY * 0.2; // Low bounce
+            newVelX *= 0.5; // High ground friction
+            if (Math.abs(newVelY) < 0.5) newVelY = 0;
           }
           
           return {
@@ -545,47 +595,12 @@ export default function CastleLevelsScreen() {
           };
         }
         
-        return block;
-      });
-      
-      // Block-to-block collision
-      return updatedBlocks.map(block => {
-        if (block.destroyed || block.falling) return block;
-        
-        const hitByFallingBlock = updatedBlocks.some(other => 
-          other.id !== block.id && 
-          (other.falling || other.destroyed) && 
-          (Math.abs(other.velocityX) > 2 || Math.abs(other.velocityY) > 2) &&
-          checkRectRectCollision(other, block)
-        );
-        
-        if (hitByFallingBlock) {
+        // Small velocity damping for nudged blocks
+        if (Math.abs(block.velocityX) > 0.01) {
           return {
             ...block,
-            destroyed: true,
-            falling: true,
-            velocityX: (Math.random() - 0.5) * 6,
-            velocityY: -4 - Math.random() * 4,
-          };
-        }
-        
-        const hasSupport = updatedBlocks.some(other =>
-          other.id !== block.id &&
-          !other.destroyed &&
-          !other.falling &&
-          block.x + block.width > other.x &&
-          block.x < other.x + other.width &&
-          Math.abs((block.y + block.height) - other.y) < 10
-        );
-        
-        const isOnGround = block.y + block.height >= GROUND_Y - 15;
-        
-        if (!hasSupport && !isOnGround) {
-          return {
-            ...block,
-            falling: true,
-            velocityX: (Math.random() - 0.5) * 2,
-            velocityY: 0,
+            x: block.x + block.velocityX,
+            velocityX: block.velocityX * 0.8,
           };
         }
         
@@ -593,7 +608,7 @@ export default function CastleLevelsScreen() {
       });
     });
 
-    // Update enemies
+    // Update enemies (pigs) - only direct hits or fast-moving blocks can eliminate
     setEnemies(prev => {
       const currentBlocksNow = blocksRef.current;
       
@@ -605,61 +620,69 @@ export default function CastleLevelsScreen() {
         const ballActive = ballPositionRef.current.active;
         const ball = cannonballRef.current;
         
-        if (!enemy.eliminated && ballActive) {
+        // Direct cannonball hit eliminates pig
+        if (!enemy.eliminated && ballActive && ball) {
           if (checkBallRectCollision(ballX, ballY, enemy)) {
             return {
               ...enemy,
               eliminated: true,
               falling: true,
-              velocityX: ball ? ball.velocityX * 0.5 : 5,
-              velocityY: -12,
-            };
-          }
-        }
-        
-        if (!enemy.eliminated && !enemy.falling) {
-          const hitByBlock = currentBlocksNow.some(b => 
-            (b.falling || b.destroyed) && 
-            (Math.abs(b.velocityX) > 1 || Math.abs(b.velocityY) > 1) &&
-            checkRectRectCollision(b, enemy)
-          );
-          
-          if (hitByBlock) {
-            return {
-              ...enemy,
-              eliminated: true,
-              falling: true,
-              velocityX: (Math.random() - 0.5) * 8,
+              velocityX: ball.velocityX * 0.4,
               velocityY: -8,
             };
           }
         }
         
+        // Only fast-moving blocks can hit pigs (not slow falling ones)
+        if (!enemy.eliminated && !enemy.falling) {
+          const hitByFastBlock = currentBlocksNow.some(b => 
+            (b.falling || b.destroyed) && 
+            (Math.abs(b.velocityX) > 5 || Math.abs(b.velocityY) > 8) && // Higher threshold
+            checkRectRectCollision(b, enemy)
+          );
+          
+          if (hitByFastBlock) {
+            return {
+              ...enemy,
+              eliminated: true,
+              falling: true,
+              velocityX: (Math.random() - 0.5) * 4,
+              velocityY: -5,
+            };
+          }
+        }
+        
+        // Pigs only fall if their direct support block is destroyed AND moving
+        // (not just because a nearby block fell)
         if (!enemy.falling && !enemy.eliminated) {
-          const hasSupport = currentBlocksNow.some(b => 
+          // Find the block directly under the pig
+          const supportBlock = currentBlocksNow.find(b => 
             !b.destroyed &&
             !b.falling &&
-            enemy.x + enemy.width > b.x &&
-            enemy.x < b.x + b.width &&
+            enemy.x + enemy.width * 0.3 > b.x &&
+            enemy.x + enemy.width * 0.7 < b.x + b.width &&
             Math.abs((enemy.y + enemy.height) - b.y) < 20
           );
           
           const isOnGround = enemy.y + enemy.height >= GROUND_Y - 25;
           
-          if (!hasSupport && !isOnGround) {
+          // Only fall if no support block found AND not on ground
+          if (!supportBlock && !isOnGround) {
             return {
               ...enemy,
               falling: true,
-              velocityX: (Math.random() - 0.5) * 3,
+              velocityX: 0,
               velocityY: 0,
             };
           }
         }
         
+        // Physics for falling pigs
         if (enemy.falling) {
           let newY = enemy.y + enemy.velocityY;
           let newVelY = enemy.velocityY + GRAVITY;
           
+          // Hit ground = eliminated
           if (newY > GROUND_Y - 20) {
             return { ...enemy, eliminated: true, y: GROUND_Y - 20, velocityY: 0, falling: false };
           }

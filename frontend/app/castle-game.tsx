@@ -37,8 +37,11 @@ interface Block {
   velocityY: number;
   falling: boolean;
   rotation: number;
-  type: 'wood' | 'ice' | 'stone'; // Block material type
-  shape: 'square' | 'plank_h' | 'plank_v' | 'pillar'; // Block shape
+  type: 'wood' | 'ice' | 'stone';
+  shape: 'square' | 'plank_h' | 'plank_v' | 'pillar';
+  mass: number;
+  friction: number;
+  hitCount: number;
 }
 
 interface GangMember {
@@ -112,6 +115,13 @@ export default function CastleMinigameScreen() {
       const scaleX = (x: number) => 300 + ((x - 300) / 600) * 800;
       const scaleY = (y: number) => (y / 400) * (GROUND_Y - 50);
       
+      // Material properties - higher values = more resistant
+      const materialProps = {
+        wood: { mass: 2.0, friction: 0.7, hitsToBreak: 1 },
+        ice: { mass: 1.0, friction: 0.3, hitsToBreak: 1 },
+        stone: { mass: 5.0, friction: 0.9, hitsToBreak: 2 },
+      };
+      
       // Block type assignment based on difficulty and position
       const getBlockType = (blockIndex: number, _fortIndex: number): { type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar' } => {
         const difficulty = gameData.difficulty || 1;
@@ -124,11 +134,12 @@ export default function CastleMinigameScreen() {
         return { type: 'wood', shape: 'plank_v' };
       };
       
-      // Initialize blocks with types
+      // Initialize blocks with types and physics properties
       const allBlocks: Block[] = [];
       layout.forts.forEach((fort, fortIndex) => {
         fort.blocks.forEach((block, blockIndex) => {
           const { type, shape } = getBlockType(blockIndex, fortIndex);
+          const props = materialProps[type];
           let width = 45, height = 45;
           if (shape === 'plank_h') { width = 80; height = 20; }
           if (shape === 'plank_v') { width = 20; height = 80; }
@@ -146,6 +157,9 @@ export default function CastleMinigameScreen() {
             rotation: 0,
             type,
             shape,
+            mass: props.mass,
+            friction: props.friction,
+            hitCount: 0,
           });
         });
       });
@@ -288,9 +302,9 @@ export default function CastleMinigameScreen() {
       setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
     }
 
-    // Update blocks physics with proper collision detection
+    // Update blocks physics - solid, no chain reactions
     setBlocks(prev => {
-      const updatedBlocks = prev.map(block => {
+      return prev.map(block => {
         if (block.destroyed && block.y >= GROUND_Y + 100) return block;
         
         const ball = cannonballRef.current;
@@ -298,39 +312,64 @@ export default function CastleMinigameScreen() {
         const ballY = ballPositionRef.current.y;
         const ballActive = ballPositionRef.current.active;
         
-        // Check cannonball collision - now using position refs
-        if (!block.destroyed && !block.falling && ballActive) {
+        // Only direct cannonball hits can damage blocks
+        if (!block.destroyed && !block.falling && ballActive && ball) {
           if (checkBallRectCollision(ballX, ballY, block)) {
-            // Calculate impact direction for realistic knockback
+            // Calculate impact force
+            const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
             const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
-            const impactForce = ball ? Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY) : 10;
             
-            return {
-              ...block,
-              destroyed: true,
-              falling: true,
-              velocityX: -Math.cos(impactAngle) * impactForce * 0.6 + (Math.random() - 0.5) * 4,
-              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * 0.4) - 5 - Math.random() * 3,
-            };
+            // Force needed to move this block based on mass
+            const forceThreshold = block.mass * 3;
+            
+            // Increment hit count
+            const newHitCount = block.hitCount + 1;
+            
+            // Check if impact is strong enough to move the block
+            if (impactForce > forceThreshold) {
+              // Stone blocks need multiple hits
+              const hitsNeeded = block.type === 'stone' ? 2 : 1;
+              
+              if (newHitCount >= hitsNeeded) {
+                // Block is destroyed and falls
+                const velocityTransfer = Math.max(0.1, 0.5 / block.mass);
+                return {
+                  ...block,
+                  destroyed: true,
+                  falling: true,
+                  hitCount: newHitCount,
+                  velocityX: -Math.cos(impactAngle) * impactForce * velocityTransfer,
+                  velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityTransfer * 0.5) - 2,
+                };
+              } else {
+                // Block takes damage but doesn't fall
+                return {
+                  ...block,
+                  hitCount: newHitCount,
+                  velocityX: -Math.cos(impactAngle) * 0.5,
+                  velocityY: 0,
+                };
+              }
+            } else {
+              return { ...block, hitCount: newHitCount };
+            }
           }
         }
         
-        // Physics for falling blocks
+        // Physics for falling/destroyed blocks
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
           let newVelY = block.velocityY + GRAVITY * 0.8;
-          let newVelX = block.velocityX * 0.98;
-          let newRotation = block.rotation + block.velocityX * 2;
+          let newVelX = block.velocityX * (1 - block.friction * 0.1);
+          let newRotation = block.rotation + block.velocityX * 1.5;
           
-          // Hit ground
+          // Ground collision
           if (newY > GROUND_Y - 10) {
             newY = GROUND_Y - 10;
-            newVelY = -newVelY * 0.3;
-            newVelX *= 0.7;
-            if (Math.abs(newVelY) < 1) {
-              newVelY = 0;
-            }
+            newVelY = -newVelY * 0.2;
+            newVelX *= 0.5;
+            if (Math.abs(newVelY) < 0.5) newVelY = 0;
           }
           
           return {
@@ -343,50 +382,12 @@ export default function CastleMinigameScreen() {
           };
         }
         
-        return block;
-      });
-      
-      // Second pass: check block-to-block collisions (falling blocks hit stationary blocks)
-      return updatedBlocks.map(block => {
-        if (block.destroyed || block.falling) return block;
-        
-        // Check if any falling block hits this stationary block
-        const hitByFallingBlock = updatedBlocks.some(other => 
-          other.id !== block.id && 
-          (other.falling || other.destroyed) && 
-          (Math.abs(other.velocityX) > 2 || Math.abs(other.velocityY) > 2) &&
-          checkRectRectCollision(other, block)
-        );
-        
-        if (hitByFallingBlock) {
+        // Small velocity damping for nudged blocks
+        if (Math.abs(block.velocityX) > 0.01) {
           return {
             ...block,
-            destroyed: true,
-            falling: true,
-            velocityX: (Math.random() - 0.5) * 6,
-            velocityY: -4 - Math.random() * 4,
-          };
-        }
-        
-        // Check if block has lost support (blocks below it are destroyed/falling)
-        const hasSupport = updatedBlocks.some(other =>
-          other.id !== block.id &&
-          !other.destroyed &&
-          !other.falling &&
-          block.x + block.width > other.x &&
-          block.x < other.x + other.width &&
-          Math.abs((block.y + block.height) - other.y) < 10
-        );
-        
-        // Also check if block is on ground
-        const isOnGround = block.y + block.height >= GROUND_Y - 15;
-        
-        if (!hasSupport && !isOnGround) {
-          return {
-            ...block,
-            falling: true,
-            velocityX: (Math.random() - 0.5) * 2,
-            velocityY: 0,
+            x: block.x + block.velocityX,
+            velocityX: block.velocityX * 0.8,
           };
         }
         
@@ -394,7 +395,7 @@ export default function CastleMinigameScreen() {
       });
     });
 
-    // Update gang members physics
+    // Update gang members physics - only direct hits
     setGangMembers(prev => {
       const currentBlocksNow = blocksRef.current;
       
@@ -406,56 +407,55 @@ export default function CastleMinigameScreen() {
         const ballActive = ballPositionRef.current.active;
         const ball = cannonballRef.current;
         
-        // Direct hit by cannonball
-        if (!member.eliminated && ballActive) {
+        // Direct cannonball hit
+        if (!member.eliminated && ballActive && ball) {
           if (checkBallRectCollision(ballX, ballY, member)) {
             return {
               ...member,
               eliminated: true,
               falling: true,
-              velocityX: ball ? ball.velocityX * 0.5 : 5,
-              velocityY: -12,
-            };
-          }
-        }
-        
-        // Check if hit by falling block
-        if (!member.eliminated && !member.falling) {
-          const hitByBlock = currentBlocksNow.some(b => 
-            (b.falling || b.destroyed) && 
-            (Math.abs(b.velocityX) > 1 || Math.abs(b.velocityY) > 1) &&
-            checkRectRectCollision(b, member)
-          );
-          
-          if (hitByBlock) {
-            return {
-              ...member,
-              eliminated: true,
-              falling: true,
-              velocityX: (Math.random() - 0.5) * 8,
+              velocityX: ball.velocityX * 0.4,
               velocityY: -8,
             };
           }
         }
         
-        // Check if support block is destroyed
+        // Only fast-moving blocks can hit members
+        if (!member.eliminated && !member.falling) {
+          const hitByFastBlock = currentBlocksNow.some(b => 
+            (b.falling || b.destroyed) && 
+            (Math.abs(b.velocityX) > 5 || Math.abs(b.velocityY) > 8) &&
+            checkRectRectCollision(b, member)
+          );
+          
+          if (hitByFastBlock) {
+            return {
+              ...member,
+              eliminated: true,
+              falling: true,
+              velocityX: (Math.random() - 0.5) * 4,
+              velocityY: -5,
+            };
+          }
+        }
+        
+        // Members only fall if their direct support is destroyed
         if (!member.falling && !member.eliminated) {
-          const hasSupport = currentBlocksNow.some(b => 
+          const supportBlock = currentBlocksNow.find(b => 
             !b.destroyed &&
             !b.falling &&
-            member.x + member.width > b.x &&
-            member.x < b.x + b.width &&
+            member.x + member.width * 0.3 > b.x &&
+            member.x + member.width * 0.7 < b.x + b.width &&
             Math.abs((member.y + member.height) - b.y) < 20
           );
           
-          // Also check if on ground
           const isOnGround = member.y + member.height >= GROUND_Y - 25;
           
-          if (!hasSupport && !isOnGround) {
+          if (!supportBlock && !isOnGround) {
             return {
               ...member,
               falling: true,
-              velocityX: (Math.random() - 0.5) * 3,
+              velocityX: 0,
               velocityY: 0,
             };
           }
@@ -466,7 +466,6 @@ export default function CastleMinigameScreen() {
           let newY = member.y + member.velocityY;
           let newVelY = member.velocityY + GRAVITY;
           
-          // Hit ground = eliminated
           if (newY > GROUND_Y - 20) {
             return { ...member, eliminated: true, y: GROUND_Y - 20, velocityY: 0, falling: false };
           }
