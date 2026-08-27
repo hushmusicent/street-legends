@@ -511,9 +511,10 @@ export default function CastleLevelsScreen() {
       setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
     }
 
-    // Update blocks - solid physics, no chain reactions
+    // Update blocks - physics with material-based behavior
     setBlocks(prev => {
-      return prev.map(block => {
+      // First pass: handle cannonball collisions and basic physics
+      const updatedBlocks = prev.map(block => {
         if (block.destroyed && block.y >= GROUND_Y + 100) return block;
         
         const ballX = ballPositionRef.current.x;
@@ -521,49 +522,37 @@ export default function CastleLevelsScreen() {
         const ballActive = ballPositionRef.current.active;
         const ball = cannonballRef.current;
         
-        // Only direct cannonball hits can damage blocks
+        // Direct cannonball hits
         if (!block.destroyed && !block.falling && ballActive && ball) {
           if (checkBallRectCollision(ballX, ballY, block)) {
-            // Calculate impact force
             const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
             const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
             
-            // Force needed to move this block based on mass
-            const forceThreshold = block.mass * 3;
+            // Direct cannonball hit always affects the block
+            // Stone needs more force but CAN be knocked over
+            const forceThreshold = block.type === 'stone' ? 8 : (block.type === 'ice' ? 3 : 5);
             
-            // Increment hit count
-            const newHitCount = block.hitCount + 1;
-            
-            // Check if impact is strong enough to move the block
             if (impactForce > forceThreshold) {
-              // Stone blocks need multiple hits
-              const hitsNeeded = block.type === 'stone' ? 2 : 1;
-              
-              if (newHitCount >= hitsNeeded) {
-                // Block is destroyed and falls
-                // Reduce velocity transfer based on block mass
-                const velocityTransfer = Math.max(0.1, 0.5 / block.mass);
-                return {
-                  ...block,
-                  destroyed: true,
-                  falling: true,
-                  hitCount: newHitCount,
-                  velocityX: -Math.cos(impactAngle) * impactForce * velocityTransfer,
-                  velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityTransfer * 0.5) - 2,
-                };
-              } else {
-                // Block takes damage but doesn't fall (for stone)
-                return {
-                  ...block,
-                  hitCount: newHitCount,
-                  // Small nudge based on impact
-                  velocityX: -Math.cos(impactAngle) * 0.5,
-                  velocityY: 0,
-                };
-              }
+              // Strong hit - block falls
+              // Stone moves slower due to mass, wood flies more
+              const velocityMult = block.type === 'stone' ? 0.25 : (block.type === 'ice' ? 0.7 : 0.5);
+              return {
+                ...block,
+                destroyed: true,
+                falling: true,
+                hitCount: block.hitCount + 1,
+                velocityX: -Math.cos(impactAngle) * impactForce * velocityMult + (Math.random() - 0.5) * 2,
+                velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityMult * 0.5) - 3,
+              };
             } else {
-              // Weak hit - just track it
-              return { ...block, hitCount: newHitCount };
+              // Weak hit - stone barely moves, others get nudged
+              const nudge = block.type === 'stone' ? 0.2 : 0.8;
+              return {
+                ...block,
+                hitCount: block.hitCount + 1,
+                velocityX: -Math.cos(impactAngle) * nudge,
+                velocityY: block.type === 'stone' ? 0 : -0.5,
+              };
             }
           }
         }
@@ -572,16 +561,16 @@ export default function CastleLevelsScreen() {
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
-          let newVelY = block.velocityY + GRAVITY * 0.8;
-          // Apply friction - higher friction = faster slowdown
-          let newVelX = block.velocityX * (1 - block.friction * 0.1);
-          let newRotation = block.rotation + block.velocityX * 1.5;
+          // Heavier blocks fall faster but accelerate slower
+          let newVelY = block.velocityY + GRAVITY * (block.type === 'stone' ? 1.0 : 0.8);
+          let newVelX = block.velocityX * (1 - block.friction * 0.08);
+          let newRotation = block.rotation + block.velocityX * (block.type === 'stone' ? 0.8 : 2);
           
           // Ground collision
           if (newY > GROUND_Y - 10) {
             newY = GROUND_Y - 10;
-            newVelY = -newVelY * 0.2; // Low bounce
-            newVelX *= 0.5; // High ground friction
+            newVelY = -newVelY * 0.15;
+            newVelX *= 0.4;
             if (Math.abs(newVelY) < 0.5) newVelY = 0;
           }
           
@@ -595,20 +584,87 @@ export default function CastleLevelsScreen() {
           };
         }
         
-        // Small velocity damping for nudged blocks
-        if (Math.abs(block.velocityX) > 0.01) {
+        // Apply any existing velocity (from nudges)
+        if (Math.abs(block.velocityX) > 0.01 || Math.abs(block.velocityY) > 0.01) {
           return {
             ...block,
             x: block.x + block.velocityX,
-            velocityX: block.velocityX * 0.8,
+            y: block.y + block.velocityY,
+            velocityX: block.velocityX * 0.85,
+            velocityY: block.velocityY * 0.85,
           };
+        }
+        
+        return block;
+      });
+      
+      // Second pass: block-to-block collisions with force thresholds
+      return updatedBlocks.map(block => {
+        if (block.destroyed || block.falling) return block;
+        
+        // Check if hit by falling/moving block
+        for (const other of updatedBlocks) {
+          if (other.id === block.id) continue;
+          if (!other.falling && !other.destroyed) continue;
+          
+          // Calculate the force of the falling block
+          const otherSpeed = Math.sqrt(other.velocityX * other.velocityX + other.velocityY * other.velocityY);
+          const otherForce = otherSpeed * other.mass;
+          
+          if (!checkRectRectCollision(other, block)) continue;
+          
+          // Force threshold depends on target block material
+          // Stone needs MUCH more force to move
+          // Wood can be pushed with less force (domino effect)
+          // Ice breaks easily
+          const forceNeeded = block.type === 'stone' ? 15 : (block.type === 'ice' ? 3 : 6);
+          
+          if (otherForce > forceNeeded) {
+            // Enough force - this block gets knocked
+            const pushDirection = other.x < block.x ? 1 : -1;
+            const transferRatio = block.type === 'stone' ? 0.15 : (block.type === 'ice' ? 0.6 : 0.4);
+            
+            return {
+              ...block,
+              destroyed: true,
+              falling: true,
+              velocityX: other.velocityX * transferRatio + pushDirection * 2,
+              velocityY: other.velocityY * transferRatio - 2,
+            };
+          }
+        }
+        
+        // Check if lost support (only for blocks not on ground)
+        const isOnGround = block.y + block.height >= GROUND_Y - 15;
+        if (!isOnGround) {
+          // Need substantial support underneath
+          const supportArea = updatedBlocks.filter(other =>
+            other.id !== block.id &&
+            !other.destroyed &&
+            !other.falling &&
+            block.x + block.width * 0.3 < other.x + other.width &&
+            block.x + block.width * 0.7 > other.x &&
+            Math.abs((block.y + block.height) - other.y) < 12
+          );
+          
+          // Stone blocks need more support to stay up
+          const minSupport = block.type === 'stone' ? 1 : 0;
+          if (supportArea.length <= minSupport) {
+            // Lost support - fall slowly
+            return {
+              ...block,
+              falling: true,
+              velocityX: 0,
+              velocityY: 0.5,
+            };
+          }
         }
         
         return block;
       });
     });
 
-    // Update enemies (pigs) - only direct hits or fast-moving blocks can eliminate
+    // Update enemies (pigs) - can be hit by cannonball or falling blocks
     setEnemies(prev => {
       const currentBlocksNow = blocksRef.current;
       
@@ -633,29 +689,34 @@ export default function CastleLevelsScreen() {
           }
         }
         
-        // Only fast-moving blocks can hit pigs (not slow falling ones)
+        // Falling blocks can knock pigs - any block with enough momentum
         if (!enemy.eliminated && !enemy.falling) {
-          const hitByFastBlock = currentBlocksNow.some(b => 
-            (b.falling || b.destroyed) && 
-            (Math.abs(b.velocityX) > 5 || Math.abs(b.velocityY) > 8) && // Higher threshold
-            checkRectRectCollision(b, enemy)
-          );
-          
-          if (hitByFastBlock) {
-            return {
-              ...enemy,
-              eliminated: true,
-              falling: true,
-              velocityX: (Math.random() - 0.5) * 4,
-              velocityY: -5,
-            };
+          for (const b of currentBlocksNow) {
+            if (!b.falling && !b.destroyed) continue;
+            if (!checkRectRectCollision(b, enemy)) continue;
+            
+            // Calculate block momentum (mass * velocity)
+            const blockMomentum = b.mass * Math.sqrt(b.velocityX * b.velocityX + b.velocityY * b.velocityY);
+            
+            // Stone blocks need less speed because they're heavy
+            // Wood blocks need more speed
+            const momentumThreshold = b.type === 'stone' ? 3 : (b.type === 'ice' ? 2 : 4);
+            
+            if (blockMomentum > momentumThreshold) {
+              const pushDir = b.x < enemy.x ? 1 : -1;
+              return {
+                ...enemy,
+                eliminated: true,
+                falling: true,
+                velocityX: pushDir * 3 + b.velocityX * 0.3,
+                velocityY: -6,
+              };
+            }
           }
         }
         
-        // Pigs only fall if their direct support block is destroyed AND moving
-        // (not just because a nearby block fell)
+        // Pigs fall if their support is destroyed
         if (!enemy.falling && !enemy.eliminated) {
-          // Find the block directly under the pig
           const supportBlock = currentBlocksNow.find(b => 
             !b.destroyed &&
             !b.falling &&
@@ -666,7 +727,6 @@ export default function CastleLevelsScreen() {
           
           const isOnGround = enemy.y + enemy.height >= GROUND_Y - 25;
           
-          // Only fall if no support block found AND not on ground
           if (!supportBlock && !isOnGround) {
             return {
               ...enemy,
