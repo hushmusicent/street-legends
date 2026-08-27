@@ -96,6 +96,8 @@ export default function CastleMinigameScreen() {
   const [showTrajectory, setShowTrajectory] = useState(true);
   const animationRef = useRef<number | null>(null);
   const cameraAnim = useRef(new Animated.Value(0)).current;
+  const ballPositionRef = useRef({ x: 0, y: 0, active: false });
+  const cannonballRef = useRef<Cannonball | null>(null);
   
   // Initialize game state from gameData
   useEffect(() => {
@@ -188,11 +190,12 @@ export default function CastleMinigameScreen() {
 
   // Physics update loop
   const updatePhysics = useCallback(() => {
-    let ballActive = false;
-    let ballX = 0;
-
     setCannonball(prev => {
-      if (!prev || !prev.active) return prev;
+      if (!prev || !prev.active) {
+        ballPositionRef.current = { x: 0, y: 0, active: false };
+        cannonballRef.current = prev;
+        return prev;
+      }
       
       let newX = prev.x + prev.velocityX;
       let newY = prev.y + prev.velocityY;
@@ -203,39 +206,48 @@ export default function CastleMinigameScreen() {
       
       // Check if out of bounds or hit ground
       if (newX > WORLD_WIDTH + 50 || newY > GROUND_Y || newX < -50) {
-        return { ...prev, active: false, trail: newTrail };
+        ballPositionRef.current = { x: newX, y: newY, active: false };
+        const newBall = { ...prev, active: false, trail: newTrail };
+        cannonballRef.current = newBall;
+        return newBall;
       }
       
-      ballActive = true;
-      ballX = newX;
-      
-      return {
+      // Update refs for camera and collision
+      ballPositionRef.current = { x: newX, y: newY, active: true };
+      const newBall = {
         ...prev,
         x: newX,
         y: newY,
         velocityY: newVelY,
         trail: newTrail,
       };
+      cannonballRef.current = newBall;
+      
+      return newBall;
     });
 
-    // Camera follows ball
-    if (ballActive) {
+    // Camera follows ball using ref
+    if (ballPositionRef.current.active) {
+      const ballX = ballPositionRef.current.x;
       const targetCameraX = Math.max(0, Math.min(WORLD_WIDTH - VIEWPORT_WIDTH, ballX - VIEWPORT_WIDTH / 3));
-      setCameraX(prev => prev + (targetCameraX - prev) * 0.1);
+      setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
     }
+
+    // Get current ball for collision checks
+    const currentBall = cannonballRef.current;
 
     // Update blocks physics
     setBlocks(prev => {
       return prev.map(block => {
         if (block.destroyed && block.y >= GROUND_Y + 100) return block;
         
-        // Check cannonball collision
-        if (!block.destroyed && cannonball?.active && checkCollision(cannonball, block)) {
+        // Check cannonball collision using ref
+        if (!block.destroyed && currentBall?.active && checkCollision(currentBall, block)) {
           return {
             ...block,
             destroyed: true,
             falling: true,
-            velocityX: cannonball.velocityX * 0.4 + (Math.random() - 0.5) * 5,
+            velocityX: currentBall.velocityX * 0.4 + (Math.random() - 0.5) * 5,
             velocityY: -8 - Math.random() * 5,
           };
         }
@@ -276,13 +288,13 @@ export default function CastleMinigameScreen() {
       return prev.map(member => {
         if (member.eliminated && member.y >= GROUND_Y + 100) return member;
         
-        // Direct hit by cannonball
-        if (!member.eliminated && cannonball?.active && checkCollision(cannonball, member)) {
+        // Direct hit by cannonball using ref
+        if (!member.eliminated && currentBall?.active && checkCollision(currentBall, member)) {
           return {
             ...member,
             eliminated: true,
             falling: true,
-            velocityX: cannonball.velocityX * 0.5 + (Math.random() - 0.5) * 3,
+            velocityX: currentBall.velocityX * 0.5 + (Math.random() - 0.5) * 3,
             velocityY: -12,
           };
         }
@@ -331,7 +343,7 @@ export default function CastleMinigameScreen() {
     });
 
     animationRef.current = requestAnimationFrame(updatePhysics);
-  }, [cannonball, blocks]);
+  }, [blocks]);
 
   // Animation loop control
   useEffect(() => {
@@ -343,7 +355,8 @@ export default function CastleMinigameScreen() {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [cannonball?.active, updatePhysics]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cannonball?.active, blocks, gangMembers]);
 
   // Check win/lose after ball stops
   useEffect(() => {
