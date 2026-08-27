@@ -26,18 +26,18 @@ const GROUND_Y = WORLD_HEIGHT - 60;
 const GRAVITY = 0.4;
 const INITIAL_VELOCITY = 22;
 
-// Level configurations
+// Level configurations (rewards scaled to 25% for mini-game balance)
 const LEVELS = [
-  { level: 1, name: 'Training Ground', blocks: 4, enemies: 1, shots: 3, xpReward: 50, cashReward: 100 },
-  { level: 2, name: 'Small Outpost', blocks: 6, enemies: 2, shots: 3, xpReward: 75, cashReward: 150 },
-  { level: 3, name: 'Guard Tower', blocks: 8, enemies: 2, shots: 3, xpReward: 100, cashReward: 200 },
-  { level: 4, name: 'Watchtower', blocks: 10, enemies: 3, shots: 4, xpReward: 150, cashReward: 300 },
-  { level: 5, name: 'Fort Minor', blocks: 12, enemies: 3, shots: 4, xpReward: 200, cashReward: 400 },
-  { level: 6, name: 'Stone Keep', blocks: 15, enemies: 4, shots: 4, xpReward: 300, cashReward: 500 },
-  { level: 7, name: 'Battle Fortress', blocks: 18, enemies: 4, shots: 5, xpReward: 400, cashReward: 700 },
-  { level: 8, name: 'War Castle', blocks: 20, enemies: 5, shots: 5, xpReward: 500, cashReward: 900 },
-  { level: 9, name: 'Imperial Stronghold', blocks: 24, enemies: 5, shots: 5, xpReward: 750, cashReward: 1200 },
-  { level: 10, name: 'Dragon Citadel', blocks: 30, enemies: 6, shots: 6, xpReward: 1000, cashReward: 2000 },
+  { level: 1, name: 'Training Ground', blocks: 4, enemies: 1, shots: 3, xpReward: 12, cashReward: 25 },
+  { level: 2, name: 'Small Outpost', blocks: 6, enemies: 2, shots: 3, xpReward: 18, cashReward: 35 },
+  { level: 3, name: 'Guard Tower', blocks: 8, enemies: 2, shots: 3, xpReward: 25, cashReward: 50 },
+  { level: 4, name: 'Watchtower', blocks: 10, enemies: 3, shots: 4, xpReward: 35, cashReward: 75 },
+  { level: 5, name: 'Fort Minor', blocks: 12, enemies: 3, shots: 4, xpReward: 50, cashReward: 100 },
+  { level: 6, name: 'Stone Keep', blocks: 15, enemies: 4, shots: 4, xpReward: 75, cashReward: 125 },
+  { level: 7, name: 'Battle Fortress', blocks: 18, enemies: 4, shots: 5, xpReward: 100, cashReward: 175 },
+  { level: 8, name: 'War Castle', blocks: 20, enemies: 5, shots: 5, xpReward: 125, cashReward: 225 },
+  { level: 9, name: 'Imperial Stronghold', blocks: 24, enemies: 5, shots: 5, xpReward: 185, cashReward: 300 },
+  { level: 10, name: 'Dragon Citadel', blocks: 30, enemies: 6, shots: 6, xpReward: 250, cashReward: 500 },
 ];
 
 interface Block {
