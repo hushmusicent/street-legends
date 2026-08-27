@@ -19,7 +19,7 @@ interface Position {
 interface MapMarker {
   id: string;
   coordinate: Position;
-  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub';
+  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub' | 'bank' | 'castle';
   level?: number;
   name?: string;
   icon?: string;
@@ -147,8 +147,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '\\u{1FA69}', bank: '\\u{1F3E6}' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '\\u{1FA69}', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     function getEnemyImage(name) {
@@ -365,6 +365,14 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 '<div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#2E7D32,#1B5E20);display:flex;align-items:center;justify-content:center;border:3px solid #FFD700;box-shadow:0 3px 12px rgba(46,125,50,0.7);font-size:26px;cursor:pointer;">\\u{1F3E6}</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(46,125,50,0.95);color:#FFD700;padding:2px 8px;border-radius:5px;font-size:8px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #FFD700;">' + bankName + '</div>' +
                 '</div>';
+            } else if (m.type === 'castle') {
+              var castleName = m.name || 'Castle';
+              var diffLevel = m.level || 1;
+              markerHTML = '<div style="width:56px;height:72px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                '<div style="width:50px;height:50px;border-radius:8px;background:linear-gradient(135deg,#8B4513,#5D3A1A);display:flex;align-items:center;justify-content:center;border:3px solid #CD853F;box-shadow:0 4px 14px rgba(139,69,19,0.7);font-size:28px;cursor:pointer;">\\u{1F3F0}</div>' +
+                '<div style="position:absolute;top:-8px;right:-4px;background:#e74c3c;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">\\u{2694}' + diffLevel + '</div>' +
+                '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(139,69,19,0.95);color:#FFE4B5;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #CD853F;">' + castleName + '</div>' +
+                '</div>';
             } else if (enemyImg) {
               var isBoss = m.isBoss || false;
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:' + (isBoss ? '#FFD700' : '#ff6b35') + ';color:' + (isBoss ? '#000' : '#fff') + ';padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
@@ -384,9 +392,10 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var isBossMarker = (m.type === 'monster' && m.isBoss);
             var isLocationMarker = (m.type === 'restaurant' || m.type === 'nightclub');
             var isBankMarker = (m.type === 'bank');
-            var markerWidth = isLocationMarker ? 48 : (isBankMarker ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32)));
-            var markerHeight = isLocationMarker ? 62 : (isBankMarker ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32)));
-            var iconAnchorY = isLocationMarker ? 31 : (isBankMarker ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16)));
+            var isCastleMarker = (m.type === 'castle');
+            var markerWidth = isCastleMarker ? 56 : (isLocationMarker ? 48 : (isBankMarker ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32))));
+            var markerHeight = isCastleMarker ? 72 : (isLocationMarker ? 62 : (isBankMarker ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32))));
+            var iconAnchorY = isCastleMarker ? 36 : (isLocationMarker ? 31 : (isBankMarker ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,

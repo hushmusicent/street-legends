@@ -2763,6 +2763,293 @@ async def rob_bank(bank_id: str, player_id: str):
         }
 
 
+# ============== CASTLE CANNON MINI-GAME SYSTEM ==============
+
+CASTLE_NAMES = [
+    "Fort Desperado", "Gangster's Keep", "Thug Stronghold", "Criminal Citadel",
+    "Outlaw Fortress", "Bandit Bastion", "Villain's Tower", "Rogue Castle",
+    "Shadow Fortress", "Dark Keep", "Iron Citadel", "Street Stronghold",
+    "Urban Castle", "The Compound", "Gang Headquarters", "Mob Fortress",
+]
+
+GANG_MEMBER_NAMES = [
+    "Vinnie", "Rocco", "Tony", "Sal", "Bruno", "Frankie", "Joey", "Mikey",
+    "Paulie", "Carmine", "Enzo", "Luca", "Dante", "Marco", "Rico", "Vito",
+]
+
+
+def generate_castle_layout(difficulty: int, seed: int) -> dict:
+    """Generate a randomized fort layout for the cannon mini-game"""
+    rng = random.Random(seed)
+    
+    # Number of forts scales with difficulty (1-10)
+    num_forts = max(1, min(10, difficulty))
+    
+    forts = []
+    gang_members = []
+    total_members = 0
+    
+    # Game area: x from 400 to 900 (forts on right side), y from 0 to 400 (ground at 400)
+    spacing = 500 // (num_forts + 1)
+    
+    for i in range(num_forts):
+        fort_x = 400 + spacing * (i + 1)
+        
+        # Random fort height (1-5 blocks tall)
+        fort_height = rng.randint(1, min(5, 2 + difficulty // 2))
+        
+        # Fort width (1-3 blocks)
+        fort_width = rng.randint(1, min(3, 1 + difficulty // 3))
+        
+        # Build the fort blocks
+        blocks = []
+        block_id = 0
+        for row in range(fort_height):
+            for col in range(fort_width):
+                block = {
+                    "id": f"fort_{i}_block_{block_id}",
+                    "x": fort_x + col * 40,
+                    "y": 360 - row * 40,  # Ground is at y=400, blocks are 40px
+                    "width": 40,
+                    "height": 40,
+                    "destroyed": False,
+                }
+                blocks.append(block)
+                block_id += 1
+        
+        # Number of gang members on this fort (1-3)
+        num_members = rng.randint(1, min(3, 1 + difficulty // 3))
+        
+        # Place gang members on top of the fort
+        for j in range(num_members):
+            member_x = fort_x + (j * 35) + 5
+            member_y = 360 - fort_height * 40 - 30  # On top of fort
+            
+            gang_member = {
+                "id": f"member_{total_members}",
+                "name": rng.choice(GANG_MEMBER_NAMES),
+                "x": member_x,
+                "y": member_y,
+                "width": 30,
+                "height": 30,
+                "eliminated": False,
+                "fort_index": i,
+            }
+            gang_members.append(gang_member)
+            total_members += 1
+        
+        forts.append({
+            "id": f"fort_{i}",
+            "x": fort_x,
+            "blocks": blocks,
+            "height": fort_height,
+            "width": fort_width,
+        })
+    
+    return {
+        "forts": forts,
+        "gang_members": gang_members,
+        "total_members": total_members,
+        "difficulty": difficulty,
+    }
+
+
+@api_router.get("/castles/spawn")
+async def spawn_castles(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn castles near a location — rare, only 20% of areas have one"""
+    # Use a grid-based seed so the same area always gives the same result
+    grid_lat = round(latitude * 150) / 150  # ~700m grid cells
+    grid_lng = round(longitude * 150) / 150
+    area_seed = hash(f"castle_{grid_lat}_{grid_lng}")
+    rng = random.Random(area_seed)
+    
+    # Only spawn in ~20% of areas (castles are rare)
+    if rng.random() > 0.20:
+        return []
+    
+    # Check if castles already exist nearby in DB
+    existing = await db.castles.find({
+        "latitude": {"$gte": latitude - 0.006, "$lte": latitude + 0.006},
+        "longitude": {"$gte": longitude - 0.006, "$lte": longitude + 0.006},
+    }).to_list(10)
+    
+    if existing:
+        for castle in existing:
+            castle.pop("_id", None)
+        return existing
+    
+    # Spawn 1 castle in this area
+    lat_offset = rng.uniform(-0.004, 0.004)
+    lng_offset = rng.uniform(-0.004, 0.004)
+    
+    # Difficulty scales with player level (1-10)
+    difficulty = min(10, max(1, (player_level // 5) + rng.randint(1, 3)))
+    
+    # Cash reward scales with difficulty
+    base_reward = 200 + (difficulty * 150) + (player_level * 50)
+    
+    castle = {
+        "id": str(uuid.uuid4()),
+        "name": rng.choice(CASTLE_NAMES),
+        "latitude": latitude + lat_offset,
+        "longitude": longitude + lng_offset,
+        "difficulty": difficulty,
+        "min_reward": int(base_reward * 0.7),
+        "max_reward": int(base_reward * 1.3),
+        "xp_reward": 25,
+        "rep_reward": 5,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.castles.insert_one(castle)
+    castle.pop("_id", None)
+    return [castle]
+
+
+@api_router.post("/castles/{castle_id}/start")
+async def start_castle_minigame(castle_id: str, player_id: str):
+    """Start a castle cannon mini-game and return the layout"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    castle = await db.castles.find_one({"id": castle_id})
+    if not castle:
+        raise HTTPException(status_code=404, detail="Castle not found")
+    
+    # Check cooldown (30 minutes per player per castle)
+    cooldown_key = f"castle_cooldowns.{castle_id}"
+    last_attempt = player.get("castle_cooldowns", {}).get(castle_id)
+    if last_attempt:
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            mins_since = (datetime.utcnow() - last_dt).total_seconds() / 60
+            if mins_since < 30:
+                remaining = round(30 - mins_since, 1)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"The fortress is on high alert! Wait {remaining} minutes before attacking again."
+                )
+        except (ValueError, TypeError):
+            pass
+    
+    # Generate a unique layout for this attempt
+    game_seed = hash(f"{castle_id}_{player_id}_{datetime.utcnow().timestamp()}")
+    layout = generate_castle_layout(castle["difficulty"], game_seed)
+    
+    # Create game session
+    game_session = {
+        "id": str(uuid.uuid4()),
+        "castle_id": castle_id,
+        "player_id": player_id,
+        "castle_name": castle["name"],
+        "difficulty": castle["difficulty"],
+        "layout": layout,
+        "shots_remaining": 3,
+        "shots_fired": [],
+        "members_eliminated": 0,
+        "total_members": layout["total_members"],
+        "status": "active",
+        "min_reward": castle.get("min_reward", 500),
+        "max_reward": castle.get("max_reward", 1000),
+        "xp_reward": castle.get("xp_reward", 25),
+        "rep_reward": castle.get("rep_reward", 5),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.castle_games.insert_one(game_session)
+    game_session.pop("_id", None)
+    
+    return game_session
+
+
+@api_router.post("/castles/game/{game_id}/complete")
+async def complete_castle_game(game_id: str, members_eliminated: int, won: bool):
+    """Complete a castle mini-game and award rewards if won"""
+    game = await db.castle_games.find_one({"id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    
+    if game["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already completed")
+    
+    player = await db.players.find_one({"id": game["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    castle_id = game["castle_id"]
+    
+    # Update game status
+    await db.castle_games.update_one(
+        {"id": game_id},
+        {"$set": {
+            "status": "completed",
+            "won": won,
+            "members_eliminated": members_eliminated,
+            "completed_at": datetime.utcnow().isoformat(),
+        }}
+    )
+    
+    # Set cooldown regardless of win/lose
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {f"castle_cooldowns.{castle_id}": datetime.utcnow().isoformat()}}
+    )
+    
+    if won:
+        # Calculate rewards based on difficulty and members eliminated
+        difficulty = game["difficulty"]
+        total_members = game["total_members"]
+        
+        # Cash scales with difficulty
+        base_cash = random.randint(game["min_reward"], game["max_reward"])
+        cash_reward = base_cash
+        
+        xp_reward = game["xp_reward"]
+        rep_reward = game["rep_reward"]
+        
+        # Update player
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {
+                "$inc": {
+                    "cash": cash_reward,
+                    "xp": xp_reward,
+                    "reputation": rep_reward,
+                    "stats.castles_conquered": 1,
+                }
+            }
+        )
+        
+        # Get updated player
+        updated_player = await db.players.find_one({"id": game["player_id"]})
+        
+        return {
+            "success": True,
+            "won": True,
+            "message": f"🏰 VICTORY! You conquered {game['castle_name']}!",
+            "castle_name": game["castle_name"],
+            "members_eliminated": members_eliminated,
+            "total_members": total_members,
+            "rewards": {
+                "cash": cash_reward,
+                "xp": xp_reward,
+                "reputation": rep_reward,
+            },
+            "cash": updated_player.get("cash", 0),
+        }
+    else:
+        return {
+            "success": True,
+            "won": False,
+            "message": f"💥 DEFEAT! The gang at {game['castle_name']} held their ground!",
+            "castle_name": game["castle_name"],
+            "members_eliminated": members_eliminated,
+            "total_members": game["total_members"],
+            "rewards": None,
+        }
+
+
 # ============== EQUIPMENT ENDPOINTS ==============
 
 @api_router.get("/items")

@@ -35,6 +35,8 @@ import {
   visitNightclub,
   spawnBanks,
   robBank,
+  spawnCastles,
+  startCastleGame,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -80,12 +82,15 @@ export default function MapScreen() {
   const [nearbyRestaurants, setNearbyRestaurants] = useState<any[]>([]);
   const [nearbyNightclubs, setNearbyNightclubs] = useState<any[]>([]);
   const [nearbyBanks, setNearbyBanks] = useState<any[]>([]);
+  const [nearbyCastles, setNearbyCastles] = useState<any[]>([]);
   const [territories, setTerritories] = useState<any[]>([]);
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
+  const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
   const [robbingBank, setRobbingBank] = useState(false);
+  const [startingCastleGame, setStartingCastleGame] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -263,6 +268,7 @@ export default function MapScreen() {
         spawnRestaurants(currentPosition.latitude, currentPosition.longitude, player.level),
         spawnNightclubs(currentPosition.latitude, currentPosition.longitude, player.level),
         spawnBanks(currentPosition.latitude, currentPosition.longitude, player.level),
+        spawnCastles(currentPosition.latitude, currentPosition.longitude, player.level),
       ]);
 
       const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -273,6 +279,7 @@ export default function MapScreen() {
       const restaurants = results[5].status === 'fulfilled' ? results[5].value : [];
       const nightclubs = results[6].status === 'fulfilled' ? results[6].value : [];
       const banks = results[7].status === 'fulfilled' ? results[7].value : [];
+      const castles = results[8].status === 'fulfilled' ? results[8].value : [];
 
       setNearbyMonsters(monsters);
       setNearbyMissions(missions);
@@ -282,8 +289,9 @@ export default function MapScreen() {
       setNearbyRestaurants(restaurants);
       setNearbyNightclubs(nightclubs);
       setNearbyBanks(banks);
+      setNearbyCastles(castles);
       
-      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants, nightclubs, banks } };
+      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants, nightclubs, banks, castles } };
     } catch (error) {
       console.error('Failed to load entities:', error);
     }
@@ -429,6 +437,27 @@ export default function MapScreen() {
     }
   }, [playerId, selectedBank, robbingBank]);
 
+  const handleStartCastleGame = useCallback(async () => {
+    if (!playerId || !selectedCastle || startingCastleGame) return;
+    setStartingCastleGame(true);
+    
+    try {
+      const gameData = await startCastleGame(selectedCastle.id, playerId);
+      setSelectedCastle(null);
+      
+      // Navigate to the castle game screen
+      router.push({
+        pathname: '/castle-game',
+        params: { gameData: JSON.stringify(gameData) },
+      });
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || 'Failed to start castle game';
+      Alert.alert('Cannot Attack', errorMsg);
+    } finally {
+      setStartingCastleGame(false);
+    }
+  }, [playerId, selectedCastle, startingCastleGame]);
+
   // Memoize markers to prevent re-renders
   const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
@@ -480,7 +509,15 @@ export default function MapScreen() {
       name: b.name,
       icon: '🏦',
     })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks]);
+    ...nearbyCastles.map((c) => ({
+      id: c.id,
+      coordinate: { latitude: c.latitude, longitude: c.longitude },
+      type: 'castle' as const,
+      name: c.name,
+      level: c.difficulty,
+      icon: '🏰',
+    })),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -504,8 +541,11 @@ export default function MapScreen() {
     } else if (marker.type === 'bank') {
       const bank = nearbyBanks.find((b) => b.id === marker.id);
       if (bank) setSelectedBank(bank);
+    } else if (marker.type === 'castle') {
+      const castle = nearbyCastles.find((c) => c.id === marker.id);
+      if (castle) setSelectedCastle(castle);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles]);
 
   if (loading) {
     return (
@@ -961,6 +1001,87 @@ export default function MapScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Castle Cannon Mini-game Modal */}
+      <Modal
+        visible={!!selectedCastle}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedCastle(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedCastle(null)}>
+          <Pressable style={styles.terrModal} onPress={(e) => e.stopPropagation()}>
+            <TouchableOpacity style={styles.terrClose} onPress={() => setSelectedCastle(null)}>
+              <Ionicons name="close" size={22} color="#666" />
+            </TouchableOpacity>
+
+            {selectedCastle && (
+              <>
+                <View style={styles.terrHeader}>
+                  <Text style={styles.bankIcon}>🏰</Text>
+                  <View style={styles.terrHeaderText}>
+                    <Text style={styles.terrName}>{selectedCastle.name}</Text>
+                    <Text style={styles.terrSubtitle}>Cannon Assault Mission</Text>
+                  </View>
+                </View>
+
+                <View style={styles.terrStats}>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="flash-outline" size={16} color="#e74c3c" />
+                    <Text style={styles.terrStatLabel}>Difficulty:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#e74c3c' }]}>
+                      {'⚔️'.repeat(selectedCastle.difficulty)}
+                    </Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="cash-outline" size={16} color="#f39c12" />
+                    <Text style={styles.terrStatLabel}>Reward:</Text>
+                    <Text style={styles.terrStatValue}>${selectedCastle.min_reward} - ${selectedCastle.max_reward}</Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="star-outline" size={16} color="#9b59b6" />
+                    <Text style={styles.terrStatLabel}>XP/Rep:</Text>
+                    <Text style={styles.terrStatValue}>+{selectedCastle.xp_reward} XP, +{selectedCastle.rep_reward} Rep</Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Ionicons name="time-outline" size={16} color="#888" />
+                    <Text style={styles.terrStatLabel}>Cooldown:</Text>
+                    <Text style={styles.terrStatValue}>30 minutes</Text>
+                  </View>
+                </View>
+
+                <View style={styles.castleInfo}>
+                  <Text style={styles.castleInfoTitle}>🎯 Mission Briefing</Text>
+                  <Text style={styles.castleInfoText}>
+                    Use your cannon to eliminate all gang members!{'\n'}
+                    • Drag to aim the cannon angle{'\n'}
+                    • You have exactly 3 shots{'\n'}
+                    • Destroy forts to knock down enemies{'\n'}
+                    • Eliminate all targets to win!
+                  </Text>
+                </View>
+
+                <View style={styles.terrActions}>
+                  <TouchableOpacity
+                    style={[styles.terrBtn, { backgroundColor: '#8B4513' }]}
+                    onPress={handleStartCastleGame}
+                    disabled={startingCastleGame}
+                  >
+                    {startingCastleGame ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="flame" size={18} color="#fff" />
+                        <Text style={styles.terrBtnText}>ATTACK FORTRESS</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1047,4 +1168,9 @@ const styles = StyleSheet.create({
   terrStatLabel: { color: '#888', fontSize: 12, flex: 1 },
   terrStatValue: { color: '#fff', fontSize: 12, fontWeight: '600' },
   terrClose: { position: 'absolute', top: 12, right: 12, zIndex: 10 },
+  
+  // Castle Modal
+  castleInfo: { backgroundColor: '#2a1a0a', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#8B4513' },
+  castleInfoTitle: { color: '#CD853F', fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  castleInfoText: { color: '#d1d5db', fontSize: 12, lineHeight: 20 },
 });
