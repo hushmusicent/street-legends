@@ -198,7 +198,7 @@ export default function GuildScreen() {
         ) : (
           <View style={styles.noGuildSection}>
             <Ionicons name="people-outline" size={64} color="#333" />
-            <Text style={styles.noGuildText}>You're not in a guild</Text>
+            <Text style={styles.noGuildText}>You are not in a guild</Text>
             <Text style={styles.noGuildSubtext}>Join or create a guild to team up!</Text>
             <GameButton
               title="CREATE GUILD"
@@ -210,14 +210,21 @@ export default function GuildScreen() {
           </View>
         )}
 
-        {/* Available Guilds */}
-        {!playerGuild && (
-          <View style={styles.availableSection}>
-            <Text style={styles.sectionTitle}>AVAILABLE GUILDS</Text>
-            {guilds.length === 0 ? (
-              <Text style={styles.emptyText}>No guilds available. Be the first to create one!</Text>
-            ) : (
-              guilds.map((guild) => (
+        {/* Available Guilds - Show for everyone, filter out own guild */}
+        <View style={styles.availableSection}>
+          <Text style={styles.sectionTitle}>
+            {playerGuild ? 'OTHER GUILDS' : 'AVAILABLE GUILDS'}
+          </Text>
+          {guilds.filter(g => g.id !== playerGuild?.id).length === 0 ? (
+            <Text style={styles.emptyText}>
+              {playerGuild 
+                ? 'No other guilds exist yet.' 
+                : 'No guilds available. Be the first to create one!'}
+            </Text>
+          ) : (
+            guilds
+              .filter(g => g.id !== playerGuild?.id)
+              .map((guild) => (
                 <View key={guild.id} style={styles.guildCard}>
                   <View style={styles.guildCardHeader}>
                     <View>
@@ -233,18 +240,19 @@ export default function GuildScreen() {
                     <Text style={styles.guildCardMembers}>
                       <Ionicons name="people" size={14} color="#888" /> {guild.members?.length || 0} members
                     </Text>
-                    <TouchableOpacity
-                      style={styles.joinButton}
-                      onPress={() => handleJoinGuild(guild.id)}
-                    >
-                      <Text style={styles.joinButtonText}>JOIN</Text>
-                    </TouchableOpacity>
+                    {!playerGuild && (
+                      <TouchableOpacity
+                        style={styles.joinButton}
+                        onPress={() => handleJoinGuild(guild.id)}
+                      >
+                        <Text style={styles.joinButtonText}>JOIN</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               ))
-            )}
-          </View>
-        )}
+          )}
+        </View>
       </ScrollView>
 
       {/* Create Guild Modal */}
