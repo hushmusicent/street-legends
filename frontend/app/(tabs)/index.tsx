@@ -594,6 +594,9 @@ export default function MapScreen() {
           </View>
         </View>
         <View style={styles.hudRight}>
+          <TouchableOpacity style={styles.minigameButton} onPress={() => router.push('/(tabs)/pvp')}>
+            <Text style={{ fontSize: 14 }}>🏰</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.shopButton} onPress={() => router.push('/shop')}>
             <Ionicons name="storefront" size={16} color="#f39c12" />
             <Text style={styles.shopCash}>${player?.cash || 0}</Text>
@@ -1108,6 +1111,7 @@ const styles = StyleSheet.create({
   energyFill: { backgroundColor: '#3498db' },
   statBarValue: { color: '#555', fontSize: 9, fontWeight: '700', marginLeft: 5, minWidth: 40, textAlign: 'right' },
   hudRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  minigameButton: { backgroundColor: '#fff', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3, borderWidth: 2, borderColor: '#8B4513' },
   shopButton: { backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
   shopCash: { color: '#f39c12', fontSize: 12, fontWeight: '700' },
   gpsIndicator: { backgroundColor: '#fff', padding: 8, borderRadius: 20, marginRight: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
