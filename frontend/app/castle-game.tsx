@@ -37,6 +37,8 @@ interface Block {
   velocityY: number;
   falling: boolean;
   rotation: number;
+  type: 'wood' | 'ice' | 'stone'; // Block material type
+  shape: 'square' | 'plank_h' | 'plank_v' | 'pillar'; // Block shape
 }
 
 interface GangMember {
@@ -110,20 +112,40 @@ export default function CastleMinigameScreen() {
       const scaleX = (x: number) => 300 + ((x - 300) / 600) * 800;
       const scaleY = (y: number) => (y / 400) * (GROUND_Y - 50);
       
-      // Initialize blocks
+      // Block type assignment based on difficulty and position
+      const getBlockType = (blockIndex: number, _fortIndex: number): { type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar' } => {
+        const difficulty = gameData.difficulty || 1;
+        // More variety as difficulty increases
+        // Base blocks are often stone pillars, middle wood, top ice
+        const heightFactor = (blockIndex % 4);
+        if (heightFactor === 0) return { type: 'stone', shape: 'pillar' };
+        if (heightFactor === 1) return { type: 'wood', shape: difficulty > 2 ? 'plank_h' : 'square' };
+        if (heightFactor === 2) return { type: difficulty > 1 ? 'ice' : 'wood', shape: 'square' };
+        return { type: 'wood', shape: 'plank_v' };
+      };
+      
+      // Initialize blocks with types
       const allBlocks: Block[] = [];
-      layout.forts.forEach(fort => {
-        fort.blocks.forEach(block => {
+      layout.forts.forEach((fort, fortIndex) => {
+        fort.blocks.forEach((block, blockIndex) => {
+          const { type, shape } = getBlockType(blockIndex, fortIndex);
+          let width = 45, height = 45;
+          if (shape === 'plank_h') { width = 80; height = 20; }
+          if (shape === 'plank_v') { width = 20; height = 80; }
+          if (shape === 'pillar') { width = 15; height = 100; }
+          
           allBlocks.push({
             ...block,
             x: scaleX(block.x),
             y: scaleY(block.y),
-            width: 45,
-            height: 45,
+            width,
+            height,
             velocityX: 0,
             velocityY: 0,
             falling: false,
             rotation: 0,
+            type,
+            shape,
           });
         });
       });
@@ -653,34 +675,61 @@ export default function CastleMinigameScreen() {
         </View>
       )}
       
-      {/* Fort blocks */}
+      {/* Fort blocks - Angry Birds style */}
       {blocks.map(block => {
         if (block.y > GROUND_Y + 100) return null;
+        
+        // Block colors based on type
+        const blockColors = {
+          wood: { bg: '#D2691E', border: '#8B4513', highlight: '#DEB887' },
+          ice: { bg: '#87CEEB', border: '#4682B4', highlight: '#B0E0E6' },
+          stone: { bg: '#808080', border: '#505050', highlight: '#A9A9A9' },
+        };
+        const colors = blockColors[block.type] || blockColors.wood;
         
         return (
           <View
             key={block.id}
             style={[
-              styles.block,
               {
+                position: 'absolute',
                 left: block.x,
                 top: block.y,
                 width: block.width,
                 height: block.height,
-                opacity: block.destroyed ? 0.7 : 1,
+                backgroundColor: colors.bg,
+                borderWidth: 3,
+                borderColor: colors.border,
+                borderRadius: block.type === 'ice' ? 2 : 4,
+                opacity: block.destroyed ? 0.6 : 1,
                 transform: [{ rotate: `${block.rotation}deg` }],
+                overflow: 'hidden',
               },
             ]}
           >
-            <View style={styles.blockInner}>
-              <View style={styles.blockHighlight} />
-              <View style={styles.blockShadow} />
-            </View>
+            {/* Wood grain lines */}
+            {block.type === 'wood' && (
+              <>
+                <View style={{ position: 'absolute', top: '30%', left: 0, right: 0, height: 2, backgroundColor: colors.border, opacity: 0.4 }} />
+                <View style={{ position: 'absolute', top: '60%', left: 0, right: 0, height: 2, backgroundColor: colors.border, opacity: 0.4 }} />
+              </>
+            )}
+            {/* Ice shine */}
+            {block.type === 'ice' && (
+              <View style={{ position: 'absolute', top: 3, left: 3, width: '40%', height: '30%', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
+            )}
+            {/* Stone texture */}
+            {block.type === 'stone' && (
+              <>
+                <View style={{ position: 'absolute', top: 5, left: 5, width: 4, height: 4, backgroundColor: colors.highlight, borderRadius: 2 }} />
+                <View style={{ position: 'absolute', bottom: 5, right: 5, width: 4, height: 4, backgroundColor: colors.border, borderRadius: 2 }} />
+              </>
+            )}
           </View>
         );
       })}
       
-      {/* Gang members */}
+      {/* Green Pigs - Angry Birds style */}
       {gangMembers.map(member => {
         if (member.y > GROUND_Y + 100) return null;
         
@@ -688,21 +737,39 @@ export default function CastleMinigameScreen() {
           <View
             key={member.id}
             style={[
-              styles.gangMember,
+              styles.pig,
               {
                 left: member.x,
                 top: member.y,
-                opacity: member.eliminated ? 0.4 : 1,
+                opacity: member.eliminated ? 0.3 : 1,
               },
             ]}
           >
-            <View style={styles.gangMemberHead}>
-              <View style={styles.gangMemberEye} />
-              <View style={[styles.gangMemberEye, { left: 18 }]} />
-              {!member.eliminated && <View style={styles.gangMemberMouth} />}
-              {member.eliminated && <View style={styles.gangMemberMouthDead} />}
+            {/* Pig body (green circle) */}
+            <View style={styles.pigBody}>
+              {/* Ears */}
+              <View style={[styles.pigEar, { left: -3, top: 2 }]} />
+              <View style={[styles.pigEar, { right: -3, top: 2 }]} />
+              {/* Eyes */}
+              <View style={styles.pigEyeLeft}>
+                <View style={styles.pigPupil} />
+              </View>
+              <View style={styles.pigEyeRight}>
+                <View style={styles.pigPupil} />
+              </View>
+              {/* Snout */}
+              <View style={styles.pigSnout}>
+                <View style={styles.pigNostril} />
+                <View style={[styles.pigNostril, { left: 12 }]} />
+              </View>
+              {/* Eyebrows when hit */}
+              {member.eliminated && (
+                <>
+                  <View style={[styles.pigBrow, { left: 6, transform: [{ rotate: '-20deg' }] }]} />
+                  <View style={[styles.pigBrow, { right: 6, transform: [{ rotate: '20deg' }] }]} />
+                </>
+              )}
             </View>
-            <View style={styles.gangMemberBody} />
           </View>
         );
       })}
@@ -1077,55 +1144,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 2,
   },
-  gangMember: {
-    position: 'absolute',
-    width: 35,
-    height: 50,
-    alignItems: 'center',
-  },
-  gangMemberHead: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#ffcc99',
-    borderWidth: 2,
-    borderColor: '#cc9966',
-  },
-  gangMemberEye: {
-    position: 'absolute',
-    top: 10,
-    left: 6,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#333',
-  },
-  gangMemberMouth: {
-    position: 'absolute',
-    bottom: 6,
-    left: 10,
-    width: 10,
-    height: 4,
-    backgroundColor: '#c0392b',
-    borderRadius: 2,
-  },
-  gangMemberMouthDead: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    width: 14,
-    height: 2,
-    backgroundColor: '#666',
-  },
-  gangMemberBody: {
-    width: 25,
-    height: 20,
-    backgroundColor: '#e74c3c',
-    borderRadius: 4,
-    marginTop: -2,
-    borderWidth: 2,
-    borderColor: '#c0392b',
-  },
+  // Pig styles (Angry Birds style green pigs)
+  pig: { position: 'absolute', width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  pigBody: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#7CB342', borderWidth: 3, borderColor: '#558B2F', position: 'relative', overflow: 'visible' },
+  pigEar: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#7CB342', borderWidth: 2, borderColor: '#558B2F' },
+  pigEyeLeft: { position: 'absolute', top: 8, left: 5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#333' },
+  pigEyeRight: { position: 'absolute', top: 8, right: 5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#333' },
+  pigPupil: { position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: '#333' },
+  pigSnout: { position: 'absolute', bottom: 4, left: '50%', marginLeft: -10, width: 20, height: 12, borderRadius: 6, backgroundColor: '#8BC34A', borderWidth: 2, borderColor: '#558B2F' },
+  pigNostril: { position: 'absolute', top: 3, left: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: '#558B2F' },
+  pigBrow: { position: 'absolute', top: 4, width: 8, height: 3, backgroundColor: '#333', borderRadius: 1 },
   aimHUD: {
     position: 'absolute',
     top: 10,

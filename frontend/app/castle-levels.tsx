@@ -8,7 +8,6 @@ import {
   Modal,
   Dimensions,
   PanResponder,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -51,6 +50,8 @@ interface Block {
   velocityY: number;
   falling: boolean;
   rotation: number;
+  type: 'wood' | 'ice' | 'stone'; // Block material type
+  shape: 'square' | 'plank_h' | 'plank_v' | 'pillar'; // Block shape
 }
 
 interface Enemy {
@@ -135,76 +136,247 @@ export default function CastleLevelsScreen() {
     }
   };
 
-  // Generate level layout
+  // Generate level layout - Angry Birds style structures
   const generateLevel = useCallback((levelNum: number) => {
     const config = LEVELS[levelNum - 1];
     const newBlocks: Block[] = [];
     const newEnemies: Enemy[] = [];
     
-    // Create fort structure based on level
-    const fortX = 700;
-    const blockSize = 45;
-    const rows = Math.ceil(Math.sqrt(config.blocks));
-    const cols = Math.ceil(config.blocks / rows);
+    const fortX = 350;
     
-    let blockCount = 0;
-    for (let row = 0; row < rows && blockCount < config.blocks; row++) {
-      for (let col = 0; col < cols && blockCount < config.blocks; col++) {
-        // Create interesting patterns based on level
-        const offsetX = (levelNum % 2 === 0) ? (row % 2) * 20 : 0;
-        newBlocks.push({
-          id: `block-${blockCount}`,
-          x: fortX + col * (blockSize + 5) + offsetX,
-          y: GROUND_Y - (row + 1) * (blockSize + 3),
-          width: blockSize,
-          height: blockSize,
-          destroyed: false,
-          velocityX: 0,
-          velocityY: 0,
-          falling: false,
-          rotation: 0,
-        });
-        blockCount++;
-      }
-    }
+    // Helper to create blocks
+    const addBlock = (x: number, y: number, type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar') => {
+      let width = 40, height = 40;
+      if (shape === 'plank_h') { width = 80; height = 20; }
+      if (shape === 'plank_v') { width = 20; height = 80; }
+      if (shape === 'pillar') { width = 15; height = 100; }
+      
+      newBlocks.push({
+        id: `block-${newBlocks.length}`,
+        x, y: GROUND_Y - y,
+        width, height,
+        destroyed: false,
+        velocityX: 0, velocityY: 0,
+        falling: false, rotation: 0,
+        type, shape,
+      });
+    };
     
-    // Place enemies on top of blocks
-    const topBlocks = newBlocks
-      .filter(b => !newBlocks.some(other => 
-        other.id !== b.id && 
-        Math.abs(other.x - b.x) < blockSize && 
-        other.y < b.y
-      ))
-      .slice(0, config.enemies);
-    
-    topBlocks.forEach((block, i) => {
+    // Helper to add enemy (pig)
+    const addPig = (x: number, y: number) => {
       newEnemies.push({
-        id: `enemy-${i}`,
-        x: block.x + 5,
-        y: block.y - 45,
-        width: 35,
-        height: 40,
+        id: `pig-${newEnemies.length}`,
+        x, y: GROUND_Y - y,
+        width: 40, height: 40,
         eliminated: false,
-        velocityX: 0,
-        velocityY: 0,
+        velocityX: 0, velocityY: 0,
         falling: false,
       });
-    });
+    };
     
-    // Add extra enemies if needed
-    while (newEnemies.length < config.enemies) {
-      const randomBlock = newBlocks[Math.floor(Math.random() * newBlocks.length)];
-      newEnemies.push({
-        id: `enemy-${newEnemies.length}`,
-        x: randomBlock.x + 5,
-        y: randomBlock.y - 45,
-        width: 35,
-        height: 40,
-        eliminated: false,
-        velocityX: 0,
-        velocityY: 0,
-        falling: false,
-      });
+    // Level-specific designs inspired by Angry Birds
+    switch (levelNum) {
+      case 1: // Simple tower - Training Ground
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 60, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'wood', 'plank_h');
+        addPig(fortX + 10, 140);
+        break;
+        
+      case 2: // Two pillars with pigs - Small Outpost
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 100, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'wood', 'plank_h');
+        addBlock(fortX + 90, 110, 'wood', 'plank_h');
+        addPig(fortX + 10, 140);
+        addPig(fortX + 110, 140);
+        break;
+        
+      case 3: // Tall wooden tower - Guard Tower
+        addBlock(fortX, 40, 'wood', 'square');
+        addBlock(fortX + 45, 40, 'wood', 'square');
+        addBlock(fortX, 85, 'wood', 'plank_v');
+        addBlock(fortX + 65, 85, 'wood', 'plank_v');
+        addBlock(fortX - 10, 135, 'wood', 'plank_h');
+        addBlock(fortX, 175, 'wood', 'plank_v');
+        addBlock(fortX + 65, 175, 'wood', 'plank_v');
+        addBlock(fortX - 10, 225, 'wood', 'plank_h');
+        addPig(fortX + 20, 130);
+        addPig(fortX + 20, 255);
+        break;
+        
+      case 4: // Ice structure - Watchtower
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 80, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'ice', 'plank_h');
+        addBlock(fortX, 130, 'ice', 'square');
+        addBlock(fortX + 45, 130, 'ice', 'square');
+        addBlock(fortX, 175, 'ice', 'square');
+        addBlock(fortX + 45, 175, 'ice', 'square');
+        addBlock(fortX + 90, 175, 'ice', 'square');
+        addBlock(fortX - 10, 220, 'ice', 'plank_h');
+        addPig(fortX + 20, 115);
+        addPig(fortX + 20, 250);
+        addPig(fortX + 100, 220);
+        break;
+        
+      case 5: // Multi-tower - Fort Minor
+        // Left tower
+        addBlock(fortX - 50, 100, 'stone', 'pillar');
+        addBlock(fortX + 30, 100, 'stone', 'pillar');
+        addBlock(fortX - 60, 110, 'wood', 'plank_h');
+        addPig(fortX - 30, 145);
+        // Right tower
+        addBlock(fortX + 100, 100, 'stone', 'pillar');
+        addBlock(fortX + 180, 100, 'stone', 'pillar');
+        addBlock(fortX + 90, 110, 'wood', 'plank_h');
+        addBlock(fortX + 90, 130, 'ice', 'square');
+        addBlock(fortX + 135, 130, 'ice', 'square');
+        addBlock(fortX + 90, 180, 'ice', 'plank_h');
+        addPig(fortX + 120, 115);
+        addPig(fortX + 120, 215);
+        break;
+        
+      case 6: // House structure - Stone Keep
+        // Foundation
+        addBlock(fortX, 40, 'stone', 'square');
+        addBlock(fortX + 45, 40, 'stone', 'square');
+        addBlock(fortX + 90, 40, 'stone', 'square');
+        // Walls
+        addBlock(fortX, 130, 'wood', 'plank_v');
+        addBlock(fortX + 115, 130, 'wood', 'plank_v');
+        // Roof frame (ice)
+        addBlock(fortX - 20, 180, 'ice', 'plank_v');
+        addBlock(fortX + 135, 180, 'ice', 'plank_v');
+        addBlock(fortX + 20, 250, 'ice', 'plank_h');
+        addBlock(fortX + 60, 280, 'ice', 'square');
+        // Interior
+        addBlock(fortX + 30, 85, 'wood', 'plank_h');
+        addPig(fortX + 50, 50);
+        addPig(fortX + 50, 120);
+        addPig(fortX + 50, 200);
+        addPig(fortX - 30, 50);
+        break;
+        
+      case 7: // Complex fortress - Battle Fortress
+        // Base pillars
+        addBlock(fortX - 30, 100, 'stone', 'pillar');
+        addBlock(fortX + 50, 100, 'stone', 'pillar');
+        addBlock(fortX + 130, 100, 'stone', 'pillar');
+        addBlock(fortX + 210, 100, 'stone', 'pillar');
+        // First floor
+        addBlock(fortX - 40, 110, 'wood', 'plank_h');
+        addBlock(fortX + 40, 110, 'wood', 'plank_h');
+        addBlock(fortX + 120, 110, 'wood', 'plank_h');
+        // Second floor pillars
+        addBlock(fortX, 200, 'wood', 'plank_v');
+        addBlock(fortX + 80, 200, 'wood', 'plank_v');
+        addBlock(fortX + 160, 200, 'wood', 'plank_v');
+        // Ice top
+        addBlock(fortX - 10, 250, 'ice', 'plank_h');
+        addBlock(fortX + 70, 250, 'ice', 'plank_h');
+        addBlock(fortX + 40, 280, 'ice', 'square');
+        addBlock(fortX + 120, 280, 'ice', 'square');
+        addPig(fortX, 145);
+        addPig(fortX + 80, 145);
+        addPig(fortX + 160, 145);
+        addPig(fortX + 80, 310);
+        break;
+        
+      case 8: // War Castle
+        // Ground level structures
+        for (let i = 0; i < 4; i++) {
+          addBlock(fortX + i * 70, 100, 'stone', 'pillar');
+          addBlock(fortX + i * 70 - 10, 110, 'wood', 'plank_h');
+        }
+        // Middle layer - ice
+        addBlock(fortX + 20, 150, 'ice', 'square');
+        addBlock(fortX + 90, 150, 'ice', 'square');
+        addBlock(fortX + 160, 150, 'ice', 'square');
+        addBlock(fortX - 10, 200, 'ice', 'plank_h');
+        addBlock(fortX + 70, 200, 'ice', 'plank_h');
+        addBlock(fortX + 150, 200, 'ice', 'plank_h');
+        // Top
+        addBlock(fortX + 50, 250, 'wood', 'plank_v');
+        addBlock(fortX + 130, 250, 'wood', 'plank_v');
+        addBlock(fortX + 40, 300, 'wood', 'plank_h');
+        addPig(fortX + 30, 145);
+        addPig(fortX + 100, 145);
+        addPig(fortX + 170, 145);
+        addPig(fortX + 50, 235);
+        addPig(fortX + 130, 235);
+        break;
+        
+      case 9: // Imperial Stronghold
+        // Multiple structures spread out
+        // Structure 1 - Left
+        addBlock(fortX - 100, 100, 'stone', 'pillar');
+        addBlock(fortX - 20, 100, 'stone', 'pillar');
+        addBlock(fortX - 110, 110, 'wood', 'plank_h');
+        addBlock(fortX - 70, 150, 'ice', 'square');
+        addBlock(fortX - 70, 200, 'ice', 'square');
+        addPig(fortX - 60, 145);
+        addPig(fortX - 60, 240);
+        // Structure 2 - Center tower
+        addBlock(fortX + 60, 100, 'stone', 'pillar');
+        addBlock(fortX + 140, 100, 'stone', 'pillar');
+        addBlock(fortX + 50, 110, 'wood', 'plank_h');
+        addBlock(fortX + 50, 150, 'wood', 'square');
+        addBlock(fortX + 95, 150, 'wood', 'square');
+        addBlock(fortX + 70, 250, 'wood', 'plank_v');
+        addBlock(fortX + 110, 250, 'wood', 'plank_v');
+        addBlock(fortX + 60, 300, 'wood', 'plank_h');
+        addPig(fortX + 70, 145);
+        addPig(fortX + 90, 335);
+        // Structure 3 - Right
+        addBlock(fortX + 220, 100, 'stone', 'pillar');
+        addBlock(fortX + 220, 45, 'ice', 'square');
+        addPig(fortX + 215, 145);
+        break;
+        
+      case 10: // Dragon Citadel - Epic final level
+        // Grand castle structure
+        // Base layer
+        for (let i = 0; i < 5; i++) {
+          addBlock(fortX - 50 + i * 60, 100, 'stone', 'pillar');
+        }
+        // First floor
+        addBlock(fortX - 60, 110, 'wood', 'plank_h');
+        addBlock(fortX + 20, 110, 'wood', 'plank_h');
+        addBlock(fortX + 100, 110, 'wood', 'plank_h');
+        addBlock(fortX + 180, 110, 'wood', 'plank_h');
+        // Ice walls
+        addBlock(fortX - 30, 200, 'ice', 'plank_v');
+        addBlock(fortX + 50, 200, 'ice', 'plank_v');
+        addBlock(fortX + 130, 200, 'ice', 'plank_v');
+        addBlock(fortX + 210, 200, 'ice', 'plank_v');
+        // Second platform
+        addBlock(fortX - 40, 250, 'ice', 'plank_h');
+        addBlock(fortX + 40, 250, 'ice', 'plank_h');
+        addBlock(fortX + 120, 250, 'ice', 'plank_h');
+        // Top tower
+        addBlock(fortX + 40, 290, 'wood', 'square');
+        addBlock(fortX + 85, 290, 'wood', 'square');
+        addBlock(fortX + 130, 290, 'wood', 'square');
+        addBlock(fortX + 50, 380, 'wood', 'plank_v');
+        addBlock(fortX + 120, 380, 'wood', 'plank_v');
+        addBlock(fortX + 40, 430, 'wood', 'plank_h');
+        addBlock(fortX + 85, 460, 'ice', 'square');
+        // Pigs everywhere
+        addPig(fortX - 20, 145);
+        addPig(fortX + 60, 145);
+        addPig(fortX + 140, 145);
+        addPig(fortX + 220, 145);
+        addPig(fortX + 90, 285);
+        addPig(fortX + 90, 465);
+        break;
+        
+      default:
+        // Fallback simple structure
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 60, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'wood', 'plank_h');
+        addPig(fortX + 10, 140);
     }
     
     setBlocks(newBlocks);
@@ -721,38 +893,99 @@ export default function CastleLevelsScreen() {
             </View>
           )}
           
-          {blocks.map(block => block.y <= GROUND_Y + 100 && (
-            <View
-              key={block.id}
-              style={[
-                styles.block,
-                {
-                  left: block.x,
-                  top: block.y,
-                  width: block.width,
-                  height: block.height,
-                  opacity: block.destroyed ? 0.7 : 1,
-                  transform: [{ rotate: `${block.rotation}deg` }],
-                },
-              ]}
-            />
-          ))}
-          
-          {enemies.map(enemy => enemy.y <= GROUND_Y + 100 && (
-            <View
-              key={enemy.id}
-              style={[
-                styles.enemy,
-                { left: enemy.x, top: enemy.y, opacity: enemy.eliminated ? 0.4 : 1 },
-              ]}
-            >
-              <View style={styles.enemyHead}>
-                <View style={styles.enemyEye} />
-                <View style={[styles.enemyEye, { left: 18 }]} />
+          {blocks.map(block => {
+            if (block.y > GROUND_Y + 100) return null;
+            
+            // Block colors based on type
+            const blockColors = {
+              wood: { bg: '#D2691E', border: '#8B4513', highlight: '#DEB887' },
+              ice: { bg: '#87CEEB', border: '#4682B4', highlight: '#B0E0E6' },
+              stone: { bg: '#808080', border: '#505050', highlight: '#A9A9A9' },
+            };
+            const colors = blockColors[block.type] || blockColors.wood;
+            
+            return (
+              <View
+                key={block.id}
+                style={[
+                  {
+                    position: 'absolute',
+                    left: block.x,
+                    top: block.y,
+                    width: block.width,
+                    height: block.height,
+                    backgroundColor: colors.bg,
+                    borderWidth: 3,
+                    borderColor: colors.border,
+                    borderRadius: block.type === 'ice' ? 2 : 4,
+                    opacity: block.destroyed ? 0.6 : 1,
+                    transform: [{ rotate: `${block.rotation}deg` }],
+                    overflow: 'hidden',
+                  },
+                ]}
+              >
+                {/* Wood grain lines */}
+                {block.type === 'wood' && (
+                  <>
+                    <View style={{ position: 'absolute', top: '30%', left: 0, right: 0, height: 2, backgroundColor: colors.border, opacity: 0.4 }} />
+                    <View style={{ position: 'absolute', top: '60%', left: 0, right: 0, height: 2, backgroundColor: colors.border, opacity: 0.4 }} />
+                  </>
+                )}
+                {/* Ice shine */}
+                {block.type === 'ice' && (
+                  <View style={{ position: 'absolute', top: 3, left: 3, width: '40%', height: '30%', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
+                )}
+                {/* Stone texture */}
+                {block.type === 'stone' && (
+                  <>
+                    <View style={{ position: 'absolute', top: 5, left: 5, width: 4, height: 4, backgroundColor: colors.highlight, borderRadius: 2 }} />
+                    <View style={{ position: 'absolute', bottom: 5, right: 5, width: 4, height: 4, backgroundColor: colors.border, borderRadius: 2 }} />
+                  </>
+                )}
               </View>
-              <View style={styles.enemyBody} />
-            </View>
-          ))}
+            );
+          })}
+          
+          {/* Green Pigs */}
+          {enemies.map(enemy => {
+            if (enemy.y > GROUND_Y + 100) return null;
+            
+            return (
+              <View
+                key={enemy.id}
+                style={[
+                  styles.pig,
+                  { left: enemy.x, top: enemy.y, opacity: enemy.eliminated ? 0.3 : 1 },
+                ]}
+              >
+                {/* Pig body (green circle) */}
+                <View style={styles.pigBody}>
+                  {/* Ears */}
+                  <View style={[styles.pigEar, { left: -3, top: 2 }]} />
+                  <View style={[styles.pigEar, { right: -3, top: 2 }]} />
+                  {/* Eyes */}
+                  <View style={styles.pigEyeLeft}>
+                    <View style={styles.pigPupil} />
+                  </View>
+                  <View style={styles.pigEyeRight}>
+                    <View style={styles.pigPupil} />
+                  </View>
+                  {/* Snout */}
+                  <View style={styles.pigSnout}>
+                    <View style={styles.pigNostril} />
+                    <View style={[styles.pigNostril, { left: 12 }]} />
+                  </View>
+                  {/* Eyebrows when hit */}
+                  {enemy.eliminated && (
+                    <>
+                      <View style={[styles.pigBrow, { left: 6, transform: [{ rotate: '-20deg' }] }]} />
+                      <View style={[styles.pigBrow, { right: 6, transform: [{ rotate: '20deg' }] }]} />
+                    </>
+                  )}
+                </View>
+              </View>
+            );
+          })}
         </View>
         
         {!firing && !gameOver && (
@@ -903,11 +1136,16 @@ const styles = StyleSheet.create({
   trailDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#666' },
   cannonball: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#1a1a1a', borderWidth: 3, borderColor: '#333' },
   cannonballHighlight: { position: 'absolute', top: 5, left: 5, width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.3)' },
-  block: { position: 'absolute', backgroundColor: '#8B4513', borderRadius: 4, borderWidth: 3, borderColor: '#5D3A1A' },
-  enemy: { position: 'absolute', width: 35, height: 50, alignItems: 'center' },
-  enemyHead: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffcc99', borderWidth: 2, borderColor: '#cc9966' },
-  enemyEye: { position: 'absolute', top: 10, left: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: '#333' },
-  enemyBody: { width: 25, height: 20, backgroundColor: '#e74c3c', borderRadius: 4, marginTop: -2, borderWidth: 2, borderColor: '#c0392b' },
+  // Pig styles (Angry Birds style green pigs)
+  pig: { position: 'absolute', width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  pigBody: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#7CB342', borderWidth: 3, borderColor: '#558B2F', position: 'relative', overflow: 'visible' },
+  pigEar: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#7CB342', borderWidth: 2, borderColor: '#558B2F' },
+  pigEyeLeft: { position: 'absolute', top: 8, left: 5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#333' },
+  pigEyeRight: { position: 'absolute', top: 8, right: 5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#333' },
+  pigPupil: { position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: '#333' },
+  pigSnout: { position: 'absolute', bottom: 4, left: '50%', marginLeft: -10, width: 20, height: 12, borderRadius: 6, backgroundColor: '#8BC34A', borderWidth: 2, borderColor: '#558B2F' },
+  pigNostril: { position: 'absolute', top: 3, left: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: '#558B2F' },
+  pigBrow: { position: 'absolute', top: 4, width: 8, height: 3, backgroundColor: '#333', borderRadius: 1 },
   aimHUD: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   aimText: { color: '#FFD700', fontSize: 12, fontWeight: '700' },
   controls: { flex: 1, backgroundColor: '#0f0f1a', padding: 12, justifyContent: 'space-between' },
