@@ -7,13 +7,12 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useGameStore } from '../../stores/gameStore';
-import { getNearbyPlayers, startBattle, spawnCastles, startCastleGame } from '../../services/api';
+import { getNearbyPlayers, startBattle } from '../../services/api';
 import { NearbyPlayer } from '../../types/game';
 
 const CLASS_COLORS: Record<string, string> = {
@@ -26,13 +25,10 @@ const CLASS_COLORS: Record<string, string> = {
 export default function PvPScreen() {
   const { player, playerId, currentPosition, nearbyPlayers, setNearbyPlayers, setCurrentBattle } = useGameStore();
   const [refreshing, setRefreshing] = useState(false);
-  const [nearbyCastles, setNearbyCastles] = useState<any[]>([]);
-  const [loadingCastleId, setLoadingCastleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (playerId && currentPosition) {
       loadNearbyPlayers();
-      loadNearbyCastles();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerId, currentPosition]);
@@ -47,40 +43,10 @@ export default function PvPScreen() {
     }
   };
 
-  const loadNearbyCastles = async () => {
-    if (!currentPosition || !player) return;
-    try {
-      const castles = await spawnCastles(currentPosition.latitude, currentPosition.longitude, player.level);
-      setNearbyCastles(castles);
-    } catch (error) {
-      console.error('Failed to load nearby castles:', error);
-    }
-  };
-
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadNearbyPlayers(), loadNearbyCastles()]);
+    await loadNearbyPlayers();
     setRefreshing(false);
-  };
-
-  const handleStartCastleGame = async (castle: any) => {
-    if (!playerId || loadingCastleId) return;
-    setLoadingCastleId(castle.id);
-    
-    try {
-      const gameData = await startCastleGame(castle.id, playerId);
-      
-      // Navigate to the castle game screen
-      router.push({
-        pathname: '/castle-game',
-        params: { gameData: JSON.stringify(gameData) },
-      });
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.detail || 'Failed to start castle game';
-      Alert.alert('Cannot Attack', errorMsg);
-    } finally {
-      setLoadingCastleId(null);
-    }
   };
 
   const handleChallenge = async (targetPlayer: NearbyPlayer) => {
@@ -209,70 +175,6 @@ export default function PvPScreen() {
           <View style={styles.tipItem}>
             <Ionicons name="information-circle" size={16} color="#3498db" />
             <Text style={styles.tipText}>Guild members cannot battle each other</Text>
-          </View>
-        </View>
-
-        {/* Castle Cannon Mini-Game Section */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>🏰 CASTLE ASSAULT ({nearbyCastles.length})</Text>
-        
-        {nearbyCastles.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={{ fontSize: 48 }}>🏰</Text>
-            <Text style={styles.emptyText}>No fortresses nearby</Text>
-            <Text style={styles.emptySubtext}>Explore the map to find gang hideouts!</Text>
-          </View>
-        ) : (
-          nearbyCastles.map((castle) => (
-            <TouchableOpacity
-              key={castle.id}
-              style={styles.castleCard}
-              onPress={() => handleStartCastleGame(castle)}
-              activeOpacity={0.8}
-              disabled={loadingCastleId === castle.id}
-            >
-              <View style={styles.castleInfo}>
-                <View style={styles.castleIcon}>
-                  <Text style={{ fontSize: 28 }}>🏰</Text>
-                </View>
-                <View style={styles.castleDetails}>
-                  <Text style={styles.castleName}>{castle.name}</Text>
-                  <Text style={styles.castleDifficulty}>
-                    {'⚔️'.repeat(castle.difficulty)} Level {castle.difficulty}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.castleMeta}>
-                <View style={styles.castleReward}>
-                  <Ionicons name="cash" size={14} color="#f39c12" />
-                  <Text style={styles.rewardText}>${castle.min_reward}-${castle.max_reward}</Text>
-                </View>
-                <Text style={styles.xpText}>+{castle.xp_reward} XP</Text>
-              </View>
-              <View style={styles.castleArrow}>
-                {loadingCastleId === castle.id ? (
-                  <ActivityIndicator size="small" color="#8B4513" />
-                ) : (
-                  <Ionicons name="flame" size={24} color="#8B4513" />
-                )}
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
-
-        {/* Castle Mini-game Tips */}
-        <View style={[styles.tipsSection, { backgroundColor: 'rgba(139, 69, 19, 0.15)', marginTop: 16 }]}>
-          <Text style={[styles.tipsTitle, { color: '#CD853F' }]}>CANNON TIPS</Text>
-          <View style={styles.tipItem}>
-            <Ionicons name="information-circle" size={16} color="#CD853F" />
-            <Text style={styles.tipText}>Drag on screen to aim the cannon</Text>
-          </View>
-          <View style={styles.tipItem}>
-            <Ionicons name="information-circle" size={16} color="#CD853F" />
-            <Text style={styles.tipText}>You have 3 shots to eliminate all targets</Text>
-          </View>
-          <View style={styles.tipItem}>
-            <Ionicons name="information-circle" size={16} color="#CD853F" />
-            <Text style={styles.tipText}>Destroy blocks to make enemies fall</Text>
           </View>
         </View>
       </ScrollView>
@@ -430,66 +332,5 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 13,
     marginLeft: 8,
-  },
-  // Castle Mini-game styles
-  castleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(139, 69, 19, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#8B4513',
-  },
-  castleInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  castleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(139, 69, 19, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  castleDetails: {
-    marginLeft: 12,
-  },
-  castleName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  castleDifficulty: {
-    fontSize: 11,
-    color: '#CD853F',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  castleMeta: {
-    alignItems: 'flex-end',
-    marginRight: 12,
-  },
-  castleReward: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  rewardText: {
-    color: '#f39c12',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  xpText: {
-    color: '#9b59b6',
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  castleArrow: {
-    padding: 8,
   },
 });

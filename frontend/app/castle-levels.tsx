@@ -1,0 +1,934 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Modal,
+  Dimensions,
+  PanResponder,
+  Animated,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Game constants
+const WORLD_WIDTH = 1200;
+const WORLD_HEIGHT = 500;
+const VIEWPORT_WIDTH = SCREEN_WIDTH;
+const VIEWPORT_HEIGHT = 400;
+const GROUND_Y = WORLD_HEIGHT - 60;
+const GRAVITY = 0.4;
+const INITIAL_VELOCITY = 22;
+
+// Level configurations
+const LEVELS = [
+  { level: 1, name: 'Training Ground', blocks: 4, enemies: 1, shots: 3, xpReward: 50, cashReward: 100 },
+  { level: 2, name: 'Small Outpost', blocks: 6, enemies: 2, shots: 3, xpReward: 75, cashReward: 150 },
+  { level: 3, name: 'Guard Tower', blocks: 8, enemies: 2, shots: 3, xpReward: 100, cashReward: 200 },
+  { level: 4, name: 'Watchtower', blocks: 10, enemies: 3, shots: 4, xpReward: 150, cashReward: 300 },
+  { level: 5, name: 'Fort Minor', blocks: 12, enemies: 3, shots: 4, xpReward: 200, cashReward: 400 },
+  { level: 6, name: 'Stone Keep', blocks: 15, enemies: 4, shots: 4, xpReward: 300, cashReward: 500 },
+  { level: 7, name: 'Battle Fortress', blocks: 18, enemies: 4, shots: 5, xpReward: 400, cashReward: 700 },
+  { level: 8, name: 'War Castle', blocks: 20, enemies: 5, shots: 5, xpReward: 500, cashReward: 900 },
+  { level: 9, name: 'Imperial Stronghold', blocks: 24, enemies: 5, shots: 5, xpReward: 750, cashReward: 1200 },
+  { level: 10, name: 'Dragon Citadel', blocks: 30, enemies: 6, shots: 6, xpReward: 1000, cashReward: 2000 },
+];
+
+interface Block {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  destroyed: boolean;
+  velocityX: number;
+  velocityY: number;
+  falling: boolean;
+  rotation: number;
+}
+
+interface Enemy {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  eliminated: boolean;
+  velocityX: number;
+  velocityY: number;
+  falling: boolean;
+}
+
+interface Cannonball {
+  x: number;
+  y: number;
+  velocityX: number;
+  velocityY: number;
+  active: boolean;
+  trail: { x: number; y: number }[];
+}
+
+export default function CastleLevelsScreen() {
+  const [currentLevel, setCurrentLevel] = useState(1);
+  const [unlockedLevel, setUnlockedLevel] = useState(1);
+  const [showLevelSelect, setShowLevelSelect] = useState(true);
+  const [showResults, setShowResults] = useState(false);
+  const [won, setWon] = useState(false);
+  
+  // Game state
+  const [angle, setAngle] = useState(45);
+  const [power, setPower] = useState(100);
+  const [shotsRemaining, setShotsRemaining] = useState(3);
+  const [cannonball, setCannonball] = useState<Cannonball | null>(null);
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [enemies, setEnemies] = useState<Enemy[]>([]);
+  const [gameOver, setGameOver] = useState(false);
+  const [firing, setFiring] = useState(false);
+  const [cameraX, setCameraX] = useState(0);
+  const [showTrajectory, setShowTrajectory] = useState(true);
+  
+  const animationRef = useRef<number | null>(null);
+  const ballPositionRef = useRef({ x: 0, y: 0, active: false });
+  const cannonballRef = useRef<Cannonball | null>(null);
+  const blocksRef = useRef<Block[]>([]);
+  const enemiesRef = useRef<Enemy[]>([]);
+
+  // Load progress on mount
+  useEffect(() => {
+    loadProgress();
+  }, []);
+
+  // Keep refs in sync
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
+
+  useEffect(() => {
+    enemiesRef.current = enemies;
+  }, [enemies]);
+
+  const loadProgress = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('castleLevelProgress');
+      if (saved) {
+        const progress = JSON.parse(saved);
+        setUnlockedLevel(progress.unlockedLevel || 1);
+      }
+    } catch {
+      console.log('Failed to load progress');
+    }
+  };
+
+  const saveProgress = async (level: number) => {
+    try {
+      const newUnlocked = Math.max(unlockedLevel, level + 1);
+      setUnlockedLevel(newUnlocked);
+      await AsyncStorage.setItem('castleLevelProgress', JSON.stringify({ unlockedLevel: newUnlocked }));
+    } catch {
+      console.log('Failed to save progress');
+    }
+  };
+
+  // Generate level layout
+  const generateLevel = useCallback((levelNum: number) => {
+    const config = LEVELS[levelNum - 1];
+    const newBlocks: Block[] = [];
+    const newEnemies: Enemy[] = [];
+    
+    // Create fort structure based on level
+    const fortX = 700;
+    const blockSize = 45;
+    const rows = Math.ceil(Math.sqrt(config.blocks));
+    const cols = Math.ceil(config.blocks / rows);
+    
+    let blockCount = 0;
+    for (let row = 0; row < rows && blockCount < config.blocks; row++) {
+      for (let col = 0; col < cols && blockCount < config.blocks; col++) {
+        // Create interesting patterns based on level
+        const offsetX = (levelNum % 2 === 0) ? (row % 2) * 20 : 0;
+        newBlocks.push({
+          id: `block-${blockCount}`,
+          x: fortX + col * (blockSize + 5) + offsetX,
+          y: GROUND_Y - (row + 1) * (blockSize + 3),
+          width: blockSize,
+          height: blockSize,
+          destroyed: false,
+          velocityX: 0,
+          velocityY: 0,
+          falling: false,
+          rotation: 0,
+        });
+        blockCount++;
+      }
+    }
+    
+    // Place enemies on top of blocks
+    const topBlocks = newBlocks
+      .filter(b => !newBlocks.some(other => 
+        other.id !== b.id && 
+        Math.abs(other.x - b.x) < blockSize && 
+        other.y < b.y
+      ))
+      .slice(0, config.enemies);
+    
+    topBlocks.forEach((block, i) => {
+      newEnemies.push({
+        id: `enemy-${i}`,
+        x: block.x + 5,
+        y: block.y - 45,
+        width: 35,
+        height: 40,
+        eliminated: false,
+        velocityX: 0,
+        velocityY: 0,
+        falling: false,
+      });
+    });
+    
+    // Add extra enemies if needed
+    while (newEnemies.length < config.enemies) {
+      const randomBlock = newBlocks[Math.floor(Math.random() * newBlocks.length)];
+      newEnemies.push({
+        id: `enemy-${newEnemies.length}`,
+        x: randomBlock.x + 5,
+        y: randomBlock.y - 45,
+        width: 35,
+        height: 40,
+        eliminated: false,
+        velocityX: 0,
+        velocityY: 0,
+        falling: false,
+      });
+    }
+    
+    setBlocks(newBlocks);
+    setEnemies(newEnemies);
+    setShotsRemaining(config.shots);
+    setGameOver(false);
+    setWon(false);
+    setFiring(false);
+    setCannonball(null);
+    setCameraX(0);
+    setShowTrajectory(true);
+  }, []);
+
+  const startLevel = (level: number) => {
+    setCurrentLevel(level);
+    generateLevel(level);
+    setShowLevelSelect(false);
+  };
+
+  // Pan responder for aiming
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !firing && !gameOver,
+      onMoveShouldSetPanResponder: () => !firing && !gameOver,
+      onPanResponderMove: (_, gestureState) => {
+        const newAngle = Math.max(10, Math.min(75, 45 - gestureState.dy / 4));
+        const newPower = Math.max(50, Math.min(100, 100 + gestureState.dx / 3));
+        setAngle(newAngle);
+        setPower(newPower);
+      },
+    })
+  ).current;
+
+  // Trajectory preview
+  const getTrajectoryPoints = useCallback(() => {
+    const points: { x: number; y: number }[] = [];
+    const angleRad = (angle * Math.PI) / 180;
+    const velocity = INITIAL_VELOCITY * (power / 100);
+    let x = 120;
+    let y = GROUND_Y - 80;
+    let vx = Math.cos(angleRad) * velocity;
+    let vy = -Math.sin(angleRad) * velocity;
+    
+    for (let i = 0; i < 30; i++) {
+      points.push({ x, y });
+      x += vx * 3;
+      y += vy * 3;
+      vy += GRAVITY * 3;
+      if (y > GROUND_Y) break;
+    }
+    return points;
+  }, [angle, power]);
+
+  // Collision detection
+  const checkBallRectCollision = (ballX: number, ballY: number, rect: { x: number; y: number; width: number; height: number }) => {
+    const ballRadius = 18;
+    const closestX = Math.max(rect.x, Math.min(ballX, rect.x + rect.width));
+    const closestY = Math.max(rect.y, Math.min(ballY, rect.y + rect.height));
+    const distanceX = ballX - closestX;
+    const distanceY = ballY - closestY;
+    return (distanceX * distanceX + distanceY * distanceY) < (ballRadius * ballRadius);
+  };
+
+  const checkRectRectCollision = (r1: { x: number; y: number; width: number; height: number }, r2: { x: number; y: number; width: number; height: number }) => {
+    return r1.x < r2.x + r2.width &&
+           r1.x + r1.width > r2.x &&
+           r1.y < r2.y + r2.height &&
+           r1.y + r1.height > r2.y;
+  };
+
+  // Physics update
+  const updatePhysics = useCallback(() => {
+    const ball = cannonballRef.current;
+    const currentBlocks = blocksRef.current;
+    
+    // Update cannonball
+    if (ball && ball.active) {
+      let newX = ball.x + ball.velocityX;
+      let newY = ball.y + ball.velocityY;
+      let newVelX = ball.velocityX;
+      let newVelY = ball.velocityY + GRAVITY;
+      let stillActive = true;
+      
+      const newTrail = [...ball.trail, { x: ball.x, y: ball.y }].slice(-20);
+      
+      currentBlocks.forEach(block => {
+        if (!block.destroyed) {
+          if (checkBallRectCollision(newX, newY, block)) {
+            newVelX *= 0.6;
+            newVelY *= 0.6;
+          }
+        }
+      });
+      
+      if (newX > WORLD_WIDTH + 50 || newY > GROUND_Y || newX < -50) {
+        stillActive = false;
+      }
+      
+      const updatedBall = {
+        ...ball,
+        x: newX,
+        y: newY,
+        velocityX: newVelX,
+        velocityY: newVelY,
+        active: stillActive,
+        trail: newTrail,
+      };
+      cannonballRef.current = updatedBall;
+      ballPositionRef.current = { x: newX, y: newY, active: stillActive };
+      setCannonball(updatedBall);
+    }
+
+    // Camera follows ball
+    if (ballPositionRef.current.active) {
+      const ballX = ballPositionRef.current.x;
+      const targetCameraX = Math.max(0, Math.min(WORLD_WIDTH - VIEWPORT_WIDTH, ballX - VIEWPORT_WIDTH / 3));
+      setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
+    }
+
+    // Update blocks
+    setBlocks(prev => {
+      const updatedBlocks = prev.map(block => {
+        if (block.destroyed && block.y >= GROUND_Y + 100) return block;
+        
+        const ballX = ballPositionRef.current.x;
+        const ballY = ballPositionRef.current.y;
+        const ballActive = ballPositionRef.current.active;
+        const ball = cannonballRef.current;
+        
+        if (!block.destroyed && !block.falling && ballActive) {
+          if (checkBallRectCollision(ballX, ballY, block)) {
+            const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
+            const impactForce = ball ? Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY) : 10;
+            
+            return {
+              ...block,
+              destroyed: true,
+              falling: true,
+              velocityX: -Math.cos(impactAngle) * impactForce * 0.6 + (Math.random() - 0.5) * 4,
+              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * 0.4) - 5 - Math.random() * 3,
+            };
+          }
+        }
+        
+        if (block.falling || block.destroyed) {
+          let newX = block.x + block.velocityX;
+          let newY = block.y + block.velocityY;
+          let newVelY = block.velocityY + GRAVITY * 0.8;
+          let newVelX = block.velocityX * 0.98;
+          let newRotation = block.rotation + block.velocityX * 2;
+          
+          if (newY > GROUND_Y - 10) {
+            newY = GROUND_Y - 10;
+            newVelY = -newVelY * 0.3;
+            newVelX *= 0.7;
+            if (Math.abs(newVelY) < 1) newVelY = 0;
+          }
+          
+          return {
+            ...block,
+            x: newX,
+            y: newY,
+            velocityX: newVelX,
+            velocityY: newVelY,
+            rotation: newRotation,
+          };
+        }
+        
+        return block;
+      });
+      
+      // Block-to-block collision
+      return updatedBlocks.map(block => {
+        if (block.destroyed || block.falling) return block;
+        
+        const hitByFallingBlock = updatedBlocks.some(other => 
+          other.id !== block.id && 
+          (other.falling || other.destroyed) && 
+          (Math.abs(other.velocityX) > 2 || Math.abs(other.velocityY) > 2) &&
+          checkRectRectCollision(other, block)
+        );
+        
+        if (hitByFallingBlock) {
+          return {
+            ...block,
+            destroyed: true,
+            falling: true,
+            velocityX: (Math.random() - 0.5) * 6,
+            velocityY: -4 - Math.random() * 4,
+          };
+        }
+        
+        const hasSupport = updatedBlocks.some(other =>
+          other.id !== block.id &&
+          !other.destroyed &&
+          !other.falling &&
+          block.x + block.width > other.x &&
+          block.x < other.x + other.width &&
+          Math.abs((block.y + block.height) - other.y) < 10
+        );
+        
+        const isOnGround = block.y + block.height >= GROUND_Y - 15;
+        
+        if (!hasSupport && !isOnGround) {
+          return {
+            ...block,
+            falling: true,
+            velocityX: (Math.random() - 0.5) * 2,
+            velocityY: 0,
+          };
+        }
+        
+        return block;
+      });
+    });
+
+    // Update enemies
+    setEnemies(prev => {
+      const currentBlocksNow = blocksRef.current;
+      
+      return prev.map(enemy => {
+        if (enemy.eliminated && enemy.y >= GROUND_Y + 100) return enemy;
+        
+        const ballX = ballPositionRef.current.x;
+        const ballY = ballPositionRef.current.y;
+        const ballActive = ballPositionRef.current.active;
+        const ball = cannonballRef.current;
+        
+        if (!enemy.eliminated && ballActive) {
+          if (checkBallRectCollision(ballX, ballY, enemy)) {
+            return {
+              ...enemy,
+              eliminated: true,
+              falling: true,
+              velocityX: ball ? ball.velocityX * 0.5 : 5,
+              velocityY: -12,
+            };
+          }
+        }
+        
+        if (!enemy.eliminated && !enemy.falling) {
+          const hitByBlock = currentBlocksNow.some(b => 
+            (b.falling || b.destroyed) && 
+            (Math.abs(b.velocityX) > 1 || Math.abs(b.velocityY) > 1) &&
+            checkRectRectCollision(b, enemy)
+          );
+          
+          if (hitByBlock) {
+            return {
+              ...enemy,
+              eliminated: true,
+              falling: true,
+              velocityX: (Math.random() - 0.5) * 8,
+              velocityY: -8,
+            };
+          }
+        }
+        
+        if (!enemy.falling && !enemy.eliminated) {
+          const hasSupport = currentBlocksNow.some(b => 
+            !b.destroyed &&
+            !b.falling &&
+            enemy.x + enemy.width > b.x &&
+            enemy.x < b.x + b.width &&
+            Math.abs((enemy.y + enemy.height) - b.y) < 20
+          );
+          
+          const isOnGround = enemy.y + enemy.height >= GROUND_Y - 25;
+          
+          if (!hasSupport && !isOnGround) {
+            return {
+              ...enemy,
+              falling: true,
+              velocityX: (Math.random() - 0.5) * 3,
+              velocityY: 0,
+            };
+          }
+        }
+        
+        if (enemy.falling) {
+          let newY = enemy.y + enemy.velocityY;
+          let newVelY = enemy.velocityY + GRAVITY;
+          
+          if (newY > GROUND_Y - 20) {
+            return { ...enemy, eliminated: true, y: GROUND_Y - 20, velocityY: 0, falling: false };
+          }
+          
+          return {
+            ...enemy,
+            x: enemy.x + enemy.velocityX,
+            y: newY,
+            velocityX: enemy.velocityX * 0.98,
+            velocityY: newVelY,
+          };
+        }
+        
+        return enemy;
+      });
+    });
+
+    const ballActive = ballPositionRef.current.active;
+    const hasAnimatingBlocks = blocksRef.current.some(b => b.falling && (Math.abs(b.velocityY) > 0.5 || Math.abs(b.velocityX) > 0.5));
+    const hasAnimatingEnemies = enemiesRef.current.some(e => e.falling);
+    
+    if (ballActive || hasAnimatingBlocks || hasAnimatingEnemies) {
+      animationRef.current = requestAnimationFrame(updatePhysics);
+    } else {
+      animationRef.current = null;
+    }
+  }, []);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, []);
+
+  // Check win/lose
+  useEffect(() => {
+    if (cannonball && !cannonball.active && firing) {
+      setTimeout(() => {
+        setFiring(false);
+        setShowTrajectory(true);
+        setCameraX(0);
+        
+        const remainingEnemies = enemies.filter(e => !e.eliminated).length;
+        
+        if (remainingEnemies === 0) {
+          setWon(true);
+          setGameOver(true);
+          saveProgress(currentLevel);
+          setShowResults(true);
+        } else if (shotsRemaining <= 0) {
+          setWon(false);
+          setGameOver(true);
+          setShowResults(true);
+        }
+      }, 1500);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cannonball?.active, firing, enemies, shotsRemaining, currentLevel]);
+
+  const fireCannon = () => {
+    if (firing || shotsRemaining <= 0 || gameOver) return;
+    
+    setFiring(true);
+    setShowTrajectory(false);
+    setShotsRemaining(prev => prev - 1);
+    
+    const angleRad = (angle * Math.PI) / 180;
+    const velocity = INITIAL_VELOCITY * (power / 100);
+    
+    const newBall = {
+      x: 120,
+      y: GROUND_Y - 80,
+      velocityX: Math.cos(angleRad) * velocity,
+      velocityY: -Math.sin(angleRad) * velocity,
+      active: true,
+      trail: [],
+    };
+    
+    cannonballRef.current = newBall;
+    ballPositionRef.current = { x: newBall.x, y: newBall.y, active: true };
+    setCannonball(newBall);
+    
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    animationRef.current = requestAnimationFrame(updatePhysics);
+  };
+
+  const trajectoryPoints = showTrajectory ? getTrajectoryPoints() : [];
+  const config = LEVELS[currentLevel - 1];
+
+  // Level Select Screen
+  if (showLevelSelect) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>CASTLE ASSAULT</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.levelGrid}>
+          <Text style={styles.selectTitle}>Select Level</Text>
+          
+          {LEVELS.map((level) => {
+            const isLocked = level.level > unlockedLevel;
+            const isCompleted = level.level < unlockedLevel;
+            
+            return (
+              <TouchableOpacity
+                key={level.level}
+                style={[
+                  styles.levelCard,
+                  isLocked && styles.levelCardLocked,
+                  isCompleted && styles.levelCardCompleted,
+                ]}
+                onPress={() => !isLocked && startLevel(level.level)}
+                disabled={isLocked}
+              >
+                <View style={styles.levelNumber}>
+                  {isLocked ? (
+                    <Ionicons name="lock-closed" size={24} color="#666" />
+                  ) : isCompleted ? (
+                    <Ionicons name="checkmark-circle" size={28} color="#4ade80" />
+                  ) : (
+                    <Text style={styles.levelNumberText}>{level.level}</Text>
+                  )}
+                </View>
+                <View style={styles.levelInfo}>
+                  <Text style={[styles.levelName, isLocked && styles.lockedText]}>
+                    {level.name}
+                  </Text>
+                  <View style={styles.levelStats}>
+                    <Text style={styles.levelStatText}>
+                      👥 {level.enemies} • 🧱 {level.blocks} • 💣 {level.shots}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.levelRewards}>
+                  <Text style={styles.rewardText}>💰 ${level.cashReward}</Text>
+                  <Text style={styles.rewardText}>⭐ {level.xpReward} XP</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Game Screen
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.gameHeader}>
+        <TouchableOpacity style={styles.backButton} onPress={() => setShowLevelSelect(true)}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={styles.gameHeaderCenter}>
+          <Text style={styles.gameHeaderTitle}>Level {currentLevel}</Text>
+          <Text style={styles.gameHeaderSubtitle}>{config.name}</Text>
+        </View>
+        <View style={styles.shotsContainer}>
+          <Text style={styles.shotsLabel}>SHOTS</Text>
+          <View style={styles.shotsIndicator}>
+            {Array.from({ length: config.shots }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.shotDot,
+                  { backgroundColor: i < shotsRemaining ? '#FFD700' : '#333' },
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.viewport} {...panResponder.panHandlers}>
+        <View style={[styles.world, { transform: [{ translateX: -cameraX }] }]}>
+          <View style={styles.skyGradient1} />
+          <View style={styles.skyGradient2} />
+          
+          <View style={[styles.cloud, { left: 200, top: 40 }]} />
+          <View style={[styles.cloud, { left: 500, top: 80 }]} />
+          <View style={[styles.cloud, { left: 800, top: 30 }]} />
+          
+          <View style={[styles.ground, { top: GROUND_Y }]}>
+            <View style={styles.groundGrass} />
+            <View style={styles.groundDirt} />
+          </View>
+          
+          {showTrajectory && trajectoryPoints.map((point, i) => (
+            <View
+              key={`traj-${i}`}
+              style={[
+                styles.trajectoryDot,
+                { left: point.x - 4, top: point.y - 4, opacity: 1 - i / trajectoryPoints.length },
+              ]}
+            />
+          ))}
+          
+          <View style={styles.cannonPlatform}>
+            <View style={styles.cannonWheelLeft} />
+            <View style={styles.cannonWheelRight} />
+            <View style={styles.cannonBody}>
+              <View style={[styles.cannonBarrel, { transform: [{ rotate: `-${angle}deg` }] }]}>
+                <View style={styles.cannonBarrelEnd} />
+              </View>
+            </View>
+          </View>
+          
+          {cannonball?.trail.map((point, i) => (
+            <View
+              key={`trail-${i}`}
+              style={[
+                styles.trailDot,
+                { left: point.x - 5, top: point.y - 5, opacity: i / cannonball.trail.length },
+              ]}
+            />
+          ))}
+          
+          {cannonball?.active && (
+            <View style={[styles.cannonball, { left: cannonball.x - 15, top: cannonball.y - 15 }]}>
+              <View style={styles.cannonballHighlight} />
+            </View>
+          )}
+          
+          {blocks.map(block => block.y <= GROUND_Y + 100 && (
+            <View
+              key={block.id}
+              style={[
+                styles.block,
+                {
+                  left: block.x,
+                  top: block.y,
+                  width: block.width,
+                  height: block.height,
+                  opacity: block.destroyed ? 0.7 : 1,
+                  transform: [{ rotate: `${block.rotation}deg` }],
+                },
+              ]}
+            />
+          ))}
+          
+          {enemies.map(enemy => enemy.y <= GROUND_Y + 100 && (
+            <View
+              key={enemy.id}
+              style={[
+                styles.enemy,
+                { left: enemy.x, top: enemy.y, opacity: enemy.eliminated ? 0.4 : 1 },
+              ]}
+            >
+              <View style={styles.enemyHead}>
+                <View style={styles.enemyEye} />
+                <View style={[styles.enemyEye, { left: 18 }]} />
+              </View>
+              <View style={styles.enemyBody} />
+            </View>
+          ))}
+        </View>
+        
+        {!firing && !gameOver && (
+          <View style={styles.aimHUD}>
+            <Text style={styles.aimText}>Angle: {Math.round(angle)}°</Text>
+            <Text style={styles.aimText}>Power: {Math.round(power)}%</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.controls}>
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Ionicons name="skull-outline" size={20} color="#e74c3c" />
+            <Text style={styles.statValue}>{enemies.filter(e => !e.eliminated).length}</Text>
+            <Text style={styles.statLabel}>LEFT</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Ionicons name="checkmark-circle-outline" size={20} color="#4ade80" />
+            <Text style={[styles.statValue, { color: '#4ade80' }]}>{enemies.filter(e => e.eliminated).length}</Text>
+            <Text style={styles.statLabel}>DOWN</Text>
+          </View>
+        </View>
+        
+        <TouchableOpacity
+          style={[styles.fireButton, (firing || shotsRemaining <= 0 || gameOver) && styles.fireButtonDisabled]}
+          onPress={fireCannon}
+          disabled={firing || shotsRemaining <= 0 || gameOver}
+        >
+          <Text style={styles.fireButtonText}>
+            {firing ? '💨 FIRING...' : gameOver ? (won ? '🏆 VICTORY' : '💀 FAILED') : '🔥 FIRE!'}
+          </Text>
+        </TouchableOpacity>
+        
+        {!firing && !gameOver && (
+          <Text style={styles.hintText}>☝️ Drag to aim • Release & tap FIRE</Text>
+        )}
+      </View>
+
+      {/* Results Modal */}
+      <Modal visible={showResults} transparent animationType="fade">
+        <View style={styles.resultsOverlay}>
+          <View style={styles.resultsContainer}>
+            <Text style={[styles.resultsTitle, { color: won ? '#4ade80' : '#ef4444' }]}>
+              {won ? '🏆 LEVEL COMPLETE!' : '💀 LEVEL FAILED'}
+            </Text>
+            
+            <Text style={styles.resultsSubtitle}>Level {currentLevel}: {config.name}</Text>
+            
+            {won && (
+              <View style={styles.rewardsContainer}>
+                <Text style={styles.rewardsTitle}>REWARDS</Text>
+                <View style={styles.rewardRow}>
+                  <Text style={styles.rewardIcon}>💰</Text>
+                  <Text style={styles.rewardValue}>+${config.cashReward}</Text>
+                </View>
+                <View style={styles.rewardRow}>
+                  <Text style={styles.rewardIcon}>⭐</Text>
+                  <Text style={styles.rewardValue}>+{config.xpReward} XP</Text>
+                </View>
+              </View>
+            )}
+            
+            <View style={styles.resultsButtons}>
+              {won && currentLevel < 10 && (
+                <TouchableOpacity
+                  style={[styles.resultBtn, { backgroundColor: '#4ade80' }]}
+                  onPress={() => {
+                    setShowResults(false);
+                    startLevel(currentLevel + 1);
+                  }}
+                >
+                  <Text style={styles.resultBtnText}>NEXT LEVEL →</Text>
+                </TouchableOpacity>
+              )}
+              
+              <TouchableOpacity
+                style={[styles.resultBtn, { backgroundColor: won ? '#666' : '#f39c12' }]}
+                onPress={() => {
+                  setShowResults(false);
+                  startLevel(currentLevel);
+                }}
+              >
+                <Text style={styles.resultBtnText}>{won ? 'REPLAY' : 'TRY AGAIN'}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.resultBtn, { backgroundColor: '#333' }]}
+                onPress={() => {
+                  setShowResults(false);
+                  setShowLevelSelect(true);
+                }}
+              >
+                <Text style={styles.resultBtnText}>LEVEL SELECT</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#222' },
+  backButton: { padding: 8 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: '#CD853F', letterSpacing: 2 },
+  selectTitle: { fontSize: 16, color: '#888', marginBottom: 16, textAlign: 'center' },
+  levelGrid: { padding: 16 },
+  levelCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 2, borderColor: '#8B4513' },
+  levelCardLocked: { borderColor: '#333', opacity: 0.6 },
+  levelCardCompleted: { borderColor: '#4ade80' },
+  levelNumber: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  levelNumberText: { fontSize: 24, fontWeight: '900', color: '#FFD700' },
+  levelInfo: { flex: 1 },
+  levelName: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  lockedText: { color: '#666' },
+  levelStats: { marginTop: 4 },
+  levelStatText: { fontSize: 12, color: '#888' },
+  levelRewards: { alignItems: 'flex-end' },
+  rewardText: { fontSize: 12, color: '#f39c12', fontWeight: '600' },
+  
+  // Game styles
+  gameHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#0f0f1a', borderBottomWidth: 2, borderBottomColor: '#8B4513' },
+  gameHeaderCenter: { alignItems: 'center', flex: 1 },
+  gameHeaderTitle: { fontSize: 16, fontWeight: '800', color: '#CD853F' },
+  gameHeaderSubtitle: { fontSize: 11, color: '#888', marginTop: 2 },
+  shotsContainer: { alignItems: 'center' },
+  shotsLabel: { fontSize: 9, color: '#666', fontWeight: '700' },
+  shotsIndicator: { flexDirection: 'row', gap: 4, marginTop: 4 },
+  shotDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#FFD700' },
+  viewport: { width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT, overflow: 'hidden', backgroundColor: '#87CEEB' },
+  world: { width: WORLD_WIDTH, height: WORLD_HEIGHT, position: 'relative' },
+  skyGradient1: { position: 'absolute', top: 0, left: 0, right: 0, height: 200, backgroundColor: '#4a90d9' },
+  skyGradient2: { position: 'absolute', top: 200, left: 0, right: 0, height: 200, backgroundColor: '#6ba3e3' },
+  cloud: { position: 'absolute', width: 80, height: 35, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 20 },
+  ground: { position: 'absolute', left: 0, width: WORLD_WIDTH, height: 100 },
+  groundGrass: { height: 15, backgroundColor: '#4a7c23' },
+  groundDirt: { height: 85, backgroundColor: '#5c3d2e' },
+  cannonPlatform: { position: 'absolute', left: 50, bottom: 60, width: 100, height: 80 },
+  cannonBody: { position: 'absolute', bottom: 20, left: 20, width: 60, height: 50, backgroundColor: '#2a2a2a', borderRadius: 10, borderWidth: 3, borderColor: '#444' },
+  cannonBarrel: { position: 'absolute', bottom: 20, left: 35, width: 70, height: 25, backgroundColor: '#3a3a3a', borderRadius: 5 },
+  cannonBarrelEnd: { position: 'absolute', right: -5, top: 2, width: 10, height: 21, backgroundColor: '#222', borderRadius: 3 },
+  cannonWheelLeft: { position: 'absolute', bottom: 0, left: 15, width: 30, height: 30, borderRadius: 15, backgroundColor: '#4a3a2a', borderWidth: 4, borderColor: '#2a2a2a' },
+  cannonWheelRight: { position: 'absolute', bottom: 0, left: 55, width: 30, height: 30, borderRadius: 15, backgroundColor: '#4a3a2a', borderWidth: 4, borderColor: '#2a2a2a' },
+  trajectoryDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFD700' },
+  trailDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#666' },
+  cannonball: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#1a1a1a', borderWidth: 3, borderColor: '#333' },
+  cannonballHighlight: { position: 'absolute', top: 5, left: 5, width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.3)' },
+  block: { position: 'absolute', backgroundColor: '#8B4513', borderRadius: 4, borderWidth: 3, borderColor: '#5D3A1A' },
+  enemy: { position: 'absolute', width: 35, height: 50, alignItems: 'center' },
+  enemyHead: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffcc99', borderWidth: 2, borderColor: '#cc9966' },
+  enemyEye: { position: 'absolute', top: 10, left: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: '#333' },
+  enemyBody: { width: 25, height: 20, backgroundColor: '#e74c3c', borderRadius: 4, marginTop: -2, borderWidth: 2, borderColor: '#c0392b' },
+  aimHUD: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  aimText: { color: '#FFD700', fontSize: 12, fontWeight: '700' },
+  controls: { flex: 1, backgroundColor: '#0f0f1a', padding: 12, justifyContent: 'space-between' },
+  statsRow: { flexDirection: 'row', justifyContent: 'center', gap: 30 },
+  statBox: { alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 10, borderWidth: 2, borderColor: '#333', flexDirection: 'row', gap: 8 },
+  statValue: { fontSize: 20, fontWeight: '900', color: '#fff' },
+  statLabel: { fontSize: 10, color: '#666', fontWeight: '600' },
+  fireButton: { backgroundColor: '#e74c3c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#c0392b' },
+  fireButtonDisabled: { backgroundColor: '#4a2020', borderColor: '#3a1a1a' },
+  fireButtonText: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: 2 },
+  hintText: { textAlign: 'center', color: '#666', fontSize: 11, marginTop: 8 },
+  resultsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  resultsContainer: { backgroundColor: '#1a1a2e', borderRadius: 20, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center', borderWidth: 3, borderColor: '#8B4513' },
+  resultsTitle: { fontSize: 28, fontWeight: '900', marginBottom: 8 },
+  resultsSubtitle: { fontSize: 16, color: '#CD853F', marginBottom: 20 },
+  rewardsContainer: { width: '100%', backgroundColor: '#0f0f1a', borderRadius: 12, padding: 16, marginBottom: 16 },
+  rewardsTitle: { fontSize: 14, fontWeight: '800', color: '#FFD700', textAlign: 'center', marginBottom: 12 },
+  rewardRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 12 },
+  rewardIcon: { fontSize: 20 },
+  rewardValue: { fontSize: 18, fontWeight: '700', color: '#4ade80' },
+  resultsButtons: { width: '100%', gap: 10 },
+  resultBtn: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultBtnText: { fontSize: 14, fontWeight: '800', color: '#fff', letterSpacing: 1 },
+});

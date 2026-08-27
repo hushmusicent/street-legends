@@ -156,6 +156,21 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
             <Text style={styles.howToPlayText}>HOW TO PLAY</Text>
           </TouchableOpacity>
 
+          <View style={styles.divider} />
+
+          {/* Castle Assault Mini-game */}
+          <TouchableOpacity 
+            style={styles.castleRow} 
+            onPress={() => {
+              onClose();
+              setTimeout(() => router.push('/castle-levels'), 300);
+            }} 
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 18 }}>🏰</Text>
+            <Text style={styles.castleText}>CASTLE ASSAULT</Text>
+          </TouchableOpacity>
+
           {/* Quit Game */}
           {showQuit && (
             <>
@@ -292,6 +307,23 @@ const styles = StyleSheet.create({
   },
   howToPlayText: {
     color: '#f59e0b',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  castleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(139, 69, 19, 0.15)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 69, 19, 0.4)',
+  },
+  castleText: {
+    color: '#CD853F',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,
