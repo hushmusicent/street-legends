@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Street Legends - Complete Game Guide</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #1a1a1a;
+            background: #fff;
+        }
+        
+        .cover {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #fff;
+            page-break-after: always;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .cover h1 {
+            font-size: 48pt;
+            font-weight: 900;
+            color: #f59e0b;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 10px;
+        }
+        
+        .cover .subtitle {
+            font-size: 24pt;
+            color: #e74c3c;
+            margin-bottom: 40px;
+        }
+        
+        .cover .tagline {
+            font-size: 14pt;
+            color: #888;
+            margin-bottom: 60px;
+        }
+        
+        .cover .guide-title {
+            font-size: 20pt;
+            color: #fff;
+            border: 2px solid #f59e0b;
+            padding: 15px 40px;
+            border-radius: 8px;
+        }
+        
+        .container {
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 22pt;
+            color: #e74c3c;
+            border-bottom: 3px solid #e74c3c;
+            padding-bottom: 8px;
+            margin: 30px 0 20px 0;
+            page-break-after: avoid;
+        }
+        
+        h2 {
+            font-size: 14pt;
+            color: #f59e0b;
+            margin: 20px 0 12px 0;
+            page-break-after: avoid;
+        }
+        
+        h3 {
+            font-size: 11pt;
+            color: #333;
+            margin: 15px 0 8px 0;
+            page-break-after: avoid;
+        }
+        
+        p {
+            margin-bottom: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 20px 0;
+            font-size: 9pt;
+            page-break-inside: auto;
+        }
+        
+        tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            text-align: left;
+        }
+        
+        th {
+            background: #1a1a1a;
+            color: #fff;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .note {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 10px 15px;
+            margin: 15px 0;
+            font-size: 9pt;
+        }
+        
+        .warning {
+            background: #fef3cd;
+            border-left: 4px solid #f59e0b;
+            padding: 10px 15px;
+            margin: 15px 0;
+            font-size: 9pt;
+        }
+        
+        .toc {
+            page-break-after: always;
+        }
+        
+        .toc h1 {
+            text-align: center;
+            border-bottom: none;
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding: 20px 40px;
+        }
+        
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px dotted #ccc;
+            font-size: 12pt;
+        }
+        
+        .toc li span {
+            float: right;
+        }
+        
+        .emoji {
+            font-size: 12pt;
+        }
+        
+        .stat-box {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-size: 9pt;
+        }
+        
+        .rarity-common { color: #666; }
+        .rarity-uncommon { color: #2ecc71; }
+        .rarity-rare { color: #3498db; }
+        .rarity-epic { color: #9b59b6; }
+        .rarity-legendary { color: #f39c12; }
+        
+        ul {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+        
+        li {
+            margin-bottom: 4px;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #888;
+            font-size: 8pt;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <!-- Cover Page -->
+    <div class="cover">
+        <h1>Street Legends</h1>
+        <div class="subtitle">GPS Crime RPG</div>
+        <div class="tagline">Build Your Empire. Rule The Streets.</div>
+        <div class="guide-title">Complete Game Guide</div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="toc">
+        <h1>Table of Contents</h1>
+        <ul>
+            <li>1. Character Classes <span>3</span></li>
+            <li>2. Skills (50 Total) <span>4</span></li>
+            <li>3. Health Store - Implants & Boosters <span>8</span></li>
+            <li>4. Territory System <span>9</span></li>
+            <li>5. Battle System <span>10</span></li>
+            <li>6. Enemy Tiers <span>11</span></li>
+            <li>7. Bank Robbery System <span>12</span></li>
+            <li>8. Leveling System <span>12</span></li>
+        </ul>
+    </div>
+
+    <div class="container">
+        <!-- CHARACTER CLASSES -->
+        <h1>1. Character Classes</h1>
+        <p>Choose your class wisely - it determines your playstyle and base stats!</p>
+        
+        <table>
+            <tr>
+                <th>Class</th>
+                <th>Description</th>
+                <th>Health</th>
+                <th>Attack</th>
+                <th>Defense</th>
+                <th>Speed</th>
+                <th>Luck</th>
+            </tr>
+            <tr>
+                <td><strong>🔫 Street Soldier</strong></td>
+                <td>Hardened fighter from the streets. Balanced stats.</td>
+                <td>120</td>
+                <td>15</td>
+                <td>12</td>
+                <td>10</td>
+                <td>8</td>
+            </tr>
+            <tr>
+                <td><strong>💻 Hacker</strong></td>
+                <td>Tech genius with digital skills. High speed & luck.</td>
+                <td>80</td>
+                <td>10</td>
+                <td>8</td>
+                <td>18</td>
+                <td>15</td>
+            </tr>
+            <tr>
+                <td><strong>💪 Enforcer</strong></td>
+                <td>Brutal powerhouse. Maximum attack & health.</td>
+                <td>150</td>
+                <td>20</td>
+                <td>10</td>
+                <td>6</td>
+                <td>5</td>
+            </tr>
+            <tr>
+                <td><strong>👻 Ghost</strong></td>
+                <td>Silent assassin. Critical hits & evasion specialist.</td>
+                <td>90</td>
+                <td>18</td>
+                <td>6</td>
+                <td>16</td>
+                <td>12</td>
+            </tr>
+        </table>
+
+        <div class="note">
+            <strong>Tip:</strong> Street Soldier is recommended for beginners due to balanced stats. Ghost excels at dealing critical damage, while Enforcer can tank hits with high HP.
+        </div>
+
+        <!-- SKILLS -->
+        <h1>2. All Skills (50 Total)</h1>
+        <p>Skills are special combat abilities. Players can <strong>own unlimited skills</strong> but only <strong>equip 4</strong> for battle.</p>
+
+        <h2>Starter Skills (Free)</h2>
+        <table>
+            <tr>
+                <th>Skill</th>
+                <th>Level</th>
+                <th>Damage</th>
+                <th>Effect</th>
+                <th>Energy</th>
+            </tr>
+            <tr>
+                <td>Heavy Strike</td>
+                <td>1</td>
+                <td>1.5x</td>
+                <td>—</td>
+                <td>10</td>
+            </tr>
+            <tr>
+                <td>Quick Shot</td>
+                <td>1</td>
+                <td>1.2x</td>
+                <td>—</td>
+                <td>5</td>
+            </tr>
+        </table>
+
+        <h2>Purchasable Skills (Levels 3-99)</h2>
+        <p>Skills unlock at <strong>odd levels</strong> and can be purchased at Gun Shops.</p>
+        
+        <table>
+            <tr>
+                <th>Skill</th>
+                <th>Lvl</th>
+                <th>Dmg</th>
+                <th>Special Effects</th>
+                <th>Energy</th>
+                <th>Price</th>
+            </tr>
+            <tr><td>Defensive Stance</td><td>3</td><td>—</td><td>2x Defense</td><td>8</td><td>$100</td></tr>
+            <tr><td>Critical Aim</td><td>5</td><td>—</td><td>50% Crit Chance</td><td>15</td><td>$150</td></tr>
+            <tr><td>Street Medicine</td><td>7</td><td>—</td><td>Heal 30% HP</td><td>20</td><td>$200</td></tr>
+            <tr><td>Rage Mode</td><td>9</td><td>2.0x</td><td>—</td><td>25</td><td>$250</td></tr>
+            <tr><td>Counter Strike</td><td>11</td><td>1.8x</td><td>+1.5x Defense</td><td>18</td><td>$350</td></tr>
+            <tr><td>Blinding Flash</td><td>13</td><td>1.3x</td><td>40% Stun</td><td>20</td><td>$400</td></tr>
+            <tr><td>Execute</td><td>15</td><td>3.0x</td><td>—</td><td>40</td><td>$500</td></tr>
+            <tr><td>Iron Skin</td><td>17</td><td>—</td><td>3x Defense</td><td>22</td><td>$550</td></tr>
+            <tr><td>Adrenaline Rush</td><td>19</td><td>1.6x</td><td>+Heal 15%</td><td>28</td><td>$600</td></tr>
+            <tr><td>Double Tap</td><td>21</td><td>2.2x</td><td>—</td><td>30</td><td>$700</td></tr>
+            <tr><td>Smoke Bomb</td><td>23</td><td>—</td><td>2.5x Def + 10% Heal</td><td>25</td><td>$750</td></tr>
+            <tr><td>Berserker</td><td>25</td><td>2.5x</td><td>—</td><td>35</td><td>$850</td></tr>
+            <tr><td>Tactical Reload</td><td>27</td><td>—</td><td>Heal 25%</td><td>18</td><td>$900</td></tr>
+            <tr><td>Armor Pierce</td><td>29</td><td>2.0x</td><td>Ignores Defense</td><td>32</td><td>$1,000</td></tr>
+            <tr><td>Venomous Strike</td><td>31</td><td>1.5x</td><td>Poison DoT</td><td>28</td><td>$1,100</td></tr>
+            <tr><td>Battle Cry</td><td>33</td><td>1.8x</td><td>+1.3x Defense</td><td>30</td><td>$1,200</td></tr>
+            <tr><td>Headshot</td><td>35</td><td>3.5x</td><td>30% Crit</td><td>45</td><td>$1,400</td></tr>
+            <tr><td>Fortress</td><td>37</td><td>—</td><td>4x Defense</td><td>35</td><td>$1,500</td></tr>
+            <tr><td>Lifesteal</td><td>39</td><td>1.8x</td><td>Drain 30% HP</td><td>38</td><td>$1,650</td></tr>
+            <tr><td>Chain Attack</td><td>41</td><td>2.8x</td><td>—</td><td>42</td><td>$1,800</td></tr>
+            <tr><td>Combat Medic</td><td>43</td><td>—</td><td>Heal 40%</td><td>30</td><td>$1,900</td></tr>
+            <tr><td>Rampage</td><td>45</td><td>3.0x</td><td>—</td><td>50</td><td>$2,100</td></tr>
+            <tr><td>Evasion</td><td>47</td><td>—</td><td>5x Defense</td><td>40</td><td>$2,250</td></tr>
+            <tr><td>Assassinate</td><td>49</td><td>4.0x</td><td>—</td><td>55</td><td>$2,500</td></tr>
+        </table>
+
+        <h2>High-Level Skills (Levels 51-99)</h2>
+        <table>
+            <tr>
+                <th>Skill</th>
+                <th>Lvl</th>
+                <th>Dmg</th>
+                <th>Special Effects</th>
+                <th>Energy</th>
+                <th>Price</th>
+            </tr>
+            <tr><td>Blood Pact</td><td>51</td><td>2.5x</td><td>Drain 40% HP</td><td>48</td><td>$2,700</td></tr>
+            <tr><td>Titanium Shell</td><td>53</td><td>—</td><td>6x Def + 10% Heal</td><td>45</td><td>$2,900</td></tr>
+            <tr><td>Obliterate</td><td>55</td><td>4.5x</td><td>—</td><td>60</td><td>$3,200</td></tr>
+            <tr><td>Regenerate</td><td>57</td><td>—</td><td>Heal 50%</td><td>40</td><td>$3,400</td></tr>
+            <tr><td>Phantom Strike</td><td>59</td><td>3.5x</td><td>Ignores Defense</td><td>55</td><td>$3,700</td></tr>
+            <tr><td>War Machine</td><td>61</td><td>3.0x</td><td>+2x Defense</td><td>52</td><td>$4,000</td></tr>
+            <tr><td>Drain Life</td><td>63</td><td>2.0x</td><td>Drain 50% HP</td><td>50</td><td>$4,300</td></tr>
+            <tr><td>Massacre</td><td>65</td><td>5.0x</td><td>—</td><td>70</td><td>$4,700</td></tr>
+            <tr><td>Diamond Armor</td><td>67</td><td>—</td><td>8x Defense</td><td>55</td><td>$5,000</td></tr>
+            <tr><td>Phoenix Heal</td><td>69</td><td>—</td><td>Heal 60%</td><td>50</td><td>$5,400</td></tr>
+            <tr><td>Annihilate</td><td>71</td><td>5.5x</td><td>—</td><td>75</td><td>$5,800</td></tr>
+            <tr><td>Vampire</td><td>73</td><td>3.0x</td><td>Drain 60% HP</td><td>60</td><td>$6,200</td></tr>
+            <tr><td>Juggernaut</td><td>75</td><td>4.0x</td><td>+3x Defense</td><td>65</td><td>$6,700</td></tr>
+            <tr><td>Omega Heal</td><td>77</td><td>—</td><td>70% Heal + 2x Def</td><td>55</td><td>$7,200</td></tr>
+            <tr><td>Death Blow</td><td>79</td><td>6.0x</td><td>—</td><td>80</td><td>$7,800</td></tr>
+            <tr><td>Eternal Guard</td><td>81</td><td>—</td><td>10x Defense</td><td>65</td><td>$8,400</td></tr>
+            <tr><td>Soul Reaper</td><td>83</td><td>5.0x</td><td>Drain 70% HP</td><td>75</td><td>$9,100</td></tr>
+            <tr><td>Armageddon</td><td>85</td><td>7.0x</td><td>—</td><td>90</td><td>$9,800</td></tr>
+            <tr><td>Immortal</td><td>87</td><td>—</td><td>80% Heal + 5x Def</td><td>70</td><td>$10,600</td></tr>
+            <tr><td>Extinction</td><td>89</td><td>8.0x</td><td>Ignores Defense</td><td>100</td><td>$11,500</td></tr>
+            <tr><td>Divine Shield</td><td>91</td><td>—</td><td>15x Def + 30% Heal</td><td>80</td><td>$12,500</td></tr>
+            <tr><td>Apocalypse</td><td>93</td><td>9.0x</td><td>—</td><td>110</td><td>$13,600</td></tr>
+            <tr class="highlight"><td><strong>Titan Soul</strong></td><td>95</td><td>7.0x</td><td>5x Def + 50% Steal</td><td>100</td><td>$14,800</td></tr>
+            <tr class="highlight"><td><strong>Rebirth</strong></td><td>97</td><td>—</td><td>Full HP Restore</td><td>90</td><td>$16,000</td></tr>
+            <tr class="highlight"><td><strong>Godslayer</strong></td><td>99</td><td>10.0x</td><td>Ignore Def + 50% Steal</td><td>120</td><td>$18,000</td></tr>
+        </table>
+
+        <!-- HEALTH STORE -->
+        <h1>3. Health Store - Implants & Boosters</h1>
+        <p>Visit Health Stores (green cross markers on the map) to purchase healing items and permanent upgrades.</p>
+
+        <h2>Health Recharges (Consumables)</h2>
+        <table>
+            <tr>
+                <th>Item</th>
+                <th>Effect</th>
+                <th>Price</th>
+                <th>Level Req</th>
+                <th>Rarity</th>
+            </tr>
+            <tr><td>Health Syringe</td><td>Restore 30 HP</td><td>$50</td><td>1</td><td class="rarity-common">Common</td></tr>
+            <tr><td>Med Kit</td><td>Restore 75 HP</td><td>$100</td><td>3</td><td class="rarity-uncommon">Uncommon</td></tr>
+            <tr><td>Full Heal Pack</td><td>Restore ALL HP</td><td>$500</td><td>5</td><td class="rarity-rare">Rare</td></tr>
+        </table>
+
+        <h2>Energy Recharges (Consumables)</h2>
+        <table>
+            <tr>
+                <th>Item</th>
+                <th>Effect</th>
+                <th>Price</th>
+                <th>Level Req</th>
+                <th>Rarity</th>
+            </tr>
+            <tr><td>Energy Drink</td><td>Restore 25 Energy</td><td>$50</td><td>1</td><td class="rarity-common">Common</td></tr>
+            <tr><td>Adrenaline Shot</td><td>Restore 60 Energy</td><td>$100</td><td>3</td><td class="rarity-uncommon">Uncommon</td></tr>
+            <tr><td>Full Energy Cell</td><td>Restore ALL Energy</td><td>$500</td><td>5</td><td class="rarity-rare">Rare</td></tr>
+        </table>
+
+        <h2>Combo Packs (Consumables)</h2>
+        <table>
+            <tr>
+                <th>Item</th>
+                <th>Effect</th>
+                <th>Price</th>
+                <th>Level Req</th>
+                <th>Rarity</th>
+            </tr>
+            <tr><td>Street Rations</td><td>+20 HP, +20 Energy</td><td>$100</td><td>1</td><td class="rarity-common">Common</td></tr>
+            <tr><td>Combat Stimulant</td><td>+50 HP, +50 Energy</td><td>$200</td><td>5</td><td class="rarity-rare">Rare</td></tr>
+            <tr><td>Full Recovery Kit</td><td>Full HP & Energy</td><td>$1,000</td><td>8</td><td class="rarity-epic">Epic</td></tr>
+        </table>
+
+        <h2>🧠 Neural Implants (PERMANENT)</h2>
+        <div class="warning">
+            <strong>⚠️ Important:</strong> Implants are PERMANENT upgrades that stack! Once purchased, they permanently increase your stats.
+        </div>
+        <table>
+            <tr>
+                <th>Implant</th>
+                <th>Effect</th>
+                <th>Price</th>
+                <th>Level Req</th>
+                <th>Rarity</th>
+            </tr>
+            <tr><td>Health Implant Mk1</td><td><strong>+25% Max HP</strong></td><td>$200</td><td>5</td><td class="rarity-rare">Rare</td></tr>
+            <tr><td>Health Implant Mk2</td><td><strong>+50% Max HP</strong></td><td>$500</td><td>8</td><td class="rarity-epic">Epic</td></tr>
+            <tr class="highlight"><td>Health Implant Mk3</td><td><strong>+100% Max HP (DOUBLES)</strong></td><td>$1,000</td><td>12</td><td class="rarity-legendary">Legendary</td></tr>
+            <tr><td>Neural Booster Mk1</td><td><strong>+25% Max Energy</strong></td><td>$200</td><td>5</td><td class="rarity-rare">Rare</td></tr>
+            <tr><td>Neural Booster Mk2</td><td><strong>+50% Max Energy</strong></td><td>$500</td><td>8</td><td class="rarity-epic">Epic</td></tr>
+            <tr class="highlight"><td>Neural Booster Mk3</td><td><strong>+100% Max Energy (DOUBLES)</strong></td><td>$1,000</td><td>12</td><td class="rarity-legendary">Legendary</td></tr>
+        </table>
+
+        <!-- TERRITORY SYSTEM -->
+        <h1>4. Territory System</h1>
+        <p>Territories are real-world locations you can capture and own. Build your empire by controlling the streets!</p>
+
+        <h2>How Territories Work</h2>
+        <ul>
+            <li><strong>Size:</strong> Each territory is 338m × 338m</li>
+            <li><strong>Names:</strong> 1,600+ unique procedurally generated names</li>
+            <li><strong>Colors:</strong> Unclaimed = Gray, Owned = Player's unique color</li>
+        </ul>
+
+        <h2>Capturing Territories</h2>
+        <ol>
+            <li><strong>Move within range</strong> (~100m) of an unclaimed territory</li>
+            <li><strong>Tap the territory</strong> marker on the map</li>
+            <li><strong>Fight the territory boss</strong> (NPC defender)</li>
+            <li><strong>Win</strong> to claim ownership</li>
+        </ol>
+
+        <h2>Territory Benefits</h2>
+        <table>
+            <tr>
+                <th>Benefit</th>
+                <th>Description</th>
+            </tr>
+            <tr><td>Passive Income</td><td>~$30 per territory over time</td></tr>
+            <tr><td>XP Reward</td><td>+50 XP on capture</td></tr>
+            <tr><td>Reputation</td><td>+10 Rep on capture</td></tr>
+            <tr><td>Visual Ownership</td><td>Your color & avatar displayed on map</td></tr>
+        </table>
+
+        <h2>Challenging Owned Territories (PvP)</h2>
+        <p>If a territory is owned by another player, you fight their stats instead of an NPC boss. The winner takes ownership of the territory.</p>
+
+        <!-- BATTLE SYSTEM -->
+        <h1>5. Battle System</h1>
+        <p>Combat in Street Legends is turn-based. Defeat enemies to earn XP, cash, and loot!</p>
+
+        <h2>Starting a Battle</h2>
+        <ul>
+            <li>Find <strong>enemy markers</strong> (skulls) on the map</li>
+            <li>Enemies spawn based on your level (±1 level range)</li>
+            <li>Tap enemy → View stats → Press "FIGHT"</li>
+        </ul>
+
+        <h2>Combat Actions</h2>
+        <table>
+            <tr>
+                <th>Action</th>
+                <th>Description</th>
+                <th>Cost</th>
+            </tr>
+            <tr><td><strong>Attack</strong></td><td>Basic attack using your Attack stat</td><td>Free</td></tr>
+            <tr><td><strong>Skill</strong></td><td>Use equipped skill for special effects</td><td>Energy</td></tr>
+            <tr><td><strong>Defend</strong></td><td>Reduce incoming damage by 50%</td><td>Free</td></tr>
+            <tr><td><strong>Flee</strong></td><td>Escape battle (may fail)</td><td>Free</td></tr>
+        </table>
+
+        <h2>Combat Mechanics</h2>
+        <table>
+            <tr>
+                <th>Mechanic</th>
+                <th>Formula</th>
+            </tr>
+            <tr><td>Base Damage</td><td>Attack - (Enemy Defense ÷ 2)</td></tr>
+            <tr><td>Miss Chance</td><td>10% base, reduced by Luck (min 5%)</td></tr>
+            <tr><td>Crit Chance</td><td>5% base + (Luck × 1%)</td></tr>
+            <tr><td>Crit Damage</td><td>2x normal damage</td></tr>
+            <tr><td>Skill Miss</td><td>Only 5% chance</td></tr>
+        </table>
+
+        <h2>Battle Rewards</h2>
+        <table>
+            <tr>
+                <th>Outcome</th>
+                <th>Rewards</th>
+            </tr>
+            <tr><td>Victory</td><td>XP, Cash, possible item drop, Reputation</td></tr>
+            <tr><td>Defeat</td><td>Lose some HP, no rewards</td></tr>
+            <tr><td>Flee</td><td>No rewards, escape to safety</td></tr>
+        </table>
+
+        <!-- ENEMY TIERS -->
+        <h1>6. Enemy Tiers (10 Total)</h1>
+        <p>Enemies scale with your level. Each tier has regular enemies and a powerful boss.</p>
+
+        <table>
+            <tr>
+                <th>Tier</th>
+                <th>Levels</th>
+                <th>Regular Enemies</th>
+                <th>Boss</th>
+            </tr>
+            <tr><td>1</td><td>1-10</td><td>Thug, Gangster, Criminal, Villain, Bandit</td><td>The Kingpin</td></tr>
+            <tr><td>2</td><td>11-20</td><td>Assassin, Thief, Hoodlum, Pirate, Bully</td><td>Vinnie The Viper</td></tr>
+            <tr><td>3</td><td>21-30</td><td>Offender, Hood, Mobster, Gangsta, Hooligan</td><td>Don Corleone</td></tr>
+            <tr><td>4</td><td>31-40</td><td>Goon, Ruffian, Gang Banger, Tough Guy, Gorilla</td><td>El Chapo</td></tr>
+            <tr><td>5</td><td>41-50</td><td>Punk, Rough Neck, Rowdy Person, Yardie, Perpetrator</td><td>Tony Montana</td></tr>
+            <tr><td>6</td><td>51-60</td><td>Vigilante, Scoundrel, Robber, Toughie, Felon</td><td>Pablo Escobar</td></tr>
+            <tr><td>7</td><td>61-70</td><td>Outlaw, Crook, Cutthroat, Brigade, Mafioso</td><td>The Joker</td></tr>
+            <tr><td>8</td><td>71-80</td><td>Perp, Mugger, LawBreaker, Racketeer, Desperado</td><td>Bane</td></tr>
+            <tr><td>9</td><td>81-90</td><td>Highway Man, Gunman, Vandal, Pick Pocket, Swindler</td><td>Thanos</td></tr>
+            <tr><td>10</td><td>91-100</td><td>Malefactor, Bravo, Delinquent, Maniac, Psycho</td><td>The Godfather</td></tr>
+        </table>
+
+        <h2>Enemy Stats Formula</h2>
+        <ul>
+            <li><strong>Health</strong> = (80 + Level × 18) × Boss Multiplier</li>
+            <li><strong>Attack</strong> = (8 + Level × 3.2) × Boss Multiplier</li>
+            <li><strong>Defense</strong> = (5 + Level × 1.8) × Boss Multiplier</li>
+            <li><strong>Boss Multiplier</strong> = 1.3 (bosses), 1.0 (regular)</li>
+        </ul>
+
+        <!-- BANK ROBBERY -->
+        <h1>7. Bank Robbery System</h1>
+        <p>High risk, high reward! Rob banks for big cash payouts.</p>
+
+        <ul>
+            <li>Find <strong>bank markers</strong> (🏦) on the map</li>
+            <li>Rob the bank for a <strong>50/50 chance</strong> heist</li>
+            <li><strong>Success:</strong> Big cash reward</li>
+            <li><strong>Failure:</strong> Lose some cash and take damage</li>
+        </ul>
+
+        <!-- LEVELING SYSTEM -->
+        <h1>8. Leveling System</h1>
+        <p>Gain experience (XP) to level up and become stronger!</p>
+
+        <h2>XP Sources</h2>
+        <table>
+            <tr>
+                <th>Activity</th>
+                <th>XP Gained</th>
+            </tr>
+            <tr><td>Defeat Enemy</td><td>Variable (based on enemy level)</td></tr>
+            <tr><td>Capture Territory</td><td>+50 XP</td></tr>
+            <tr><td>Complete Mission</td><td>Variable</td></tr>
+            <tr><td>Fitness Rewards</td><td>5K/10K/50K steps milestones</td></tr>
+        </table>
+
+        <h2>Level Benefits</h2>
+        <ul>
+            <li>Increased base stats</li>
+            <li>Access to higher tier enemies & bosses</li>
+            <li>Better equipment drops</li>
+            <li>New skills unlock at <strong>odd levels</strong> (3, 5, 7... 99)</li>
+            <li>Higher tier shop items available</li>
+        </ul>
+
+        <div class="footer">
+            <p>Street Legends - Complete Game Guide</p>
+            <p>© 2026 Street Legends. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
