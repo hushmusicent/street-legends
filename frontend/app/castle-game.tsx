@@ -462,30 +462,27 @@ export default function CastleMinigameScreen() {
       });
     });
 
-    animationRef.current = requestAnimationFrame(updatePhysics);
+    // Check if we should continue animating
+    const ballActive = ballPositionRef.current.active;
+    const hasAnimatingBlocks = blocksRef.current.some(b => b.falling && (Math.abs(b.velocityY) > 0.5 || Math.abs(b.velocityX) > 0.5));
+    const hasAnimatingMembers = gangMembersRef.current.some(m => m.falling);
+    
+    if (ballActive || hasAnimatingBlocks || hasAnimatingMembers) {
+      animationRef.current = requestAnimationFrame(updatePhysics);
+    } else {
+      animationRef.current = null;
+    }
   }, []);
 
-  // Animation loop control - starts when ball is fired
+  // Animation loop cleanup only - loop is started by fireCannon
   useEffect(() => {
-    const shouldAnimate = cannonball?.active || 
-                          blocks.some(b => b.falling && Math.abs(b.velocityY) > 0.5) || 
-                          gangMembers.some(m => m.falling);
-    
-    if (shouldAnimate) {
-      // Cancel any existing animation frame first
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      animationRef.current = requestAnimationFrame(updatePhysics);
-    }
-    
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
     };
-  }, [cannonball?.active, updatePhysics]);
+  }, []);
 
   // Check win/lose after ball stops
   useEffect(() => {
@@ -548,14 +545,26 @@ export default function CastleMinigameScreen() {
     const angleRad = (angle * Math.PI) / 180;
     const velocity = INITIAL_VELOCITY * (power / 100);
     
-    setCannonball({
+    const newBall = {
       x: 120,
       y: GROUND_Y - 80,
       velocityX: Math.cos(angleRad) * velocity,
       velocityY: -Math.sin(angleRad) * velocity,
       active: true,
       trail: [],
-    });
+    };
+    
+    // Update refs immediately before setting state
+    cannonballRef.current = newBall;
+    ballPositionRef.current = { x: newBall.x, y: newBall.y, active: true };
+    
+    setCannonball(newBall);
+    
+    // Start animation loop immediately
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    animationRef.current = requestAnimationFrame(updatePhysics);
   };
 
   const handleClose = () => {
