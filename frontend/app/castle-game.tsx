@@ -178,53 +178,86 @@ export default function CastleMinigameScreen() {
     return points;
   }, [angle, power]);
 
-  // Check collision
-  const checkCollision = (ball: Cannonball, rect: { x: number; y: number; width: number; height: number }) => {
-    const ballRadius = 15;
-    const closestX = Math.max(rect.x, Math.min(ball.x, rect.x + rect.width));
-    const closestY = Math.max(rect.y, Math.min(ball.y, rect.y + rect.height));
-    const distanceX = ball.x - closestX;
-    const distanceY = ball.y - closestY;
+  // Check collision between ball and rectangle
+  const checkBallRectCollision = (ballX: number, ballY: number, rect: { x: number; y: number; width: number; height: number }) => {
+    const ballRadius = 18; // Slightly larger for better hit detection
+    const closestX = Math.max(rect.x, Math.min(ballX, rect.x + rect.width));
+    const closestY = Math.max(rect.y, Math.min(ballY, rect.y + rect.height));
+    const distanceX = ballX - closestX;
+    const distanceY = ballY - closestY;
     return (distanceX * distanceX + distanceY * distanceY) < (ballRadius * ballRadius);
   };
 
-  // Physics update loop
+  // Check collision between two rectangles (for block-to-block)
+  const checkRectRectCollision = (r1: { x: number; y: number; width: number; height: number }, r2: { x: number; y: number; width: number; height: number }) => {
+    return r1.x < r2.x + r2.width &&
+           r1.x + r1.width > r2.x &&
+           r1.y < r2.y + r2.height &&
+           r1.y + r1.height > r2.y;
+  };
+
+  // Refs to track current state for collision in physics loop
+  const blocksRef = useRef<Block[]>([]);
+  const gangMembersRef = useRef<GangMember[]>([]);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
+
+  useEffect(() => {
+    gangMembersRef.current = gangMembers;
+  }, [gangMembers]);
+
+  // Physics update loop - completely rewritten for proper collision
   const updatePhysics = useCallback(() => {
-    setCannonball(prev => {
-      if (!prev || !prev.active) {
-        ballPositionRef.current = { x: 0, y: 0, active: false };
-        cannonballRef.current = prev;
-        return prev;
-      }
-      
-      let newX = prev.x + prev.velocityX;
-      let newY = prev.y + prev.velocityY;
-      let newVelY = prev.velocityY + GRAVITY;
+    // Get current ball position from ref
+    const ball = cannonballRef.current;
+    const currentBlocks = blocksRef.current;
+    
+    // Update cannonball position
+    if (ball && ball.active) {
+      let newX = ball.x + ball.velocityX;
+      let newY = ball.y + ball.velocityY;
+      let newVelX = ball.velocityX;
+      let newVelY = ball.velocityY + GRAVITY;
+      let stillActive = true;
       
       // Add trail point
-      const newTrail = [...prev.trail, { x: prev.x, y: prev.y }].slice(-20);
+      const newTrail = [...ball.trail, { x: ball.x, y: ball.y }].slice(-20);
+      
+      // Check collision with blocks BEFORE updating position
+      let hitSomething = false;
+      currentBlocks.forEach(block => {
+        if (!block.destroyed && !hitSomething) {
+          if (checkBallRectCollision(newX, newY, block)) {
+            hitSomething = true;
+            // Reduce ball velocity on impact but keep it going
+            newVelX *= 0.6;
+            newVelY *= 0.6;
+          }
+        }
+      });
       
       // Check if out of bounds or hit ground
       if (newX > WORLD_WIDTH + 50 || newY > GROUND_Y || newX < -50) {
-        ballPositionRef.current = { x: newX, y: newY, active: false };
-        const newBall = { ...prev, active: false, trail: newTrail };
-        cannonballRef.current = newBall;
-        return newBall;
+        stillActive = false;
       }
       
-      // Update refs for camera and collision
-      ballPositionRef.current = { x: newX, y: newY, active: true };
-      const newBall = {
-        ...prev,
+      // Update ball ref and state
+      const updatedBall = {
+        ...ball,
         x: newX,
         y: newY,
+        velocityX: newVelX,
         velocityY: newVelY,
+        active: stillActive,
         trail: newTrail,
       };
-      cannonballRef.current = newBall;
-      
-      return newBall;
-    });
+      cannonballRef.current = updatedBall;
+      ballPositionRef.current = { x: newX, y: newY, active: stillActive };
+      setCannonball(updatedBall);
+    }
 
     // Camera follows ball using ref
     if (ballPositionRef.current.active) {
@@ -233,27 +266,36 @@ export default function CastleMinigameScreen() {
       setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
     }
 
-    // Get current ball for collision checks
-    const currentBall = cannonballRef.current;
-
-    // Update blocks physics
+    // Update blocks physics with proper collision detection
     setBlocks(prev => {
-      return prev.map(block => {
+      const updatedBlocks = prev.map(block => {
         if (block.destroyed && block.y >= GROUND_Y + 100) return block;
         
-        // Check cannonball collision using ref
-        if (!block.destroyed && currentBall?.active && checkCollision(currentBall, block)) {
-          return {
-            ...block,
-            destroyed: true,
-            falling: true,
-            velocityX: currentBall.velocityX * 0.4 + (Math.random() - 0.5) * 5,
-            velocityY: -8 - Math.random() * 5,
-          };
+        const ball = cannonballRef.current;
+        const ballX = ballPositionRef.current.x;
+        const ballY = ballPositionRef.current.y;
+        const ballActive = ballPositionRef.current.active;
+        
+        // Check cannonball collision - now using position refs
+        if (!block.destroyed && !block.falling && ballActive) {
+          if (checkBallRectCollision(ballX, ballY, block)) {
+            // Calculate impact direction for realistic knockback
+            const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
+            const impactForce = ball ? Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY) : 10;
+            
+            return {
+              ...block,
+              destroyed: true,
+              falling: true,
+              velocityX: -Math.cos(impactAngle) * impactForce * 0.6 + (Math.random() - 0.5) * 4,
+              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * 0.4) - 5 - Math.random() * 3,
+            };
+          }
         }
         
         // Physics for falling blocks
         if (block.falling || block.destroyed) {
+          let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
           let newVelY = block.velocityY + GRAVITY * 0.8;
           let newVelX = block.velocityX * 0.98;
@@ -271,7 +313,7 @@ export default function CastleMinigameScreen() {
           
           return {
             ...block,
-            x: block.x + newVelX,
+            x: newX,
             y: newY,
             velocityX: newVelX,
             velocityY: newVelY,
@@ -281,35 +323,113 @@ export default function CastleMinigameScreen() {
         
         return block;
       });
+      
+      // Second pass: check block-to-block collisions (falling blocks hit stationary blocks)
+      return updatedBlocks.map(block => {
+        if (block.destroyed || block.falling) return block;
+        
+        // Check if any falling block hits this stationary block
+        const hitByFallingBlock = updatedBlocks.some(other => 
+          other.id !== block.id && 
+          (other.falling || other.destroyed) && 
+          (Math.abs(other.velocityX) > 2 || Math.abs(other.velocityY) > 2) &&
+          checkRectRectCollision(other, block)
+        );
+        
+        if (hitByFallingBlock) {
+          return {
+            ...block,
+            destroyed: true,
+            falling: true,
+            velocityX: (Math.random() - 0.5) * 6,
+            velocityY: -4 - Math.random() * 4,
+          };
+        }
+        
+        // Check if block has lost support (blocks below it are destroyed/falling)
+        const hasSupport = updatedBlocks.some(other =>
+          other.id !== block.id &&
+          !other.destroyed &&
+          !other.falling &&
+          block.x + block.width > other.x &&
+          block.x < other.x + other.width &&
+          Math.abs((block.y + block.height) - other.y) < 10
+        );
+        
+        // Also check if block is on ground
+        const isOnGround = block.y + block.height >= GROUND_Y - 15;
+        
+        if (!hasSupport && !isOnGround) {
+          return {
+            ...block,
+            falling: true,
+            velocityX: (Math.random() - 0.5) * 2,
+            velocityY: 0,
+          };
+        }
+        
+        return block;
+      });
     });
 
     // Update gang members physics
     setGangMembers(prev => {
+      const currentBlocksNow = blocksRef.current;
+      
       return prev.map(member => {
         if (member.eliminated && member.y >= GROUND_Y + 100) return member;
         
-        // Direct hit by cannonball using ref
-        if (!member.eliminated && currentBall?.active && checkCollision(currentBall, member)) {
-          return {
-            ...member,
-            eliminated: true,
-            falling: true,
-            velocityX: currentBall.velocityX * 0.5 + (Math.random() - 0.5) * 3,
-            velocityY: -12,
-          };
+        const ballX = ballPositionRef.current.x;
+        const ballY = ballPositionRef.current.y;
+        const ballActive = ballPositionRef.current.active;
+        const ball = cannonballRef.current;
+        
+        // Direct hit by cannonball
+        if (!member.eliminated && ballActive) {
+          if (checkBallRectCollision(ballX, ballY, member)) {
+            return {
+              ...member,
+              eliminated: true,
+              falling: true,
+              velocityX: ball ? ball.velocityX * 0.5 : 5,
+              velocityY: -12,
+            };
+          }
+        }
+        
+        // Check if hit by falling block
+        if (!member.eliminated && !member.falling) {
+          const hitByBlock = currentBlocksNow.some(b => 
+            (b.falling || b.destroyed) && 
+            (Math.abs(b.velocityX) > 1 || Math.abs(b.velocityY) > 1) &&
+            checkRectRectCollision(b, member)
+          );
+          
+          if (hitByBlock) {
+            return {
+              ...member,
+              eliminated: true,
+              falling: true,
+              velocityX: (Math.random() - 0.5) * 8,
+              velocityY: -8,
+            };
+          }
         }
         
         // Check if support block is destroyed
         if (!member.falling && !member.eliminated) {
-          const hasSupport = blocks.some(b => 
+          const hasSupport = currentBlocksNow.some(b => 
             !b.destroyed &&
             !b.falling &&
             member.x + member.width > b.x &&
             member.x < b.x + b.width &&
-            Math.abs((member.y + member.height) - b.y) < 15
+            Math.abs((member.y + member.height) - b.y) < 20
           );
           
-          if (!hasSupport) {
+          // Also check if on ground
+          const isOnGround = member.y + member.height >= GROUND_Y - 25;
+          
+          if (!hasSupport && !isOnGround) {
             return {
               ...member,
               falling: true,
@@ -326,7 +446,7 @@ export default function CastleMinigameScreen() {
           
           // Hit ground = eliminated
           if (newY > GROUND_Y - 20) {
-            return { ...member, eliminated: true, y: GROUND_Y - 20, velocityY: 0 };
+            return { ...member, eliminated: true, y: GROUND_Y - 20, velocityY: 0, falling: false };
           }
           
           return {
@@ -343,20 +463,29 @@ export default function CastleMinigameScreen() {
     });
 
     animationRef.current = requestAnimationFrame(updatePhysics);
-  }, [blocks]);
+  }, []);
 
-  // Animation loop control
+  // Animation loop control - starts when ball is fired
   useEffect(() => {
-    if (cannonball?.active || blocks.some(b => b.falling) || gangMembers.some(m => m.falling)) {
-      animationRef.current = requestAnimationFrame(updatePhysics);
-    }
-    return () => {
+    const shouldAnimate = cannonball?.active || 
+                          blocks.some(b => b.falling && Math.abs(b.velocityY) > 0.5) || 
+                          gangMembers.some(m => m.falling);
+    
+    if (shouldAnimate) {
+      // Cancel any existing animation frame first
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      animationRef.current = requestAnimationFrame(updatePhysics);
+    }
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cannonball?.active, blocks, gangMembers]);
+  }, [cannonball?.active, updatePhysics]);
 
   // Check win/lose after ball stops
   useEffect(() => {
@@ -403,7 +532,7 @@ export default function CastleMinigameScreen() {
       if (didWin && result.rewards) {
         showGameToast(`🏰 Victory! +$${result.rewards.cash} +${result.rewards.xp}XP`, 'success');
       }
-    } catch (error) {
+    } catch {
       setShowResults(true);
       setResults({ won: didWin, message: didWin ? 'Victory!' : 'Defeated!' });
     }
