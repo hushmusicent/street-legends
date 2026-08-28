@@ -32,13 +32,19 @@ export interface Player {
     accessory: string | null;
     vehicle: string | null;
   };
-  inventory: string[];
+  inventory: InventoryItem[];
   skills: string[];
   wins: number;
   losses: number;
   missions_completed: number;
   created_at: string;
   last_active: string;
+}
+
+export interface InventoryItem {
+  item_id: string;
+  durability: number;
+  max_durability: number;
 }
 
 export interface Monster {

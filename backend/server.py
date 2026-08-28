@@ -90,6 +90,163 @@ CHARACTER_CLASSES = {
 EQUIPMENT_TYPES = ["weapon", "armor", "accessory", "vehicle"]
 RARITIES = ["common", "uncommon", "rare", "epic", "legendary"]
 
+# ============== DURABILITY SYSTEM ==============
+# Max durability by rarity (higher rarity = more durable)
+DURABILITY_BY_RARITY = {
+    "common": 100,
+    "uncommon": 150,
+    "rare": 200,
+    "epic": 300,
+    "legendary": 500,
+}
+
+# Durability loss rates by equipment type
+DURABILITY_LOSS = {
+    "weapon": {"per_battle": 8, "on_hit": 2},       # Loses durability per battle + extra on hits
+    "armor": {"per_battle": 5, "on_damage": 3},     # Loses durability per battle + extra when damaged
+    "accessory": {"per_battle": 2, "passive": 1},   # Small loss per battle + passive decay
+    "vehicle": {"per_use": 10, "per_territory": 15}, # Loses on movement/territory capture
+}
+
+# Repair cost multiplier by rarity (cost = base_value * multiplier * damage_percent)
+REPAIR_COST_MULTIPLIER = {
+    "common": 0.3,
+    "uncommon": 0.4,
+    "rare": 0.5,
+    "epic": 0.6,
+    "legendary": 0.8,
+}
+
+def get_max_durability(item_id: str) -> int:
+    """Get max durability for an item based on its rarity"""
+    # Try to find item in STARTER_ITEMS first, then in ALL_ITEMS (which gets populated later)
+    item = STARTER_ITEMS.get(item_id)
+    if not item and 'ALL_ITEMS' in globals():
+        item = ALL_ITEMS.get(item_id)
+    if not item:
+        return 100
+    rarity = item.get("rarity", "common")
+    return DURABILITY_BY_RARITY.get(rarity, 100)
+
+def create_inventory_item(item_id: str, durability: int = None) -> dict:
+    """Create an inventory item dict with durability"""
+    max_dur = get_max_durability(item_id)
+    return {
+        "item_id": item_id,
+        "durability": durability if durability is not None else max_dur,
+        "max_durability": max_dur,
+    }
+
+def calculate_repair_cost(item_id: str, current_durability: int) -> int:
+    """Calculate cost to repair an item"""
+    # Try to find item in STARTER_ITEMS first, then in ALL_ITEMS
+    item = STARTER_ITEMS.get(item_id)
+    if not item and 'ALL_ITEMS' in globals():
+        item = ALL_ITEMS.get(item_id)
+    if not item:
+        return 0
+    
+    max_dur = get_max_durability(item_id)
+    damage_percent = (max_dur - current_durability) / max_dur
+    rarity = item.get("rarity", "common")
+    base_value = item.get("value", 10)
+    multiplier = REPAIR_COST_MULTIPLIER.get(rarity, 0.5)
+    
+    return max(1, int(base_value * multiplier * damage_percent))
+
+def is_item_broken(inventory_item: dict) -> bool:
+    """Check if an inventory item is broken (0 durability)"""
+    if isinstance(inventory_item, str):
+        return False  # Legacy string items are never broken
+    return inventory_item.get("durability", 100) <= 0
+
+def migrate_inventory_item(item) -> dict:
+    """Migrate old string inventory items to new dict format"""
+    if isinstance(item, str):
+        return create_inventory_item(item)
+    return item
+
+
+async def apply_battle_durability_loss(player_id: str, dealt_damage: bool, took_damage: bool):
+    """Apply durability loss to equipped items after a battle turn"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        return
+    
+    equipment = player.get("equipment", {})
+    inventory = player.get("inventory", [])
+    inventory = [migrate_inventory_item(item) for item in inventory]
+    
+    updates = {}
+    
+    for item_type, item_id in equipment.items():
+        if not item_id:
+            continue
+        
+        # Find item in inventory
+        for idx, inv_item in enumerate(inventory):
+            i_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+            if i_id == item_id:
+                current_dur = inv_item.get("durability", 100)
+                loss = 0
+                
+                # Calculate durability loss based on item type
+                if item_type == "weapon":
+                    loss = DURABILITY_LOSS["weapon"]["per_battle"]
+                    if dealt_damage:
+                        loss += DURABILITY_LOSS["weapon"]["on_hit"]
+                elif item_type == "armor":
+                    loss = DURABILITY_LOSS["armor"]["per_battle"]
+                    if took_damage:
+                        loss += DURABILITY_LOSS["armor"]["on_damage"]
+                elif item_type == "accessory":
+                    loss = DURABILITY_LOSS["accessory"]["per_battle"]
+                
+                new_dur = max(0, current_dur - loss)
+                inventory[idx]["durability"] = new_dur
+                break
+    
+    # Save updated inventory
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"inventory": inventory}}
+    )
+
+
+async def apply_vehicle_durability_loss(player_id: str, action_type: str = "use"):
+    """Apply durability loss to equipped vehicle for movement/territory actions"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        return
+    
+    equipment = player.get("equipment", {})
+    vehicle_id = equipment.get("vehicle")
+    if not vehicle_id:
+        return
+    
+    inventory = player.get("inventory", [])
+    inventory = [migrate_inventory_item(item) for item in inventory]
+    
+    for idx, inv_item in enumerate(inventory):
+        i_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+        if i_id == vehicle_id:
+            current_dur = inv_item.get("durability", 100)
+            
+            if action_type == "territory":
+                loss = DURABILITY_LOSS["vehicle"]["per_territory"]
+            else:
+                loss = DURABILITY_LOSS["vehicle"]["per_use"]
+            
+            new_dur = max(0, current_dur - loss)
+            inventory[idx]["durability"] = new_dur
+            
+            await db.players.update_one(
+                {"id": player_id},
+                {"$set": {"inventory": inventory}}
+            )
+            break
+
+
 # Starter equipment items
 STARTER_ITEMS = {
     "rusty_pipe": {
@@ -858,7 +1015,7 @@ class Player(BaseModel):
     reputation: int = 0
     guild_id: Optional[str] = None
     equipment: Dict[str, Optional[str]] = Field(default_factory=lambda: {"weapon": None, "armor": None, "accessory": None, "vehicle": None})
-    inventory: List[str] = Field(default_factory=list)
+    inventory: List[Any] = Field(default_factory=list)  # List of dicts: {"item_id": str, "durability": int, "max_durability": int}
     owned_skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])  # All skills player owns
     equipped_skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])  # Max 4 skills equipped for battle
     skills: List[str] = Field(default_factory=lambda: ["heavy_strike", "quick_shot"])  # Legacy field for backwards compatibility
@@ -1074,7 +1231,12 @@ async def register(data: AuthRegister):
             speed=base_stats["speed"],
             luck=base_stats["luck"]
         ),
-        inventory=["rusty_pipe", "worn_jacket", "chain_necklace", "beat_up_bike"],
+        inventory=[
+            create_inventory_item("rusty_pipe"),
+            create_inventory_item("worn_jacket"),
+            create_inventory_item("chain_necklace"),
+            create_inventory_item("beat_up_bike")
+        ],
         equipment={"weapon": None, "armor": None, "accessory": None, "vehicle": None}
     )
     
@@ -1262,7 +1424,12 @@ async def create_player(player_data: PlayerCreate):
             speed=base_stats["speed"],
             luck=base_stats["luck"]
         ),
-        inventory=["rusty_pipe", "worn_jacket", "chain_necklace", "beat_up_bike"],
+        inventory=[
+            create_inventory_item("rusty_pipe"),
+            create_inventory_item("worn_jacket"),
+            create_inventory_item("chain_necklace"),
+            create_inventory_item("beat_up_bike")
+        ],
         equipment={"weapon": None, "armor": None, "accessory": None, "vehicle": None}
     )
     
@@ -1275,6 +1442,19 @@ async def get_player(player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Migrate inventory to new durability format if needed
+    inventory = player.get("inventory", [])
+    migrated_inventory = [migrate_inventory_item(item) for item in inventory]
+    
+    # Check if any items were migrated (strings converted to dicts)
+    needs_migration = any(isinstance(item, str) for item in inventory)
+    if needs_migration:
+        await db.players.update_one(
+            {"id": player_id},
+            {"$set": {"inventory": migrated_inventory}}
+        )
+        player["inventory"] = migrated_inventory
     
     # Passive health & energy regen: 25% every 5 minutes
     now = datetime.utcnow()
@@ -1837,6 +2017,9 @@ async def battle_action(battle_id: str, action: BattleAction):
             
         combat_log.append(f"Victory! {battle['enemy_name']} defeated!")
         
+        # Apply durability loss for battle
+        await apply_battle_durability_loss(battle["player_id"], dealt_damage=True, took_damage=True)
+        
         await decrement_player_buffs(battle["player_id"])
         
         await db.battles.update_one(
@@ -1882,6 +2065,8 @@ async def battle_action(battle_id: str, action: BattleAction):
                 "last_health_regen": datetime.utcnow().isoformat(),
             }}
         )
+        # Apply durability loss for battle
+        await apply_battle_durability_loss(battle["player_id"], dealt_damage=True, took_damage=True)
         await decrement_player_buffs(battle["player_id"])
         combat_log.append("You have been defeated!")
         
@@ -3139,31 +3324,61 @@ async def get_item(item_id: str):
 
 @api_router.get("/players/{player_id}/inventory-details")
 async def get_player_inventory_details(player_id: str):
-    """Get player's inventory with full item details"""
+    """Get player's inventory with full item details including durability"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
+    inventory = player.get("inventory", [])
+    inventory = [migrate_inventory_item(item) for item in inventory]
+    
     inventory_items = []
-    for item_id in player.get("inventory", []):
+    for idx, inv_item in enumerate(inventory):
+        item_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
         item = ALL_ITEMS.get(item_id)
         if item:
-            inventory_items.append(item)
+            # Add durability info to item
+            item_with_durability = {**item}
+            item_with_durability["durability"] = inv_item.get("durability", 100)
+            item_with_durability["max_durability"] = inv_item.get("max_durability", get_max_durability(item_id))
+            item_with_durability["is_broken"] = inv_item.get("durability", 100) <= 0
+            item_with_durability["inventory_index"] = idx
+            inventory_items.append(item_with_durability)
     return inventory_items
 
 @api_router.get("/players/{player_id}/equipment-details")
 async def get_player_equipment_details(player_id: str):
-    """Get player's equipped items with full details"""
+    """Get player's equipped items with full details including durability"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
     equipment = player.get("equipment", {})
+    inventory = player.get("inventory", [])
+    inventory = [migrate_inventory_item(item) for item in inventory]
+    
     equipped = {}
     for slot, item_id in equipment.items():
         if item_id:
             item = ALL_ITEMS.get(item_id)
-            equipped[slot] = item if item else {"id": item_id, "name": "Unknown", "equipment_type": slot, "rarity": "common", "stats_bonus": {}, "description": "Unknown item"}
+            if item:
+                # Find durability from inventory for equipped item
+                durability = 100
+                max_durability = get_max_durability(item_id)
+                for inv_item in inventory:
+                    if inv_item.get("item_id") == item_id:
+                        durability = inv_item.get("durability", 100)
+                        max_durability = inv_item.get("max_durability", max_durability)
+                        break
+                
+                equipped[slot] = {
+                    **item,
+                    "durability": durability,
+                    "max_durability": max_durability,
+                    "is_broken": durability <= 0
+                }
+            else:
+                equipped[slot] = {"id": item_id, "name": "Unknown", "equipment_type": slot, "rarity": "common", "stats_bonus": {}, "description": "Unknown item", "durability": 100, "max_durability": 100, "is_broken": False}
         else:
             equipped[slot] = None
     return equipped
@@ -3176,10 +3391,20 @@ async def delete_item(player_id: str, item_id: str):
         raise HTTPException(status_code=404, detail="Player not found")
     
     inv = player.get("inventory", [])
-    if item_id not in inv:
+    inv = [migrate_inventory_item(item) for item in inv]
+    
+    # Find item in inventory (now stored as dicts)
+    item_index = None
+    for idx, inv_item in enumerate(inv):
+        i_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+        if i_id == item_id:
+            item_index = idx
+            break
+    
+    if item_index is None:
         raise HTTPException(status_code=400, detail="Item not in inventory")
     
-    inv.remove(item_id)
+    inv.pop(item_index)
     await db.players.update_one({"id": player_id}, {"$set": {"inventory": inv}})
     
     item = ALL_ITEMS.get(item_id, {})
@@ -3193,7 +3418,17 @@ async def sell_item(player_id: str, item_id: str):
         raise HTTPException(status_code=404, detail="Player not found")
     
     inv = player.get("inventory", [])
-    if item_id not in inv:
+    inv = [migrate_inventory_item(item) for item in inv]
+    
+    # Find item in inventory (now stored as dicts)
+    item_index = None
+    for idx, inv_item in enumerate(inv):
+        i_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+        if i_id == item_id:
+            item_index = idx
+            break
+    
+    if item_index is None:
         raise HTTPException(status_code=400, detail="Item not in inventory")
     
     item = ALL_ITEMS.get(item_id)
@@ -3202,7 +3437,7 @@ async def sell_item(player_id: str, item_id: str):
     
     sell_price = max(1, item.get("value", 10) // 2)
     
-    inv.remove(item_id)
+    inv.pop(item_index)
     await db.players.update_one(
         {"id": player_id},
         {"$set": {"inventory": inv}, "$inc": {"cash": sell_price}}
@@ -3213,6 +3448,86 @@ async def sell_item(player_id: str, item_id: str):
         "sell_price": sell_price,
         "item_name": item["name"],
     }
+
+
+@api_router.post("/players/{player_id}/inventory/repair")
+async def repair_item(player_id: str, item_index: int):
+    """Repair an item in player's inventory (restores durability)"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    inv = player.get("inventory", [])
+    
+    # Migrate inventory if needed
+    inv = [migrate_inventory_item(item) for item in inv]
+    
+    if item_index < 0 or item_index >= len(inv):
+        raise HTTPException(status_code=400, detail="Invalid item index")
+    
+    inv_item = inv[item_index]
+    item_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+    current_durability = inv_item.get("durability", 100) if isinstance(inv_item, dict) else 100
+    max_durability = get_max_durability(item_id)
+    
+    if current_durability >= max_durability:
+        raise HTTPException(status_code=400, detail="Item is already at full durability")
+    
+    repair_cost = calculate_repair_cost(item_id, current_durability)
+    
+    if player.get("cash", 0) < repair_cost:
+        raise HTTPException(status_code=400, detail=f"Not enough cash. Repair costs ${repair_cost}")
+    
+    # Repair the item
+    inv[item_index] = create_inventory_item(item_id, max_durability)
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"inventory": inv}, "$inc": {"cash": -repair_cost}}
+    )
+    
+    item = ALL_ITEMS.get(item_id, {})
+    return {
+        "message": f"Repaired {item.get('name', 'item')} for ${repair_cost}",
+        "repair_cost": repair_cost,
+        "item_name": item.get("name", "Unknown"),
+        "new_durability": max_durability,
+        "max_durability": max_durability,
+    }
+
+
+@api_router.get("/players/{player_id}/repair-costs")
+async def get_repair_costs(player_id: str):
+    """Get repair costs for all items in player's inventory"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    inv = player.get("inventory", [])
+    inv = [migrate_inventory_item(item) for item in inv]
+    
+    repair_info = []
+    for idx, inv_item in enumerate(inv):
+        item_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+        current_durability = inv_item.get("durability", 100) if isinstance(inv_item, dict) else 100
+        max_durability = get_max_durability(item_id)
+        
+        item = ALL_ITEMS.get(item_id, {})
+        repair_cost = calculate_repair_cost(item_id, current_durability) if current_durability < max_durability else 0
+        
+        repair_info.append({
+            "index": idx,
+            "item_id": item_id,
+            "item_name": item.get("name", "Unknown"),
+            "current_durability": current_durability,
+            "max_durability": max_durability,
+            "repair_cost": repair_cost,
+            "is_broken": current_durability <= 0,
+            "needs_repair": current_durability < max_durability,
+        })
+    
+    return {"items": repair_info}
+
 
 @api_router.post("/players/{player_id}/unequip")
 async def unequip_item(player_id: str, slot: str):
@@ -3228,9 +3543,17 @@ async def unequip_item(player_id: str, slot: str):
     if not current_item:
         raise HTTPException(status_code=400, detail="Nothing equipped in that slot")
     
+    # Migrate inventory and add unequipped item with durability preserved
+    inventory = player.get("inventory", [])
+    inventory = [migrate_inventory_item(item) for item in inventory]
+    
+    # Create inventory item for unequipped gear (preserving durability if item already in inv)
+    unequipped_item = create_inventory_item(current_item)
+    inventory.append(unequipped_item)
+    
     await db.players.update_one(
         {"id": player_id},
-        {"$set": {f"equipment.{slot}": None}, "$push": {"inventory": current_item}}
+        {"$set": {f"equipment.{slot}": None, "inventory": inventory}}
     )
     return {"message": f"Unequipped item from {slot}"}
 
@@ -3251,9 +3574,12 @@ async def buy_item(player_id: str, item_id: str):
     if player.get("level", 1) < item["level_requirement"]:
         raise HTTPException(status_code=400, detail=f"Requires level {item['level_requirement']}")
     
+    # Create inventory item with full durability
+    new_item = create_inventory_item(item_id)
+    
     await db.players.update_one(
         {"id": player_id},
-        {"$inc": {"cash": -item["value"]}, "$push": {"inventory": item_id}}
+        {"$inc": {"cash": -item["value"]}, "$push": {"inventory": new_item}}
     )
     return {"message": f"Purchased {item['name']}!", "item": item}
 
@@ -3276,26 +3602,49 @@ async def equip_item(player_id: str, equipment_id: str):
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
     
-    if equipment_id not in player.get("inventory", []):
+    # Migrate and check inventory
+    inventory = player.get("inventory", [])
+    inventory = [migrate_inventory_item(item) for item in inventory]
+    
+    # Find item in inventory (now stored as dicts)
+    item_index = None
+    for idx, inv_item in enumerate(inventory):
+        i_id = inv_item.get("item_id") if isinstance(inv_item, dict) else inv_item
+        if i_id == equipment_id:
+            item_index = idx
+            # Check if item is broken
+            if is_item_broken(inv_item):
+                raise HTTPException(status_code=400, detail="Cannot equip broken item. Repair it first!")
+            break
+    
+    if item_index is None:
         raise HTTPException(status_code=400, detail="Item not in inventory")
     
     slot = equipment["equipment_type"]
     current_equipped = player["equipment"].get(slot)
     
-    # Update equipment
-    update_data = {f"equipment.{slot}": equipment_id}
+    # Get the item being equipped (to preserve durability)
+    equipped_item = inventory[item_index]
+    
+    # Remove item from inventory
+    inventory.pop(item_index)
     
     # Move old item back to inventory if exists
     if current_equipped:
-        await db.players.update_one(
-            {"id": player_id},
-            {"$push": {"inventory": current_equipped}}
-        )
+        # Find old item's durability in inventory (it might have been there before) or create new
+        old_item_dur = None
+        for inv_item in inventory:
+            if inv_item.get("item_id") == current_equipped:
+                old_item_dur = inv_item
+                break
+        if not old_item_dur:
+            old_item_dur = create_inventory_item(current_equipped)
+        inventory.append(old_item_dur)
     
-    # Remove new item from inventory and equip
+    # Update equipment and inventory
     await db.players.update_one(
         {"id": player_id},
-        {"$pull": {"inventory": equipment_id}, "$set": update_data}
+        {"$set": {f"equipment.{slot}": equipment_id, "inventory": inventory}}
     )
     
     return {"message": f"Equipped {equipment['name']}"}
@@ -4002,6 +4351,10 @@ async def capture_territory(territory_id: str, player_id: str):
             {"id": player_id},
             {"$set": {"stats.health": max(1, player_hp)}, "$inc": {"xp": 50, "reputation": 10, "cash": capture_bonus}}
         )
+        # Apply vehicle durability loss for territory capture
+        await apply_vehicle_durability_loss(player_id, "territory")
+        # Apply battle durability loss 
+        await apply_battle_durability_loss(player_id, dealt_damage=True, took_damage=True)
         return {
             "result": "victory",
             "combat_log": combat_log,

@@ -343,4 +343,32 @@ export const deletePlayerAccount = async (playerId: string): Promise<{ status: s
   return response.data;
 };
 
+// Durability & Repair APIs
+export interface RepairCostInfo {
+  index: number;
+  item_id: string;
+  item_name: string;
+  current_durability: number;
+  max_durability: number;
+  repair_cost: number;
+  is_broken: boolean;
+  needs_repair: boolean;
+}
+
+export const getRepairCosts = async (playerId: string): Promise<{ items: RepairCostInfo[] }> => {
+  const response = await api.get(`/players/${playerId}/repair-costs`);
+  return response.data;
+};
+
+export const repairItem = async (playerId: string, itemIndex: number): Promise<{
+  message: string;
+  repair_cost: number;
+  item_name: string;
+  new_durability: number;
+  max_durability: number;
+}> => {
+  const response = await api.post(`/players/${playerId}/inventory/repair?item_index=${itemIndex}`);
+  return response.data;
+};
+
 export default api;

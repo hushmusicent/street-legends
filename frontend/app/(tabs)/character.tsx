@@ -35,6 +35,7 @@ import {
   getTerritoryIncomePreview,
   equipSkill,
   unequipSkill,
+  repairItem,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -89,6 +90,10 @@ interface EquipmentItem {
   stats_bonus: Record<string, number>;
   level_requirement: number;
   value: number;
+  durability?: number;
+  max_durability?: number;
+  is_broken?: boolean;
+  inventory_index?: number;
 }
 
 export default function CharacterScreen() {
@@ -214,6 +219,42 @@ export default function CharacterScreen() {
         },
       },
     ]);
+  };
+
+  const handleRepairItem = async (item: EquipmentItem) => {
+    if (!playerId || item.inventory_index === undefined) return;
+    
+    const maxDur = item.max_durability || 100;
+    const curDur = item.durability || maxDur;
+    const damagePercent = (maxDur - curDur) / maxDur;
+    const rarityMult: Record<string, number> = { common: 0.3, uncommon: 0.4, rare: 0.5, epic: 0.6, legendary: 0.8 };
+    const mult = rarityMult[item.rarity] || 0.5;
+    const repairCost = Math.max(1, Math.floor(item.value * mult * damagePercent));
+    
+    Alert.alert(
+      'Repair Item',
+      `Repair "${item.name}" for $${repairCost}?\n\nCurrent: ${curDur}/${maxDur}\nAfter repair: ${maxDur}/${maxDur}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: `Repair $${repairCost}`,
+          onPress: async () => {
+            try {
+              const result = await repairItem(playerId, item.inventory_index!);
+              await loadAllData();
+              showGameToast({
+                type: 'success',
+                title: 'Item Repaired!',
+                message: result.message,
+                duration: 2500,
+              });
+            } catch (error: any) {
+              Alert.alert('Error', error?.response?.data?.detail || 'Failed to repair item');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleLogout = () => {
@@ -411,7 +452,9 @@ export default function CharacterScreen() {
             onEquip={handleEquip}
             onDelete={handleDeleteItem}
             onSell={handleSellItem}
+            onRepair={handleRepairItem}
             playerLevel={player.level}
+            playerCash={player.cash}
           />
         )}
         {activeTab === 'skills' && (
@@ -679,22 +722,53 @@ function EquipmentTab({
       {slots.map((slot) => {
         const item = equipped[slot];
         const rarityColor = item ? RARITY_COLORS[item.rarity] || '#9e9e9e' : '#333';
+        
+        // Durability info for equipped items
+        const durability = item?.durability ?? 100;
+        const maxDurability = item?.max_durability ?? 100;
+        const durabilityPercent = item ? (durability / maxDurability) * 100 : 100;
+        
+        // Durability bar color
+        let durabilityColor = '#4caf50';
+        if (durabilityPercent <= 25) durabilityColor = '#e74c3c';
+        else if (durabilityPercent <= 50) durabilityColor = '#f39c12';
 
         return (
           <View key={slot} style={[styles.equipSlot, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
             <View style={[styles.slotIcon, { backgroundColor: item ? `${rarityColor}20` : '#1a1a1a' }]}>
               <Ionicons name={SLOT_ICONS[slot]} size={24} color={item ? rarityColor : '#444'} />
+              {item?.is_broken && (
+                <View style={styles.brokenBadge}>
+                  <Ionicons name="warning" size={10} color="#e74c3c" />
+                </View>
+              )}
             </View>
             <View style={styles.slotInfo}>
               <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
               {item ? (
                 <>
-                  <Text style={[styles.slotItemName, { color: rarityColor }]}>{item.name}</Text>
+                  <Text style={[styles.slotItemName, { color: item.is_broken ? '#666' : rarityColor }]}>
+                    {item.name} {item.is_broken && '(BROKEN)'}
+                  </Text>
+                  {/* Durability bar for equipped item */}
+                  <View style={styles.durabilityContainer}>
+                    <View style={[styles.durabilityBarBg, { height: 4 }]}>
+                      <View 
+                        style={[
+                          styles.durabilityBar, 
+                          { width: `${durabilityPercent}%`, backgroundColor: durabilityColor }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={[styles.durabilityText, { color: durabilityColor, fontSize: 9 }]}>
+                      {durability}/{maxDurability}
+                    </Text>
+                  </View>
                   <View style={styles.statBonusRow}>
                     {Object.entries(item.stats_bonus).map(([stat, val]) => (
                       <Text
                         key={stat}
-                        style={[styles.statBonusText, { color: (val as number) > 0 ? '#4caf50' : '#f44336' }]}
+                        style={[styles.statBonusText, { color: item.is_broken ? '#555' : ((val as number) > 0 ? '#4caf50' : '#f44336') }]}
                       >
                         {(val as number) > 0 ? '+' : ''}{val as number} {stat}
                       </Text>
@@ -756,14 +830,18 @@ function ItemsTab({
   onEquip,
   onDelete,
   onSell,
+  onRepair,
   playerLevel,
+  playerCash,
 }: {
   inventory: EquipmentItem[];
   classColor: string;
   onEquip: (item: EquipmentItem) => void;
   onDelete: (item: EquipmentItem) => void;
   onSell: (item: EquipmentItem) => void;
+  onRepair: (item: EquipmentItem) => void;
   playerLevel: number;
+  playerCash: number;
 }) {
   if (inventory.length === 0) {
     return (
@@ -777,50 +855,114 @@ function ItemsTab({
     );
   }
 
+  // Calculate repair cost (30-80% of item value based on rarity)
+  const getRepairCost = (item: EquipmentItem) => {
+    const maxDur = item.max_durability || 100;
+    const curDur = item.durability || maxDur;
+    const damagePercent = (maxDur - curDur) / maxDur;
+    const rarityMult: Record<string, number> = { common: 0.3, uncommon: 0.4, rare: 0.5, epic: 0.6, legendary: 0.8 };
+    const mult = rarityMult[item.rarity] || 0.5;
+    return Math.max(1, Math.floor(item.value * mult * damagePercent));
+  };
+
   return (
     <View>
       <Text style={styles.sectionTitle}>INVENTORY ({inventory.length})</Text>
       {inventory.map((item, index) => {
         const rarityColor = RARITY_COLORS[item.rarity] || '#9e9e9e';
-        const canEquip = playerLevel >= item.level_requirement;
+        const canEquip = playerLevel >= item.level_requirement && !item.is_broken;
         const sellPrice = Math.max(1, Math.floor((item as any).value / 2 || 5));
+        const durability = item.durability ?? 100;
+        const maxDurability = item.max_durability ?? 100;
+        const durabilityPercent = (durability / maxDurability) * 100;
+        const needsRepair = durability < maxDurability;
+        const repairCost = needsRepair ? getRepairCost(item) : 0;
+        const canAffordRepair = playerCash >= repairCost;
+
+        // Durability bar color based on condition
+        let durabilityColor = '#4caf50'; // Green
+        if (durabilityPercent <= 25) durabilityColor = '#e74c3c'; // Red
+        else if (durabilityPercent <= 50) durabilityColor = '#f39c12'; // Orange
 
         return (
-          <View key={`${item.id}-${index}`} style={[styles.itemCard, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
+          <View 
+            key={`${item.id}-${index}`} 
+            style={[
+              styles.itemCard, 
+              { borderLeftColor: rarityColor, borderLeftWidth: 3 },
+              item.is_broken && styles.brokenItemCard
+            ]}
+          >
             <View style={[styles.itemIconWrap, { backgroundColor: `${rarityColor}20` }]}>
-              <Ionicons name={SLOT_ICONS[item.equipment_type] || 'cube'} size={22} color={rarityColor} />
+              <Ionicons name={SLOT_ICONS[item.equipment_type] || 'cube'} size={22} color={item.is_broken ? '#666' : rarityColor} />
+              {item.is_broken && (
+                <View style={styles.brokenBadge}>
+                  <Ionicons name="warning" size={12} color="#e74c3c" />
+                </View>
+              )}
             </View>
             <View style={styles.itemInfo}>
               <View style={styles.itemHeader}>
-                <Text style={[styles.itemName, { color: rarityColor }]}>{item.name}</Text>
-                <Text style={[styles.rarityBadge, { color: rarityColor }]}>
+                <Text style={[styles.itemName, { color: item.is_broken ? '#666' : rarityColor }]}>
+                  {item.name} {item.is_broken && '(BROKEN)'}
+                </Text>
+                <Text style={[styles.rarityBadge, { color: item.is_broken ? '#666' : rarityColor }]}>
                   {item.rarity.toUpperCase()}
                 </Text>
               </View>
-              <Text style={styles.itemDesc} numberOfLines={1}>{item.description}</Text>
+              <Text style={[styles.itemDesc, item.is_broken && { color: '#555' }]} numberOfLines={1}>{item.description}</Text>
+              
+              {/* Durability Bar */}
+              <View style={styles.durabilityContainer}>
+                <View style={styles.durabilityBarBg}>
+                  <View 
+                    style={[
+                      styles.durabilityBar, 
+                      { width: `${durabilityPercent}%`, backgroundColor: durabilityColor }
+                    ]} 
+                  />
+                </View>
+                <Text style={[styles.durabilityText, { color: durabilityColor }]}>
+                  {durability}/{maxDurability}
+                </Text>
+              </View>
+
               <View style={styles.statBonusRow}>
                 {Object.entries(item.stats_bonus).map(([stat, val]) => (
                   <Text
                     key={stat}
-                    style={[styles.statBonusText, { color: (val as number) > 0 ? '#4caf50' : '#f44336' }]}
+                    style={[styles.statBonusText, { color: item.is_broken ? '#555' : ((val as number) > 0 ? '#4caf50' : '#f44336') }]}
                   >
                     {(val as number) > 0 ? '+' : ''}{val as number} {stat}
                   </Text>
                 ))}
               </View>
-              {!canEquip && (
+              {!canEquip && !item.is_broken && (
                 <Text style={styles.levelReqText}>Requires Lv.{item.level_requirement}</Text>
               )}
               {/* Action buttons row */}
               <View style={styles.itemActions}>
-                <TouchableOpacity
-                  style={[styles.itemActionBtn, styles.equipActionBtn, !canEquip && styles.equipBtnDisabled]}
-                  onPress={() => canEquip && onEquip(item)}
-                  disabled={!canEquip}
-                >
-                  <Ionicons name="checkmark-circle" size={14} color={canEquip ? '#fff' : '#555'} />
-                  <Text style={[styles.itemActionText, !canEquip && { color: '#555' }]}>EQUIP</Text>
-                </TouchableOpacity>
+                {needsRepair ? (
+                  <TouchableOpacity
+                    style={[styles.itemActionBtn, styles.repairActionBtn, !canAffordRepair && styles.equipBtnDisabled]}
+                    onPress={() => canAffordRepair && onRepair(item)}
+                    disabled={!canAffordRepair}
+                  >
+                    <Ionicons name="construct" size={14} color={canAffordRepair ? '#fff' : '#555'} />
+                    <Text style={[styles.itemActionText, !canAffordRepair && { color: '#555' }]}>
+                      REPAIR ${repairCost}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.itemActionBtn, styles.equipActionBtn, !canEquip && styles.equipBtnDisabled]}
+                    onPress={() => canEquip && onEquip(item)}
+                    disabled={!canEquip}
+                  >
+                    <Ionicons name="checkmark-circle" size={14} color={canEquip ? '#fff' : '#555'} />
+                    <Text style={[styles.itemActionText, !canEquip && { color: '#555' }]}>EQUIP</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[styles.itemActionBtn, styles.sellActionBtn]}
                   onPress={() => onSell(item)}
@@ -1561,5 +1703,48 @@ const styles = StyleSheet.create({
     color: '#f39c12',
     fontSize: 11,
     fontWeight: '800',
+  },
+  // Durability styles
+  durabilityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 4,
+  },
+  durabilityBarBg: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#222',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  durabilityBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  durabilityText: {
+    fontSize: 10,
+    fontWeight: '700',
+    minWidth: 50,
+    textAlign: 'right',
+  },
+  brokenItemCard: {
+    opacity: 0.7,
+    borderLeftColor: '#e74c3c',
+    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+  },
+  brokenBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    padding: 2,
+  },
+  repairActionBtn: {
+    backgroundColor: '#27ae60',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 });
