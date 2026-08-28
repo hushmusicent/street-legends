@@ -146,114 +146,114 @@ STARTER_ITEMS = {
 
 ALL_ITEMS = {**STARTER_ITEMS}
 
-# Additional gun shop items - Prices raised 50%
+# Additional gun shop items - Prices DOUBLED
 GUN_SHOP_ITEMS = {
     # Pistols
     "glock_9mm": {
         "id": "glock_9mm", "name": "Glock 9mm", "description": "Standard-issue sidearm. Reliable and deadly.",
         "equipment_type": "weapon", "rarity": "uncommon",
-        "stats_bonus": {"attack": 6, "speed": 1}, "level_requirement": 2, "value": 83
+        "stats_bonus": {"attack": 6, "speed": 1}, "level_requirement": 2, "value": 166
     },
     "desert_eagle": {
         "id": "desert_eagle", "name": "Desert Eagle .50", "description": "Massive hand cannon. One shot, one kill.",
         "equipment_type": "weapon", "rarity": "rare",
-        "stats_bonus": {"attack": 10, "speed": -2}, "level_requirement": 5, "value": 180
+        "stats_bonus": {"attack": 10, "speed": -2}, "level_requirement": 5, "value": 360
     },
     "gold_plated_pistol": {
         "id": "gold_plated_pistol", "name": "Gold-Plated Pistol", "description": "A kingpin's weapon. Style meets firepower.",
         "equipment_type": "weapon", "rarity": "epic",
-        "stats_bonus": {"attack": 12, "luck": 3}, "level_requirement": 8, "value": 300
+        "stats_bonus": {"attack": 12, "luck": 3}, "level_requirement": 8, "value": 600
     },
     # SMGs
     "uzi": {
         "id": "uzi", "name": "Micro Uzi", "description": "Compact and fast. Spray and pray.",
         "equipment_type": "weapon", "rarity": "uncommon",
-        "stats_bonus": {"attack": 5, "speed": 3}, "level_requirement": 3, "value": 98
+        "stats_bonus": {"attack": 5, "speed": 3}, "level_requirement": 3, "value": 196
     },
     "mp5": {
         "id": "mp5", "name": "MP5 Submachine Gun", "description": "Precision SMG used by tactical teams worldwide.",
         "equipment_type": "weapon", "rarity": "rare",
-        "stats_bonus": {"attack": 8, "speed": 2}, "level_requirement": 6, "value": 165
+        "stats_bonus": {"attack": 8, "speed": 2}, "level_requirement": 6, "value": 330
     },
     # Shotguns
     "sawed_off": {
         "id": "sawed_off", "name": "Sawed-Off Shotgun", "description": "Close range devastation. Not subtle.",
         "equipment_type": "weapon", "rarity": "uncommon",
-        "stats_bonus": {"attack": 7, "speed": -1}, "level_requirement": 4, "value": 105
+        "stats_bonus": {"attack": 7, "speed": -1}, "level_requirement": 4, "value": 210
     },
     "combat_shotgun": {
         "id": "combat_shotgun", "name": "Combat Shotgun", "description": "Military-grade room clearer.",
         "equipment_type": "weapon", "rarity": "rare",
-        "stats_bonus": {"attack": 11, "defense": 1}, "level_requirement": 7, "value": 210
+        "stats_bonus": {"attack": 11, "defense": 1}, "level_requirement": 7, "value": 420
     },
     # Rifles
     "ak47": {
         "id": "ak47", "name": "AK-47", "description": "The most iconic assault rifle. Never jams.",
         "equipment_type": "weapon", "rarity": "rare",
-        "stats_bonus": {"attack": 12, "speed": -1}, "level_requirement": 8, "value": 240
+        "stats_bonus": {"attack": 12, "speed": -1}, "level_requirement": 8, "value": 480
     },
     "sniper_rifle": {
         "id": "sniper_rifle", "name": "Sniper Rifle", "description": "Long range precision. One shot from downtown.",
         "equipment_type": "weapon", "rarity": "epic",
-        "stats_bonus": {"attack": 15, "speed": -3, "luck": 2}, "level_requirement": 10, "value": 375
+        "stats_bonus": {"attack": 15, "speed": -3, "luck": 2}, "level_requirement": 10, "value": 750
     },
     # Body Armor
     "tactical_vest": {
         "id": "tactical_vest", "name": "Tactical Vest", "description": "Military-grade protection with ammo pouches.",
         "equipment_type": "armor", "rarity": "uncommon",
-        "stats_bonus": {"defense": 4, "attack": 1}, "level_requirement": 3, "value": 75
+        "stats_bonus": {"defense": 4, "attack": 1}, "level_requirement": 3, "value": 150
     },
     "riot_gear": {
         "id": "riot_gear", "name": "Riot Gear", "description": "Full body protection. Slow but tough.",
         "equipment_type": "armor", "rarity": "rare",
-        "stats_bonus": {"defense": 8, "speed": -3}, "level_requirement": 6, "value": 150
+        "stats_bonus": {"defense": 8, "speed": -3}, "level_requirement": 6, "value": 300
     },
     "dragon_skin_armor": {
         "id": "dragon_skin_armor", "name": "Dragon Skin Armor", "description": "Next-gen flexible armor. The best money can buy.",
         "equipment_type": "armor", "rarity": "epic",
-        "stats_bonus": {"defense": 10, "speed": 1}, "level_requirement": 10, "value": 420
+        "stats_bonus": {"defense": 10, "speed": 1}, "level_requirement": 10, "value": 840
     },
     "steel_toe_boots": {
         "id": "steel_toe_boots", "name": "Steel-Toe Boots", "description": "Kick harder, walk tougher.",
         "equipment_type": "armor", "rarity": "common",
-        "stats_bonus": {"defense": 2, "attack": 1}, "level_requirement": 1, "value": 27
+        "stats_bonus": {"defense": 2, "attack": 1}, "level_requirement": 1, "value": 54
     },
     # Accessories
     "night_vision_goggles": {
         "id": "night_vision_goggles", "name": "Night Vision Goggles", "description": "See everything in the dark.",
         "equipment_type": "accessory", "rarity": "rare",
-        "stats_bonus": {"luck": 4, "attack": 2}, "level_requirement": 5, "value": 135
+        "stats_bonus": {"luck": 4, "attack": 2}, "level_requirement": 5, "value": 270
     },
     "bulletproof_watch": {
         "id": "bulletproof_watch", "name": "Bulletproof Watch", "description": "Fancy watch that can stop a bullet. Sometimes.",
         "equipment_type": "accessory", "rarity": "uncommon",
-        "stats_bonus": {"defense": 2, "luck": 2}, "level_requirement": 2, "value": 53
+        "stats_bonus": {"defense": 2, "luck": 2}, "level_requirement": 2, "value": 106
     },
     "laser_sight": {
         "id": "laser_sight", "name": "Laser Sight", "description": "Pin-point accuracy attachment.",
         "equipment_type": "accessory", "rarity": "uncommon",
-        "stats_bonus": {"attack": 3, "luck": 1}, "level_requirement": 3, "value": 60
+        "stats_bonus": {"attack": 3, "luck": 1}, "level_requirement": 3, "value": 120
     },
     "skull_ring": {
         "id": "skull_ring", "name": "Skull Ring", "description": "Intimidating ring. Enemies think twice.",
         "equipment_type": "accessory", "rarity": "epic",
-        "stats_bonus": {"attack": 4, "luck": 4, "defense": 2}, "level_requirement": 8, "value": 270
+        "stats_bonus": {"attack": 4, "luck": 4, "defense": 2}, "level_requirement": 8, "value": 540
     },
     # Vehicles
     "stolen_motorcycle": {
         "id": "stolen_motorcycle", "name": "Stolen Motorcycle", "description": "Hot ride. Fast getaway guaranteed.",
         "equipment_type": "vehicle", "rarity": "uncommon",
-        "stats_bonus": {"speed": 6}, "level_requirement": 3, "value": 83
+        "stats_bonus": {"speed": 6}, "level_requirement": 3, "value": 166
     },
     "armored_suv": {
         "id": "armored_suv", "name": "Armored SUV", "description": "Bulletproof ride with all the extras.",
         "equipment_type": "vehicle", "rarity": "rare",
-        "stats_bonus": {"speed": 4, "defense": 4}, "level_requirement": 6, "value": 195
+        "stats_bonus": {"speed": 4, "defense": 4}, "level_requirement": 6, "value": 390
     },
     "sports_car": {
         "id": "sports_car", "name": "Stolen Lambo", "description": "0 to 60 in 2.9 seconds. Don't ask where it came from.",
         "equipment_type": "vehicle", "rarity": "epic",
-        "stats_bonus": {"speed": 10, "luck": 2}, "level_requirement": 10, "value": 450
+        "stats_bonus": {"speed": 10, "luck": 2}, "level_requirement": 10, "value": 900
     },
 }
 
