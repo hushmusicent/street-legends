@@ -148,7 +148,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
     // Existing entity markers stored by ID
     var entityMarkers = {};
     var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '\\u{1FA69}', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     function getEnemyImage(name) {
@@ -356,7 +356,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             } else if (m.type === 'nightclub') {
               var ncName = m.name || 'Night Club';
               markerHTML = '<div style="width:48px;height:62px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
-                '<div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#9b59b6,#8e44ad);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(155,89,182,0.6);font-size:22px;cursor:pointer;">\\u{1FA69}</div>' +
+                '<div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#9b59b6,#8e44ad);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 10px rgba(155,89,182,0.6);font-size:22px;cursor:pointer;">🎵</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(155,89,182,0.9);color:#fff;padding:1px 6px;border-radius:4px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + ncName + '</div>' +
                 '</div>';
             } else if (m.type === 'bank') {
