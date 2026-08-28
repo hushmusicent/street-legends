@@ -105,80 +105,244 @@ export default function CastleMinigameScreen() {
   const cannonballRef = useRef<Cannonball | null>(null);
   const structureHitRef = useRef(false); // Track if any block has been hit
   
-  // Initialize game state from gameData
+  // Initialize game state from gameData - generates Angry Birds-style structures
   useEffect(() => {
     if (gameData?.layout) {
       const layout: GameLayout = gameData.layout;
-      
-      // Scale server coordinates to world coordinates
-      // Server uses x: 400-900, y: 0-400
-      // World uses x: 0-1200, y: 0-500
-      // Shift forts farther right for longer cannonball arc
-      const scaleX = (x: number) => 500 + ((x - 300) / 600) * 700;
-      const scaleY = (y: number) => (y / 400) * (GROUND_Y - 50);
+      const difficulty = gameData.difficulty || 1;
       
       // Material properties - VERY HIGH mass and friction to prevent chain reactions
+      // Only direct hits should move blocks, minimal force transfer
       const materialProps = {
         wood: { mass: 15.0, friction: 0.95, hitsToBreak: 1 },
         ice: { mass: 8.0, friction: 0.85, hitsToBreak: 1 },
         stone: { mass: 30.0, friction: 0.98, hitsToBreak: 2 },
       };
       
-      // Block type assignment based on difficulty and position
-      const getBlockType = (blockIndex: number, _fortIndex: number): { type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar' } => {
-        const difficulty = gameData.difficulty || 1;
-        // More variety as difficulty increases
-        // Base blocks are often stone pillars, middle wood, top ice
-        const heightFactor = (blockIndex % 4);
-        if (heightFactor === 0) return { type: 'stone', shape: 'pillar' };
-        if (heightFactor === 1) return { type: 'wood', shape: difficulty > 2 ? 'plank_h' : 'square' };
-        if (heightFactor === 2) return { type: difficulty > 1 ? 'ice' : 'wood', shape: 'square' };
-        return { type: 'wood', shape: 'plank_v' };
+      // Generate Angry Birds-style structures based on difficulty
+      // This replaces server layout with proper physics-friendly structures
+      const newBlocks: Block[] = [];
+      const newMembers: GangMember[] = [];
+      
+      // Fort position - farther from cannon for longer cannonball arc
+      const fortX = 650;
+      
+      // Helper to create blocks
+      const addBlock = (x: number, y: number, type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar') => {
+        let width = 40, height = 40;
+        if (shape === 'plank_h') { width = 80; height = 20; }
+        if (shape === 'plank_v') { width = 20; height = 80; }
+        if (shape === 'pillar') { width = 15; height = 100; }
+        
+        const props = materialProps[type];
+        
+        newBlocks.push({
+          id: `block-${newBlocks.length}`,
+          x, y: GROUND_Y - y,
+          width, height,
+          destroyed: false,
+          velocityX: 0, velocityY: 0,
+          falling: false, rotation: 0,
+          type, shape,
+          mass: props.mass,
+          friction: props.friction,
+          hitCount: 0,
+        });
       };
       
-      // Initialize blocks with types and physics properties
-      const allBlocks: Block[] = [];
-      layout.forts.forEach((fort, fortIndex) => {
-        fort.blocks.forEach((block, blockIndex) => {
-          const { type, shape } = getBlockType(blockIndex, fortIndex);
-          const props = materialProps[type];
-          let width = 45, height = 45;
-          if (shape === 'plank_h') { width = 80; height = 20; }
-          if (shape === 'plank_v') { width = 20; height = 80; }
-          if (shape === 'pillar') { width = 15; height = 100; }
-          
-          allBlocks.push({
-            ...block,
-            x: scaleX(block.x),
-            y: scaleY(block.y),
-            width,
-            height,
-            velocityX: 0,
-            velocityY: 0,
-            falling: false,
-            rotation: 0,
-            type,
-            shape,
-            mass: props.mass,
-            friction: props.friction,
-            hitCount: 0,
-          });
+      // Helper to add gang member (pig)
+      const addPig = (x: number, y: number, name: string, fortIndex: number) => {
+        newMembers.push({
+          id: `pig-${newMembers.length}`,
+          name,
+          x, y: GROUND_Y - y,
+          width: 40, height: 40,
+          eliminated: false,
+          fort_index: fortIndex,
+          velocityX: 0, velocityY: 0,
+          falling: false,
         });
-      });
-      setBlocks(allBlocks);
+      };
       
-      // Initialize gang members
-      const members: GangMember[] = layout.gang_members.map(m => ({
-        ...m,
-        x: scaleX(m.x),
-        y: scaleY(m.y) - 10,
-        width: 35,
-        height: 40,
-        velocityX: 0,
-        velocityY: 0,
-        falling: false,
-      }));
-      setGangMembers(members);
+      // Get enemy names from layout or use defaults
+      const enemyNames = layout.gang_members?.map(m => m.name) || ['Thug', 'Goon', 'Boss'];
+      let nameIndex = 0;
+      const getNextName = () => enemyNames[nameIndex++ % enemyNames.length];
+      
+      // Generate structure based on difficulty (1-10 scale, similar to castle-levels)
+      // Uses the same Angry Birds-style designs
+      if (difficulty <= 1) {
+        // Simple tower - Training Ground style
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 60, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'wood', 'plank_h');
+        addPig(fortX + 10, 140, getNextName(), 0);
+      } else if (difficulty === 2) {
+        // Two pillars with pigs - Small Outpost style
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 100, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'wood', 'plank_h');
+        addBlock(fortX + 90, 110, 'wood', 'plank_h');
+        addPig(fortX + 10, 140, getNextName(), 0);
+        addPig(fortX + 110, 140, getNextName(), 1);
+      } else if (difficulty === 3) {
+        // Tall wooden tower - Guard Tower style
+        addBlock(fortX, 40, 'wood', 'square');
+        addBlock(fortX + 45, 40, 'wood', 'square');
+        addBlock(fortX, 85, 'wood', 'plank_v');
+        addBlock(fortX + 65, 85, 'wood', 'plank_v');
+        addBlock(fortX - 10, 135, 'wood', 'plank_h');
+        addBlock(fortX, 175, 'wood', 'plank_v');
+        addBlock(fortX + 65, 175, 'wood', 'plank_v');
+        addBlock(fortX - 10, 225, 'wood', 'plank_h');
+        addPig(fortX + 20, 130, getNextName(), 0);
+        addPig(fortX + 20, 255, getNextName(), 0);
+      } else if (difficulty === 4) {
+        // Ice structure - Watchtower style
+        addBlock(fortX, 100, 'stone', 'pillar');
+        addBlock(fortX + 80, 100, 'stone', 'pillar');
+        addBlock(fortX - 10, 110, 'ice', 'plank_h');
+        addBlock(fortX, 130, 'ice', 'square');
+        addBlock(fortX + 45, 130, 'ice', 'square');
+        addBlock(fortX, 175, 'ice', 'square');
+        addBlock(fortX + 45, 175, 'ice', 'square');
+        addBlock(fortX + 90, 175, 'ice', 'square');
+        addBlock(fortX - 10, 220, 'ice', 'plank_h');
+        addPig(fortX + 20, 115, getNextName(), 0);
+        addPig(fortX + 20, 250, getNextName(), 0);
+        addPig(fortX + 100, 220, getNextName(), 0);
+      } else if (difficulty === 5) {
+        // Multi-tower - Fort Minor style
+        // Left tower
+        addBlock(fortX - 50, 100, 'stone', 'pillar');
+        addBlock(fortX + 30, 100, 'stone', 'pillar');
+        addBlock(fortX - 60, 110, 'wood', 'plank_h');
+        addPig(fortX - 30, 145, getNextName(), 0);
+        // Right tower
+        addBlock(fortX + 100, 100, 'stone', 'pillar');
+        addBlock(fortX + 180, 100, 'stone', 'pillar');
+        addBlock(fortX + 90, 110, 'wood', 'plank_h');
+        addBlock(fortX + 90, 130, 'ice', 'square');
+        addBlock(fortX + 135, 130, 'ice', 'square');
+        addBlock(fortX + 90, 180, 'ice', 'plank_h');
+        addPig(fortX + 120, 115, getNextName(), 1);
+        addPig(fortX + 120, 215, getNextName(), 1);
+      } else if (difficulty === 6) {
+        // House structure - Stone Keep style
+        addBlock(fortX, 40, 'stone', 'square');
+        addBlock(fortX + 45, 40, 'stone', 'square');
+        addBlock(fortX + 90, 40, 'stone', 'square');
+        addBlock(fortX, 130, 'wood', 'plank_v');
+        addBlock(fortX + 115, 130, 'wood', 'plank_v');
+        addBlock(fortX - 20, 180, 'ice', 'plank_v');
+        addBlock(fortX + 135, 180, 'ice', 'plank_v');
+        addBlock(fortX + 20, 250, 'ice', 'plank_h');
+        addBlock(fortX + 60, 280, 'ice', 'square');
+        addBlock(fortX + 30, 85, 'wood', 'plank_h');
+        addPig(fortX + 50, 50, getNextName(), 0);
+        addPig(fortX + 50, 120, getNextName(), 0);
+        addPig(fortX + 50, 200, getNextName(), 0);
+        addPig(fortX - 30, 50, getNextName(), 0);
+      } else if (difficulty === 7) {
+        // Complex fortress - Battle Fortress style
+        addBlock(fortX - 30, 100, 'stone', 'pillar');
+        addBlock(fortX + 50, 100, 'stone', 'pillar');
+        addBlock(fortX + 130, 100, 'stone', 'pillar');
+        addBlock(fortX + 210, 100, 'stone', 'pillar');
+        addBlock(fortX - 40, 110, 'wood', 'plank_h');
+        addBlock(fortX + 40, 110, 'wood', 'plank_h');
+        addBlock(fortX + 120, 110, 'wood', 'plank_h');
+        addBlock(fortX, 200, 'wood', 'plank_v');
+        addBlock(fortX + 80, 200, 'wood', 'plank_v');
+        addBlock(fortX + 160, 200, 'wood', 'plank_v');
+        addBlock(fortX - 10, 250, 'ice', 'plank_h');
+        addBlock(fortX + 70, 250, 'ice', 'plank_h');
+        addBlock(fortX + 40, 280, 'ice', 'square');
+        addBlock(fortX + 120, 280, 'ice', 'square');
+        addPig(fortX, 145, getNextName(), 0);
+        addPig(fortX + 80, 145, getNextName(), 0);
+        addPig(fortX + 160, 145, getNextName(), 0);
+        addPig(fortX + 80, 310, getNextName(), 0);
+      } else if (difficulty === 8) {
+        // War Castle style
+        for (let i = 0; i < 4; i++) {
+          addBlock(fortX + i * 70, 100, 'stone', 'pillar');
+          addBlock(fortX + i * 70 - 10, 110, 'wood', 'plank_h');
+        }
+        addBlock(fortX + 20, 150, 'ice', 'square');
+        addBlock(fortX + 90, 150, 'ice', 'square');
+        addBlock(fortX + 160, 150, 'ice', 'square');
+        addBlock(fortX - 10, 200, 'ice', 'plank_h');
+        addBlock(fortX + 70, 200, 'ice', 'plank_h');
+        addBlock(fortX + 150, 200, 'ice', 'plank_h');
+        addBlock(fortX + 50, 250, 'wood', 'plank_v');
+        addBlock(fortX + 130, 250, 'wood', 'plank_v');
+        addBlock(fortX + 40, 300, 'wood', 'plank_h');
+        addPig(fortX + 30, 145, getNextName(), 0);
+        addPig(fortX + 100, 145, getNextName(), 0);
+        addPig(fortX + 170, 145, getNextName(), 0);
+        addPig(fortX + 50, 235, getNextName(), 0);
+        addPig(fortX + 130, 235, getNextName(), 0);
+      } else if (difficulty === 9) {
+        // Imperial Stronghold style
+        // Structure 1 - Left
+        addBlock(fortX - 100, 100, 'stone', 'pillar');
+        addBlock(fortX - 20, 100, 'stone', 'pillar');
+        addBlock(fortX - 110, 110, 'wood', 'plank_h');
+        addBlock(fortX - 70, 150, 'ice', 'square');
+        addBlock(fortX - 70, 200, 'ice', 'square');
+        addPig(fortX - 60, 145, getNextName(), 0);
+        addPig(fortX - 60, 240, getNextName(), 0);
+        // Structure 2 - Center tower
+        addBlock(fortX + 60, 100, 'stone', 'pillar');
+        addBlock(fortX + 140, 100, 'stone', 'pillar');
+        addBlock(fortX + 50, 110, 'wood', 'plank_h');
+        addBlock(fortX + 50, 150, 'wood', 'square');
+        addBlock(fortX + 95, 150, 'wood', 'square');
+        addBlock(fortX + 70, 250, 'wood', 'plank_v');
+        addBlock(fortX + 110, 250, 'wood', 'plank_v');
+        addBlock(fortX + 60, 300, 'wood', 'plank_h');
+        addPig(fortX + 70, 145, getNextName(), 1);
+        addPig(fortX + 90, 335, getNextName(), 1);
+        // Structure 3 - Right
+        addBlock(fortX + 220, 100, 'stone', 'pillar');
+        addBlock(fortX + 300, 100, 'stone', 'pillar');
+        addBlock(fortX + 210, 110, 'ice', 'plank_h');
+        addPig(fortX + 240, 145, getNextName(), 2);
+      } else {
+        // Dragon Citadel style (difficulty 10+)
+        // Grand central structure
+        for (let i = 0; i < 5; i++) {
+          addBlock(fortX - 50 + i * 60, 100, 'stone', 'pillar');
+        }
+        addBlock(fortX - 60, 110, 'stone', 'plank_h');
+        addBlock(fortX + 20, 110, 'stone', 'plank_h');
+        addBlock(fortX + 100, 110, 'stone', 'plank_h');
+        addBlock(fortX + 180, 110, 'stone', 'plank_h');
+        // Second level
+        addBlock(fortX - 30, 200, 'wood', 'plank_v');
+        addBlock(fortX + 50, 200, 'wood', 'plank_v');
+        addBlock(fortX + 130, 200, 'wood', 'plank_v');
+        addBlock(fortX + 210, 200, 'wood', 'plank_v');
+        addBlock(fortX - 40, 250, 'ice', 'plank_h');
+        addBlock(fortX + 40, 250, 'ice', 'plank_h');
+        addBlock(fortX + 120, 250, 'ice', 'plank_h');
+        // Top tower
+        addBlock(fortX + 60, 320, 'ice', 'plank_v');
+        addBlock(fortX + 100, 320, 'ice', 'plank_v');
+        addBlock(fortX + 50, 370, 'ice', 'plank_h');
+        addBlock(fortX + 80, 400, 'stone', 'square');
+        // Pigs spread throughout
+        addPig(fortX - 40, 145, getNextName(), 0);
+        addPig(fortX + 40, 145, getNextName(), 0);
+        addPig(fortX + 120, 145, getNextName(), 0);
+        addPig(fortX + 200, 145, getNextName(), 0);
+        addPig(fortX + 80, 285, getNextName(), 0);
+        addPig(fortX + 80, 405, getNextName(), 0);
+      }
+      
+      setBlocks(newBlocks);
+      setGangMembers(newMembers);
       structureHitRef.current = false; // Reset - no blocks hit yet
     }
   }, [gameData]);
