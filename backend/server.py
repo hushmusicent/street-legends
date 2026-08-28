@@ -1155,6 +1155,78 @@ async def request_account_deletion(data: DeleteAccountRequest):
     # Always return success for privacy (don't reveal if account exists)
     return {"status": "success", "message": "If an account exists with this username, it will be deleted within 30 days."}
 
+
+@api_router.delete("/players/{player_id}/account")
+async def delete_player_account(player_id: str):
+    """
+    Permanently delete a player's account and all associated data.
+    This is for logged-in users who want to delete their own account.
+    """
+    # Find the player
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player_name = player.get("name", "Unknown")
+    
+    try:
+        # Delete all player data from all collections
+        await db.players.delete_one({"id": player_id})
+        await db.territories.delete_many({"owner_id": player_id})
+        await db.battles.delete_many({"player_id": player_id})
+        await db.missions.delete_many({"player_id": player_id})
+        await db.fitness_data.delete_many({"player_id": player_id})
+        await db.guild_invites.delete_many({"player_id": player_id})
+        await db.chat_messages.delete_many({"player_id": player_id})
+        
+        # Clear owner from territories they owned (don't delete territories, just remove owner)
+        await db.territories.update_many(
+            {"owner_id": player_id},
+            {"$set": {"owner_id": None, "owner_name": None, "owner_pic": None}}
+        )
+        
+        # Remove player from any guilds they're in
+        await db.guilds.update_many(
+            {"members": {"$elemMatch": {"id": player_id}}},
+            {"$pull": {"members": {"id": player_id}}}
+        )
+        
+        # If player was a guild leader, delete the guild or transfer leadership
+        player_guilds = await db.guilds.find({"leader_id": player_id}).to_list(10)
+        for guild in player_guilds:
+            # Delete the guild if no other members
+            if len(guild.get("members", [])) == 0:
+                await db.guilds.delete_one({"id": guild["id"]})
+            else:
+                # Transfer to first available member
+                new_leader = guild["members"][0]
+                await db.guilds.update_one(
+                    {"id": guild["id"]},
+                    {"$set": {"leader_id": new_leader["id"], "leader_name": new_leader.get("name", "Unknown")}}
+                )
+        
+        # Log the deletion for records
+        deletion_log = {
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "player_name": player_name,
+            "deleted_at": datetime.utcnow(),
+            "deletion_type": "user_initiated"
+        }
+        await db.deletion_logs.insert_one(deletion_log)
+        
+        logger.info(f"Account permanently deleted for player: {player_id} ({player_name})")
+        
+        return {
+            "status": "success",
+            "message": "Your account and all associated data have been permanently deleted."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting account for player {player_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete account. Please try again.")
+
+
 # ============== PLAYER ENDPOINTS ==============
 @api_router.get("/")
 async def root():

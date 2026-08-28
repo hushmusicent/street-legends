@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,14 @@ import {
   Platform,
   Share,
   Clipboard,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as NavigationBar from 'expo-navigation-bar';
 import { useGameStore } from '../stores/gameStore';
+import { deletePlayerAccount } from '../services/api';
 
 interface OptionsModalProps {
   visible: boolean;
@@ -25,7 +27,8 @@ interface OptionsModalProps {
 }
 
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
-  const { clearPlayer } = useGameStore();
+  const { clearPlayer, playerId } = useGameStore();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const shareMessage = '🎮 Check out Street Legends - A GTA-style GPS RPG game! Fight enemies, capture territories, and build your criminal empire in real life locations! Download now: https://street-empire-test.preview.emergentagent.com';
 
@@ -92,6 +95,76 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
               console.log('Quit error:', e);
               try { router.replace('/'); } catch (_) {}
             }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '⚠️ Delete Account',
+      'Are you sure you want to permanently delete your account?\n\nThis action CANNOT be undone and will delete:\n\n• All character stats and progress\n• Your territories and income\n• Skills and inventory\n• Battle history\n• Fitness data\n• Guild memberships',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: () => {
+            // Second confirmation for safety
+            Alert.alert(
+              '🚨 Final Confirmation',
+              'This is your LAST CHANCE. Your account and ALL data will be permanently deleted.\n\nType your understanding by pressing DELETE.',
+              [
+                { text: 'Go Back', style: 'cancel' },
+                {
+                  text: 'DELETE',
+                  style: 'destructive',
+                  onPress: async () => {
+                    if (!playerId) {
+                      Alert.alert('Error', 'No player ID found. Please try again.');
+                      return;
+                    }
+                    
+                    setIsDeleting(true);
+                    try {
+                      await deletePlayerAccount(playerId);
+                      
+                      // Restore Android navigation bar
+                      if (Platform.OS === 'android') {
+                        await NavigationBar.setVisibilityAsync('visible');
+                      }
+                      
+                      // Clear local storage
+                      await AsyncStorage.removeItem('playerId');
+                      clearPlayer();
+                      onClose();
+                      
+                      // Show success and redirect
+                      Alert.alert(
+                        'Account Deleted',
+                        'Your account has been permanently deleted. Thank you for playing Street Legends.',
+                        [
+                          {
+                            text: 'OK',
+                            onPress: () => {
+                              try { router.dismissAll(); } catch (_) {}
+                              router.replace('/');
+                            }
+                          }
+                        ]
+                      );
+                    } catch (error: any) {
+                      setIsDeleting(false);
+                      Alert.alert(
+                        'Deletion Failed',
+                        error?.response?.data?.detail || 'Failed to delete account. Please try again.'
+                      );
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -181,6 +254,24 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
               </TouchableOpacity>
             </>
           )}
+
+          {/* Delete Account */}
+          <View style={styles.divider} />
+          <TouchableOpacity 
+            style={styles.deleteRow} 
+            onPress={handleDeleteAccount} 
+            activeOpacity={0.7}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color="#dc2626" />
+            ) : (
+              <Ionicons name="trash" size={20} color="#dc2626" />
+            )}
+            <Text style={styles.deleteText}>
+              {isDeleting ? 'DELETING...' : 'DELETE ACCOUNT'}
+            </Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -327,5 +418,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,
+  },
+  deleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+    marginTop: 8,
+  },
+  deleteText: {
+    color: '#dc2626',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
 });
