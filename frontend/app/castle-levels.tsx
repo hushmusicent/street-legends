@@ -148,11 +148,12 @@ export default function CastleLevelsScreen() {
     
     const fortX = 350;
     
-    // Material properties - higher values = more resistant
+    // Material properties - VERY HIGH mass and friction to prevent chain reactions
+    // Only direct hits should move blocks, minimal force transfer
     const materialProps = {
-      wood: { mass: 2.0, friction: 0.7, hitsToBreak: 1 },
-      ice: { mass: 1.0, friction: 0.3, hitsToBreak: 1 },
-      stone: { mass: 5.0, friction: 0.9, hitsToBreak: 2 },
+      wood: { mass: 15.0, friction: 0.95, hitsToBreak: 1 },
+      ice: { mass: 8.0, friction: 0.85, hitsToBreak: 1 },
+      stone: { mass: 30.0, friction: 0.98, hitsToBreak: 2 },
     };
     
     // Helper to create blocks
@@ -534,32 +535,18 @@ export default function CastleLevelsScreen() {
             // Mark structure as hit - now support checks can happen
             structureHitRef.current = true;
             
-            // Direct cannonball hit always affects the block
-            // Stone needs more force but CAN be knocked over
-            const forceThreshold = block.type === 'stone' ? 8 : (block.type === 'ice' ? 3 : 5);
-            
-            if (impactForce > forceThreshold) {
-              // Strong hit - block falls
-              // Stone moves slower due to mass, wood flies more
-              const velocityMult = block.type === 'stone' ? 0.25 : (block.type === 'ice' ? 0.7 : 0.5);
-              return {
-                ...block,
-                destroyed: true,
-                falling: true,
-                hitCount: block.hitCount + 1,
-                velocityX: -Math.cos(impactAngle) * impactForce * velocityMult + (Math.random() - 0.5) * 2,
-                velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityMult * 0.5) - 3,
-              };
-            } else {
-              // Weak hit - stone barely moves, others get nudged
-              const nudge = block.type === 'stone' ? 0.2 : 0.8;
-              return {
-                ...block,
-                hitCount: block.hitCount + 1,
-                velocityX: -Math.cos(impactAngle) * nudge,
-                velocityY: block.type === 'stone' ? 0 : -0.5,
-              };
-            }
+            // Direct cannonball hit - ONLY this specific block moves
+            // Very LOW velocity transfer to prevent chain reactions
+            const velocityMult = block.type === 'stone' ? 0.08 : (block.type === 'ice' ? 0.15 : 0.12);
+            return {
+              ...block,
+              destroyed: true,
+              falling: true,
+              hitCount: block.hitCount + 1,
+              // Minimal velocity - block moves slowly, doesn't fly
+              velocityX: -Math.cos(impactAngle) * impactForce * velocityMult,
+              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityMult * 0.3) - 1,
+            };
           }
         }
         
@@ -567,18 +554,22 @@ export default function CastleLevelsScreen() {
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
-          // Heavier blocks fall faster but accelerate slower
-          let newVelY = block.velocityY + GRAVITY * (block.type === 'stone' ? 1.0 : 0.8);
-          let newVelX = block.velocityX * (1 - block.friction * 0.08);
-          let newRotation = block.rotation + block.velocityX * (block.type === 'stone' ? 0.8 : 2);
+          // Slow falling, high drag
+          let newVelY = block.velocityY + GRAVITY * 0.6;
+          // Very high friction - blocks slow down fast
+          let newVelX = block.velocityX * 0.85;
+          let newRotation = block.rotation + block.velocityX * 0.5;
           
-          // Ground collision
+          // Ground collision - blocks stop quickly
           if (newY > GROUND_Y - 10) {
             newY = GROUND_Y - 10;
-            newVelY = -newVelY * 0.15;
-            newVelX *= 0.4;
-            if (Math.abs(newVelY) < 0.5) newVelY = 0;
+            newVelY = 0; // No bounce
+            newVelX *= 0.2; // High ground friction
           }
+          
+          // Cap maximum velocity to prevent blocks flying too fast
+          newVelX = Math.max(-3, Math.min(3, newVelX));
+          newVelY = Math.max(-5, Math.min(8, newVelY));
           
           return {
             ...block,
@@ -594,10 +585,10 @@ export default function CastleLevelsScreen() {
         return block;
       });
       
-      // Second pass: block-to-block collisions and support checks
+      // Second pass: block-to-block collisions - VERY restrictive
       // ONLY if structure has been hit at least once
       if (!structureHitRef.current) {
-        return updatedBlocks; // No collisions or support checks until first hit
+        return updatedBlocks;
       }
       
       return updatedBlocks.map(block => {
@@ -608,58 +599,34 @@ export default function CastleLevelsScreen() {
           if (other.id === block.id) continue;
           if (!other.falling && !other.destroyed) continue;
           
-          // Calculate the force of the falling block
+          // Calculate the momentum of the falling block
           const otherSpeed = Math.sqrt(other.velocityX * other.velocityX + other.velocityY * other.velocityY);
-          const otherForce = otherSpeed * other.mass;
+          const otherMomentum = otherSpeed * other.mass;
           
           if (!checkRectRectCollision(other, block)) continue;
           
-          // Force threshold depends on target block material
-          // Stone needs MUCH more force to move
-          // Wood can be pushed with less force (domino effect)
-          // Ice breaks easily
-          const forceNeeded = block.type === 'stone' ? 15 : (block.type === 'ice' ? 3 : 6);
+          // VERY HIGH force thresholds - blocks barely affect each other
+          // Only a fast, heavy block can move another block
+          const forceNeeded = block.type === 'stone' ? 100 : (block.type === 'ice' ? 40 : 60);
           
-          if (otherForce > forceNeeded) {
-            // Enough force - this block gets knocked
+          if (otherMomentum > forceNeeded) {
+            // Very rare - only happens with very fast, heavy blocks
+            // Even then, minimal velocity transfer
             const pushDirection = other.x < block.x ? 1 : -1;
-            const transferRatio = block.type === 'stone' ? 0.15 : (block.type === 'ice' ? 0.6 : 0.4);
-            
             return {
               ...block,
               destroyed: true,
               falling: true,
-              velocityX: other.velocityX * transferRatio + pushDirection * 2,
-              velocityY: other.velocityY * transferRatio - 2,
+              // Minimal velocity - block barely moves
+              velocityX: pushDirection * 0.5,
+              velocityY: -0.5,
             };
           }
         }
         
-        // Check if lost support (only after structure has been hit)
-        const isOnGround = block.y + block.height >= GROUND_Y - 15;
-        if (!isOnGround) {
-          // Need substantial support underneath
-          const supportArea = updatedBlocks.filter(other =>
-            other.id !== block.id &&
-            !other.destroyed &&
-            !other.falling &&
-            block.x + block.width * 0.3 < other.x + other.width &&
-            block.x + block.width * 0.7 > other.x &&
-            Math.abs((block.y + block.height) - other.y) < 12
-          );
-          
-          // Stone blocks need more support to stay up
-          const minSupport = block.type === 'stone' ? 1 : 0;
-          if (supportArea.length <= minSupport) {
-            // Lost support - fall slowly
-            return {
-              ...block,
-              falling: true,
-              velocityX: 0,
-              velocityY: 0.5,
-            };
-          }
-        }
+        // DISABLED support check - blocks don't fall just because support is removed
+        // They only move when directly hit or pushed by a fast-moving block
+        // This prevents the whole structure collapsing
         
         return block;
       });

@@ -116,11 +116,11 @@ export default function CastleMinigameScreen() {
       const scaleX = (x: number) => 300 + ((x - 300) / 600) * 800;
       const scaleY = (y: number) => (y / 400) * (GROUND_Y - 50);
       
-      // Material properties - higher values = more resistant
+      // Material properties - VERY HIGH mass and friction to prevent chain reactions
       const materialProps = {
-        wood: { mass: 2.0, friction: 0.7, hitsToBreak: 1 },
-        ice: { mass: 1.0, friction: 0.3, hitsToBreak: 1 },
-        stone: { mass: 5.0, friction: 0.9, hitsToBreak: 2 },
+        wood: { mass: 15.0, friction: 0.95, hitsToBreak: 1 },
+        ice: { mass: 8.0, friction: 0.85, hitsToBreak: 1 },
+        stone: { mass: 30.0, friction: 0.98, hitsToBreak: 2 },
       };
       
       // Block type assignment based on difficulty and position
@@ -324,29 +324,18 @@ export default function CastleMinigameScreen() {
             // Mark structure as hit - now support checks can happen
             structureHitRef.current = true;
             
-            // Direct cannonball hit always affects the block
-            const forceThreshold = block.type === 'stone' ? 8 : (block.type === 'ice' ? 3 : 5);
-            
-            if (impactForce > forceThreshold) {
-              // Strong hit - block falls
-              const velocityMult = block.type === 'stone' ? 0.25 : (block.type === 'ice' ? 0.7 : 0.5);
-              return {
-                ...block,
-                destroyed: true,
-                falling: true,
-                hitCount: block.hitCount + 1,
-                velocityX: -Math.cos(impactAngle) * impactForce * velocityMult + (Math.random() - 0.5) * 2,
-                velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityMult * 0.5) - 3,
-              };
-            } else {
-              const nudge = block.type === 'stone' ? 0.2 : 0.8;
-              return {
-                ...block,
-                hitCount: block.hitCount + 1,
-                velocityX: -Math.cos(impactAngle) * nudge,
-                velocityY: block.type === 'stone' ? 0 : -0.5,
-              };
-            }
+            // Direct cannonball hit - ONLY this specific block moves
+            // Very LOW velocity transfer to prevent chain reactions
+            const velocityMult = block.type === 'stone' ? 0.08 : (block.type === 'ice' ? 0.15 : 0.12);
+            return {
+              ...block,
+              destroyed: true,
+              falling: true,
+              hitCount: block.hitCount + 1,
+              // Minimal velocity - block moves slowly, doesn't fly
+              velocityX: -Math.cos(impactAngle) * impactForce * velocityMult,
+              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityMult * 0.3) - 1,
+            };
           }
         }
         
@@ -354,16 +343,22 @@ export default function CastleMinigameScreen() {
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
-          let newVelY = block.velocityY + GRAVITY * (block.type === 'stone' ? 1.0 : 0.8);
-          let newVelX = block.velocityX * (1 - block.friction * 0.08);
-          let newRotation = block.rotation + block.velocityX * (block.type === 'stone' ? 0.8 : 2);
+          // Slow falling, high drag
+          let newVelY = block.velocityY + GRAVITY * 0.6;
+          // Very high friction - blocks slow down fast
+          let newVelX = block.velocityX * 0.85;
+          let newRotation = block.rotation + block.velocityX * 0.5;
           
+          // Ground collision - blocks stop quickly
           if (newY > GROUND_Y - 10) {
             newY = GROUND_Y - 10;
-            newVelY = -newVelY * 0.15;
-            newVelX *= 0.4;
-            if (Math.abs(newVelY) < 0.5) newVelY = 0;
+            newVelY = 0; // No bounce
+            newVelX *= 0.2; // High ground friction
           }
+          
+          // Cap maximum velocity
+          newVelX = Math.max(-3, Math.min(3, newVelX));
+          newVelY = Math.max(-5, Math.min(8, newVelY));
           
           return {
             ...block,
@@ -379,10 +374,10 @@ export default function CastleMinigameScreen() {
         return block;
       });
       
-      // Second pass: block-to-block collisions and support checks
+      // Second pass: block-to-block collisions - VERY restrictive
       // ONLY if structure has been hit at least once
       if (!structureHitRef.current) {
-        return updatedBlocks; // No collisions or support checks until first hit
+        return updatedBlocks;
       }
       
       return updatedBlocks.map(block => {
@@ -393,48 +388,26 @@ export default function CastleMinigameScreen() {
           if (!other.falling && !other.destroyed) continue;
           
           const otherSpeed = Math.sqrt(other.velocityX * other.velocityX + other.velocityY * other.velocityY);
-          const otherForce = otherSpeed * other.mass;
+          const otherMomentum = otherSpeed * other.mass;
           
           if (!checkRectRectCollision(other, block)) continue;
           
-          const forceNeeded = block.type === 'stone' ? 15 : (block.type === 'ice' ? 3 : 6);
+          // VERY HIGH force thresholds
+          const forceNeeded = block.type === 'stone' ? 100 : (block.type === 'ice' ? 40 : 60);
           
-          if (otherForce > forceNeeded) {
+          if (otherMomentum > forceNeeded) {
             const pushDirection = other.x < block.x ? 1 : -1;
-            const transferRatio = block.type === 'stone' ? 0.15 : (block.type === 'ice' ? 0.6 : 0.4);
-            
             return {
               ...block,
               destroyed: true,
               falling: true,
-              velocityX: other.velocityX * transferRatio + pushDirection * 2,
-              velocityY: other.velocityY * transferRatio - 2,
+              velocityX: pushDirection * 0.5,
+              velocityY: -0.5,
             };
           }
         }
         
-        // Check support (only after structure has been hit)
-        const isOnGround = block.y + block.height >= GROUND_Y - 15;
-        if (!isOnGround) {
-          const supportArea = updatedBlocks.filter(other =>
-            other.id !== block.id &&
-            !other.destroyed &&
-            !other.falling &&
-            block.x + block.width * 0.3 < other.x + other.width &&
-            block.x + block.width * 0.7 > other.x &&
-            Math.abs((block.y + block.height) - other.y) < 12
-          );
-          
-          const minSupport = block.type === 'stone' ? 1 : 0;
-          if (supportArea.length <= minSupport) {
-            return {
-              ...block,
-              falling: true,
-              velocityX: 0,
-              velocityY: 0.5,
-            };
-          }
-        }
+        // DISABLED support check - blocks don't fall just because support is removed
         
         return block;
       });
