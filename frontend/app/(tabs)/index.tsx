@@ -20,39 +20,20 @@ import { getEnemyBattleImage } from '../../assets/enemyImages';
 import {
   getPlayer,
   updatePlayerPosition,
-  spawnMonsters,
-  generateMissions,
-  getNearbyPlayers,
   startBattle,
-  spawnShops,
   getProfilePic,
-  getNearbyTerritories,
   captureTerritory,
   collectTerritoryIncome,
-  spawnRestaurants,
   eatAtRestaurant,
-  spawnNightclubs,
   visitNightclub,
-  spawnBanks,
   robBank,
-  spawnCastles,
   startCastleGame,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
 import { SFX } from '../../hooks/useSoundEffects';
-
-// Calculate distance between two points in meters
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-};
+import { useMapEntities, usePlayerData, useInvalidateMapQueries } from '../../hooks/useMapQueries';
 
 export default function MapScreen() {
   const {
@@ -61,11 +42,8 @@ export default function MapScreen() {
     setPlayer,
     currentPosition,
     setCurrentPosition,
-    nearbyMonsters,
     setNearbyMonsters,
-    nearbyMissions,
     setNearbyMissions,
-    nearbyPlayers,
     setNearbyPlayers,
     setCurrentBattle,
   } = useGameStore();
@@ -75,15 +53,8 @@ export default function MapScreen() {
     type: 'monster' | 'mission' | 'bounty' | 'player' | 'shop' | 'restaurant' | 'nightclub';
     data: any;
   } | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [heading, setHeading] = useState<number>(0);
-  const [nearbyShops, setNearbyShops] = useState<any[]>([]);
-  const [nearbyRestaurants, setNearbyRestaurants] = useState<any[]>([]);
-  const [nearbyNightclubs, setNearbyNightclubs] = useState<any[]>([]);
-  const [nearbyBanks, setNearbyBanks] = useState<any[]>([]);
-  const [nearbyCastles, setNearbyCastles] = useState<any[]>([]);
-  const [territories, setTerritories] = useState<any[]>([]);
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
   const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
@@ -96,9 +67,54 @@ export default function MapScreen() {
   
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const headingSubscription = useRef<Location.LocationSubscription | null>(null);
-  const lastEntityLoadPos = useRef<{ lat: number; lon: number } | null>(null);
   const lastServerUpdateTime = useRef<number>(0);
-  const entitiesCache = useRef<{ time: number; data: any } | null>(null);
+
+  // TanStack Query hooks - replaces setInterval polling
+  const { invalidateEntities } = useInvalidateMapQueries();
+  
+  const { 
+    data: entitiesData, 
+    refetch: refetchEntities,
+    isFetching: isRefreshing,
+  } = useMapEntities({
+    latitude: currentPosition?.latitude || 0,
+    longitude: currentPosition?.longitude || 0,
+    playerLevel: player?.level || 1,
+    playerId: playerId || '',
+    enabled: !!currentPosition && !!player && !!playerId,
+  });
+
+  const { data: playerData, refetch: refetchPlayer } = usePlayerData({
+    playerId: playerId || '',
+    enabled: !!playerId,
+  });
+
+  // Sync TanStack Query player data to global store
+  useEffect(() => {
+    if (playerData) {
+      setPlayer(playerData);
+    }
+  }, [playerData, setPlayer]);
+
+  // Memoized derived state from entities query
+  const nearbyMonsters = useMemo(() => entitiesData?.monsters || [], [entitiesData?.monsters]);
+  const nearbyMissions = useMemo(() => entitiesData?.missions || [], [entitiesData?.missions]);
+  const nearbyPlayers = useMemo(() => entitiesData?.players || [], [entitiesData?.players]);
+  const nearbyShops = useMemo(() => entitiesData?.shops || [], [entitiesData?.shops]);
+  const territories = useMemo(() => entitiesData?.territories || [], [entitiesData?.territories]);
+  const nearbyRestaurants = useMemo(() => entitiesData?.restaurants || [], [entitiesData?.restaurants]);
+  const nearbyNightclubs = useMemo(() => entitiesData?.nightclubs || [], [entitiesData?.nightclubs]);
+  const nearbyBanks = useMemo(() => entitiesData?.banks || [], [entitiesData?.banks]);
+  const nearbyCastles = useMemo(() => entitiesData?.castles || [], [entitiesData?.castles]);
+
+  // Update global store when entities change
+  useEffect(() => {
+    if (entitiesData) {
+      setNearbyMonsters(entitiesData.monsters);
+      setNearbyMissions(entitiesData.missions);
+      setNearbyPlayers(entitiesData.players);
+    }
+  }, [entitiesData, setNearbyMonsters, setNearbyMissions, setNearbyPlayers]);
 
   useEffect(() => {
     initializeLocation();
@@ -118,39 +134,6 @@ export default function MapScreen() {
       }).catch(() => {});
     }
   }, [playerId]);
-
-  // Only load entities when position changes significantly (50m+)
-  useEffect(() => {
-    if (currentPosition && player) {
-      const shouldLoad = !lastEntityLoadPos.current || 
-        getDistance(
-          lastEntityLoadPos.current.lat,
-          lastEntityLoadPos.current.lon,
-          currentPosition.latitude,
-          currentPosition.longitude
-        ) > 50;
-      
-      if (shouldLoad) {
-        loadNearbyEntities();
-        lastEntityLoadPos.current = {
-          lat: currentPosition.latitude,
-          lon: currentPosition.longitude
-        };
-      }
-    }
-  }, [currentPosition?.latitude, currentPosition?.longitude]);
-
-  // Auto-refresh: spawn new enemies every 5 min + refresh player HP/energy regen
-  useEffect(() => {
-    if (!playerId || !currentPosition) return;
-    const interval = setInterval(() => {
-      // Refresh player data (triggers health/energy regen on backend)
-      getPlayer(playerId).then(setPlayer).catch(console.error);
-      // Refresh monsters (triggers new enemy spawn if 5 min passed)
-      loadNearbyEntities();
-    }, 300000); // 5 minutes = 300,000ms
-    return () => clearInterval(interval);
-  }, [playerId, currentPosition?.latitude, currentPosition?.longitude]);
 
   const initializeLocation = async () => {
     try {
@@ -245,65 +228,13 @@ export default function MapScreen() {
     }
   };
 
-  const loadNearbyEntities = useCallback(async () => {
-    if (!currentPosition || !player || !playerId) return;
-
-    // Check cache (30 second TTL)
-    const now = Date.now();
-    if (entitiesCache.current && now - entitiesCache.current.time < 30000) {
-      return;
-    }
-
-    try {
-      // Ensure server knows our position before fetching entities
-      await updatePlayerPosition(playerId, currentPosition).catch(() => {});
-
-      // Use allSettled so one failure doesn't block others
-      const results = await Promise.allSettled([
-        spawnMonsters(currentPosition.latitude, currentPosition.longitude, player.level),
-        generateMissions(currentPosition.latitude, currentPosition.longitude, player.level, playerId),
-        getNearbyPlayers(playerId, 500),
-        spawnShops(currentPosition.latitude, currentPosition.longitude, player.level),
-        getNearbyTerritories(currentPosition.latitude, currentPosition.longitude, player.level),
-        spawnRestaurants(currentPosition.latitude, currentPosition.longitude, player.level),
-        spawnNightclubs(currentPosition.latitude, currentPosition.longitude, player.level),
-        spawnBanks(currentPosition.latitude, currentPosition.longitude, player.level),
-        spawnCastles(currentPosition.latitude, currentPosition.longitude, player.level),
-      ]);
-
-      const monsters = results[0].status === 'fulfilled' ? results[0].value : [];
-      const missions = results[1].status === 'fulfilled' ? results[1].value : [];
-      const players = results[2].status === 'fulfilled' ? results[2].value : [];
-      const shops = results[3].status === 'fulfilled' ? results[3].value : [];
-      const terrs = results[4].status === 'fulfilled' ? results[4].value : [];
-      const restaurants = results[5].status === 'fulfilled' ? results[5].value : [];
-      const nightclubs = results[6].status === 'fulfilled' ? results[6].value : [];
-      const banks = results[7].status === 'fulfilled' ? results[7].value : [];
-      const castles = results[8].status === 'fulfilled' ? results[8].value : [];
-
-      setNearbyMonsters(monsters);
-      setNearbyMissions(missions);
-      setNearbyPlayers(players);
-      setNearbyShops(shops);
-      setTerritories(terrs);
-      setNearbyRestaurants(restaurants);
-      setNearbyNightclubs(nightclubs);
-      setNearbyBanks(banks);
-      setNearbyCastles(castles);
-      
-      entitiesCache.current = { time: now, data: { monsters, missions, players, shops, terrs, restaurants, nightclubs, banks, castles } };
-    } catch (error) {
-      console.error('Failed to load entities:', error);
-    }
-  }, [currentPosition, player, playerId]);
-
+  // Manual refresh handler using TanStack Query
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    entitiesCache.current = null; // Clear cache
-    lastEntityLoadPos.current = null; // Force reload
-    await loadNearbyEntities();
-    setRefreshing(false);
-  }, [loadNearbyEntities]);
+    await Promise.all([
+      refetchEntities(),
+      refetchPlayer(),
+    ]);
+  }, [refetchEntities, refetchPlayer]);
 
   // Build territory data for the map
   const mapTerritories = useMemo(() => {
@@ -337,33 +268,33 @@ export default function MapScreen() {
       const result = await captureTerritory(selectedTerritory.id, playerId);
       setTerritoryBattleLog(result.combat_log || []);
       
-      // Update territories list with new ownership
+      // Update selected territory with new ownership
       if (result.territory) {
-        setTerritories(prev => prev.map((t: any) => t.id === result.territory.id ? result.territory : t));
         setSelectedTerritory(result.territory);
       }
       
-      // Refresh player data
-      const updatedPlayer = await getPlayer(playerId);
-      setPlayer(updatedPlayer);
+      // Invalidate queries to refresh data
+      await Promise.all([
+        invalidateEntities(),
+        refetchPlayer(),
+      ]);
     } catch (error: any) {
       Alert.alert('Error', error?.response?.data?.detail || 'Failed to challenge territory');
     } finally {
       setTerritoryFighting(false);
     }
-  }, [playerId, selectedTerritory]);
+  }, [playerId, selectedTerritory, invalidateEntities, refetchPlayer]);
 
   const handleCollectIncome = useCallback(async () => {
     if (!playerId || !selectedTerritory) return;
     try {
-      const result = await collectTerritoryIncome(selectedTerritory.id, playerId);
+      const result = await collectTerritoryIncome(playerId);
       Alert.alert('Income Collected!', result.message);
-      const updatedPlayer = await getPlayer(playerId);
-      setPlayer(updatedPlayer);
+      await refetchPlayer();
     } catch (error: any) {
       Alert.alert('Error', error?.response?.data?.detail || 'Failed to collect income');
     }
-  }, [playerId, selectedTerritory]);
+  }, [playerId, selectedTerritory, refetchPlayer]);
 
   const handleStartBattle = useCallback(async (monster: Monster) => {
     if (!playerId) return;
@@ -426,16 +357,15 @@ export default function MapScreen() {
         });
       }
       
-      // Refresh player data
-      const updatedPlayer = await getPlayer(playerId);
-      setPlayer(updatedPlayer);
+      // Refresh player data using TanStack Query
+      await refetchPlayer();
       setSelectedBank(null);
     } catch (error: any) {
       Alert.alert('Error', error?.response?.data?.detail || 'Bank robbery failed');
     } finally {
       setRobbingBank(false);
     }
-  }, [playerId, selectedBank, robbingBank]);
+  }, [playerId, selectedBank, robbingBank, refetchPlayer]);
 
   const handleStartCastleGame = useCallback(async () => {
     if (!playerId || !selectedCastle || startingCastleGame) return;
@@ -601,8 +531,8 @@ export default function MapScreen() {
           <View style={[styles.gpsIndicator, isTracking && styles.gpsActive]}>
             <Ionicons name="navigate" size={14} color={isTracking ? '#34A853' : '#888'} />
           </View>
-          <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh} disabled={refreshing}>
-            <Ionicons name="refresh" size={22} color="#5F6368" style={refreshing ? styles.rotating : undefined} />
+          <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh} disabled={isRefreshing}>
+            <Ionicons name="refresh" size={22} color="#5F6368" style={isRefreshing ? styles.rotating : undefined} />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -759,9 +689,8 @@ export default function MapScreen() {
                       message: result.healed > 0 ? `Healed ${result.healed} HP! (${result.health}/${result.max_health})` : 'Already at full health!',
                       duration: 3000,
                     });
-                    // Refresh player data
-                    const updatedPlayer = await getPlayer(playerId);
-                    setPlayer(updatedPlayer);
+                    // Refresh player data using TanStack Query
+                    await refetchPlayer();
                     setSelectedMarker(null);
                   } catch (err: any) {
                     showGameToast({
@@ -810,9 +739,8 @@ export default function MapScreen() {
                       message: result.restored > 0 ? `Restored ${result.restored} Energy! (${result.energy}/${result.max_energy})` : 'Already at full energy!',
                       duration: 3000,
                     });
-                    // Refresh player data
-                    const updatedPlayer = await getPlayer(playerId);
-                    setPlayer(updatedPlayer);
+                    // Refresh player data using TanStack Query
+                    await refetchPlayer();
                     setSelectedMarker(null);
                   } catch (err: any) {
                     showGameToast({
