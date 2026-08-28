@@ -103,6 +103,7 @@ export default function CastleMinigameScreen() {
   const cameraAnim = useRef(new Animated.Value(0)).current;
   const ballPositionRef = useRef({ x: 0, y: 0, active: false });
   const cannonballRef = useRef<Cannonball | null>(null);
+  const structureHitRef = useRef(false); // Track if any block has been hit
   
   // Initialize game state from gameData
   useEffect(() => {
@@ -177,6 +178,7 @@ export default function CastleMinigameScreen() {
         falling: false,
       }));
       setGangMembers(members);
+      structureHitRef.current = false; // Reset - no blocks hit yet
     }
   }, [gameData]);
 
@@ -319,6 +321,9 @@ export default function CastleMinigameScreen() {
             const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
             const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
             
+            // Mark structure as hit - now support checks can happen
+            structureHitRef.current = true;
+            
             // Direct cannonball hit always affects the block
             const forceThreshold = block.type === 'stone' ? 8 : (block.type === 'ice' ? 3 : 5);
             
@@ -345,7 +350,7 @@ export default function CastleMinigameScreen() {
           }
         }
         
-        // Physics for falling/destroyed blocks
+        // Physics for falling/destroyed blocks ONLY
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
@@ -370,21 +375,16 @@ export default function CastleMinigameScreen() {
           };
         }
         
-        // Apply any existing velocity
-        if (Math.abs(block.velocityX) > 0.01 || Math.abs(block.velocityY) > 0.01) {
-          return {
-            ...block,
-            x: block.x + block.velocityX,
-            y: block.y + block.velocityY,
-            velocityX: block.velocityX * 0.85,
-            velocityY: block.velocityY * 0.85,
-          };
-        }
-        
+        // Stationary blocks stay stationary until hit
         return block;
       });
       
-      // Second pass: block-to-block collisions with force thresholds
+      // Second pass: block-to-block collisions and support checks
+      // ONLY if structure has been hit at least once
+      if (!structureHitRef.current) {
+        return updatedBlocks; // No collisions or support checks until first hit
+      }
+      
       return updatedBlocks.map(block => {
         if (block.destroyed || block.falling) return block;
         
@@ -413,7 +413,7 @@ export default function CastleMinigameScreen() {
           }
         }
         
-        // Check support
+        // Check support (only after structure has been hit)
         const isOnGround = block.y + block.height >= GROUND_Y - 15;
         if (!isOnGround) {
           const supportArea = updatedBlocks.filter(other =>
@@ -487,8 +487,8 @@ export default function CastleMinigameScreen() {
           }
         }
         
-        // Members fall if support is destroyed
-        if (!member.falling && !member.eliminated) {
+        // Members fall if support is destroyed (only after structure hit)
+        if (!member.falling && !member.eliminated && structureHitRef.current) {
           const supportBlock = currentBlocksNow.find(b => 
             !b.destroyed &&
             !b.falling &&

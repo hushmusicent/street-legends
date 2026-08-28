@@ -102,6 +102,7 @@ export default function CastleLevelsScreen() {
   const cannonballRef = useRef<Cannonball | null>(null);
   const blocksRef = useRef<Block[]>([]);
   const enemiesRef = useRef<Enemy[]>([]);
+  const structureHitRef = useRef(false); // Track if any block has been hit
 
   // Load progress on mount
   useEffect(() => {
@@ -403,12 +404,14 @@ export default function CastleLevelsScreen() {
     setCannonball(null);
     setCameraX(0);
     setShowTrajectory(true);
+    structureHitRef.current = false; // Reset - no blocks hit yet
   }, []);
 
   const startLevel = (level: number) => {
     setCurrentLevel(level);
     generateLevel(level);
     setShowLevelSelect(false);
+    structureHitRef.current = false; // Ensure reset on level start
   };
 
   // Pan responder for aiming
@@ -528,6 +531,9 @@ export default function CastleLevelsScreen() {
             const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
             const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
             
+            // Mark structure as hit - now support checks can happen
+            structureHitRef.current = true;
+            
             // Direct cannonball hit always affects the block
             // Stone needs more force but CAN be knocked over
             const forceThreshold = block.type === 'stone' ? 8 : (block.type === 'ice' ? 3 : 5);
@@ -557,7 +563,7 @@ export default function CastleLevelsScreen() {
           }
         }
         
-        // Physics for falling/destroyed blocks
+        // Physics for falling/destroyed blocks ONLY
         if (block.falling || block.destroyed) {
           let newX = block.x + block.velocityX;
           let newY = block.y + block.velocityY;
@@ -584,21 +590,16 @@ export default function CastleLevelsScreen() {
           };
         }
         
-        // Apply any existing velocity (from nudges)
-        if (Math.abs(block.velocityX) > 0.01 || Math.abs(block.velocityY) > 0.01) {
-          return {
-            ...block,
-            x: block.x + block.velocityX,
-            y: block.y + block.velocityY,
-            velocityX: block.velocityX * 0.85,
-            velocityY: block.velocityY * 0.85,
-          };
-        }
-        
+        // Stationary blocks stay stationary until hit
         return block;
       });
       
-      // Second pass: block-to-block collisions with force thresholds
+      // Second pass: block-to-block collisions and support checks
+      // ONLY if structure has been hit at least once
+      if (!structureHitRef.current) {
+        return updatedBlocks; // No collisions or support checks until first hit
+      }
+      
       return updatedBlocks.map(block => {
         if (block.destroyed || block.falling) return block;
         
@@ -634,7 +635,7 @@ export default function CastleLevelsScreen() {
           }
         }
         
-        // Check if lost support (only for blocks not on ground)
+        // Check if lost support (only after structure has been hit)
         const isOnGround = block.y + block.height >= GROUND_Y - 15;
         if (!isOnGround) {
           // Need substantial support underneath
@@ -715,8 +716,8 @@ export default function CastleLevelsScreen() {
           }
         }
         
-        // Pigs fall if their support is destroyed
-        if (!enemy.falling && !enemy.eliminated) {
+        // Pigs fall if their support is destroyed (only after structure hit)
+        if (!enemy.falling && !enemy.eliminated && structureHitRef.current) {
           const supportBlock = currentBlocksNow.find(b => 
             !b.destroyed &&
             !b.falling &&
