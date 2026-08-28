@@ -113,7 +113,8 @@ export default function CastleMinigameScreen() {
       // Scale server coordinates to world coordinates
       // Server uses x: 400-900, y: 0-400
       // World uses x: 0-1200, y: 0-500
-      const scaleX = (x: number) => 300 + ((x - 300) / 600) * 800;
+      // Shift forts farther right for longer cannonball arc
+      const scaleX = (x: number) => 500 + ((x - 300) / 600) * 700;
       const scaleY = (y: number) => (y / 400) * (GROUND_Y - 50);
       
       // Material properties - VERY HIGH mass and friction to prevent chain reactions

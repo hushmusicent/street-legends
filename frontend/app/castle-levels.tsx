@@ -146,7 +146,8 @@ export default function CastleLevelsScreen() {
     const newBlocks: Block[] = [];
     const newEnemies: Enemy[] = [];
     
-    const fortX = 350;
+    // Fort position - farther from cannon for longer cannonball arc
+    const fortX = 650;
     
     // Material properties - VERY HIGH mass and friction to prevent chain reactions
     // Only direct hits should move blocks, minimal force transfer
