@@ -28,6 +28,7 @@ import {
   visitNightclub,
   robBank,
   startCastleGame,
+  startCarChase,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -58,10 +59,12 @@ export default function MapScreen() {
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
   const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
+  const [selectedCarChase, setSelectedCarChase] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
   const [robbingBank, setRobbingBank] = useState(false);
   const [startingCastleGame, setStartingCastleGame] = useState(false);
+  const [startingCarChase, setStartingCarChase] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -106,6 +109,7 @@ export default function MapScreen() {
   const nearbyNightclubs = useMemo(() => entitiesData?.nightclubs || [], [entitiesData?.nightclubs]);
   const nearbyBanks = useMemo(() => entitiesData?.banks || [], [entitiesData?.banks]);
   const nearbyCastles = useMemo(() => entitiesData?.castles || [], [entitiesData?.castles]);
+  const nearbyCarChases = useMemo(() => entitiesData?.carChases || [], [entitiesData?.carChases]);
 
   // Update global store when entities change
   useEffect(() => {
@@ -388,6 +392,33 @@ export default function MapScreen() {
     }
   }, [playerId, selectedCastle, startingCastleGame]);
 
+  const handleStartCarChase = useCallback(async () => {
+    if (!playerId || !selectedCarChase || startingCarChase) return;
+    setStartingCarChase(true);
+    
+    try {
+      const gameData = await startCarChase(selectedCarChase.id, playerId);
+      setSelectedCarChase(null);
+      
+      // Navigate to the car chase game screen
+      router.push({
+        pathname: '/car-chase',
+        params: {
+          chaseId: selectedCarChase.id,
+          chaseName: selectedCarChase.name,
+          difficulty: selectedCarChase.difficulty.toString(),
+          countyLineDistance: selectedCarChase.county_line_distance.toString(),
+          gameId: gameData.game_id,
+        },
+      });
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || 'Failed to start car chase';
+      Alert.alert('Cannot Start Chase', errorMsg);
+    } finally {
+      setStartingCarChase(false);
+    }
+  }, [playerId, selectedCarChase, startingCarChase]);
+
   // Memoize markers to prevent re-renders
   const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
@@ -447,7 +478,15 @@ export default function MapScreen() {
       level: c.difficulty,
       icon: '🏰',
     })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles]);
+    ...nearbyCarChases.map((cc) => ({
+      id: cc.id,
+      coordinate: { latitude: cc.latitude, longitude: cc.longitude },
+      type: 'carChase' as const,
+      name: cc.name,
+      level: cc.difficulty,
+      icon: '🚗',
+    })),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -474,8 +513,11 @@ export default function MapScreen() {
     } else if (marker.type === 'castle') {
       const castle = nearbyCastles.find((c) => c.id === marker.id);
       if (castle) setSelectedCastle(castle);
+    } else if (marker.type === 'carChase') {
+      const carChase = nearbyCarChases.find((cc) => cc.id === marker.id);
+      if (carChase) setSelectedCarChase(carChase);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases]);
 
   if (loading) {
     return (
@@ -932,14 +974,14 @@ export default function MapScreen() {
 
       {/* Castle Cannon Mini-game Modal */}
       <Modal
-        visible={!!selectedCastle}
+        visible={!!selectedCastle || !!selectedCarChase}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedCastle(null)}
+        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); }}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setSelectedCastle(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); }}>
           <Pressable style={styles.terrModal} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity style={styles.terrClose} onPress={() => setSelectedCastle(null)}>
+            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); }}>
               <Ionicons name="close" size={22} color="#666" />
             </TouchableOpacity>
 
@@ -1001,6 +1043,82 @@ export default function MapScreen() {
                       <>
                         <Ionicons name="flame" size={18} color="#fff" />
                         <Text style={styles.terrBtnText}>ATTACK FORTRESS</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* Car Chase Modal Content */}
+            {selectedCarChase && (
+              <>
+                <View style={styles.terrHeader}>
+                  <Text style={{ fontSize: 28 }}>🚗💨</Text>
+                  <View style={styles.terrHeaderInfo}>
+                    <Text style={[styles.terrName, { color: '#e74c3c' }]}>{selectedCarChase.name}</Text>
+                    <Text style={styles.terrOwner}>Car Chase Event</Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.terrClose} 
+                    onPress={() => setSelectedCarChase(null)}
+                  >
+                    <Ionicons name="close" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.terrStats}>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Difficulty:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#e74c3c' }]}>
+                      {'⭐'.repeat(Math.min(5, Math.ceil(selectedCarChase.difficulty / 2)))}
+                    </Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Distance:</Text>
+                    <Text style={styles.terrStatValue}>{selectedCarChase.county_line_distance}m to county line</Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Cash Reward:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#4caf50' }]}>
+                      ${selectedCarChase.min_reward} - ${selectedCarChase.max_reward}
+                    </Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>XP/Rep:</Text>
+                    <Text style={styles.terrStatValue}>
+                      +{selectedCarChase.xp_reward} XP / +{selectedCarChase.rep_reward} Rep
+                    </Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Cooldown:</Text>
+                    <Text style={styles.terrStatValue}>15 minutes</Text>
+                  </View>
+                </View>
+
+                <View style={styles.castleInfo}>
+                  <Text style={styles.castleInfoTitle}>🚔 Mission Briefing</Text>
+                  <Text style={styles.castleInfoText}>
+                    Escape the cops before they catch you!{'\n'}
+                    • Tap LEFT or RIGHT to change lanes{'\n'}
+                    • Avoid traffic and obstacles{'\n'}
+                    • Police get closer over time{'\n'}
+                    • Reach the county line to escape!
+                  </Text>
+                </View>
+
+                <View style={styles.terrActions}>
+                  <TouchableOpacity
+                    style={[styles.terrBtn, { backgroundColor: '#e74c3c' }]}
+                    onPress={handleStartCarChase}
+                    disabled={startingCarChase}
+                  >
+                    {startingCarChase ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="car-sport" size={18} color="#fff" />
+                        <Text style={styles.terrBtnText}>START CHASE</Text>
                       </>
                     )}
                   </TouchableOpacity>

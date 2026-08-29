@@ -9,6 +9,7 @@ import {
   spawnNightclubs,
   spawnBanks,
   spawnCastles,
+  spawnCarChases,
   getPlayer,
   updatePlayerPosition,
 } from '../services/api';
@@ -40,6 +41,7 @@ export interface MapEntitiesData {
   nightclubs: any[];
   banks: any[];
   castles: any[];
+  carChases: any[];
 }
 
 interface UseMapEntitiesOptions {
@@ -78,6 +80,7 @@ export const useMapEntities = ({
         spawnNightclubs(latitude, longitude, playerLevel),
         spawnBanks(latitude, longitude, playerLevel),
         spawnCastles(latitude, longitude, playerLevel),
+        spawnCarChases(latitude, longitude, playerLevel),
       ]);
 
       return {
@@ -90,6 +93,7 @@ export const useMapEntities = ({
         nightclubs: results[6].status === 'fulfilled' ? results[6].value : [],
         banks: results[7].status === 'fulfilled' ? results[7].value : [],
         castles: results[8].status === 'fulfilled' ? results[8].value : [],
+        carChases: results[9].status === 'fulfilled' ? results[9].value : [],
       };
     },
     enabled: enabled && !!playerId && !!latitude && !!longitude,

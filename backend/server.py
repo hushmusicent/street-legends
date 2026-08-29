@@ -3307,6 +3307,188 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool)
         }
 
 
+# ============== CAR CHASE MINI-GAME ==============
+
+CAR_CHASE_NAMES = [
+    "Highway Pursuit", "Downtown Escape", "Bridge Run", "Tunnel Chase",
+    "Industrial Zone", "Harbor Highway", "City Center", "Mountain Pass",
+    "Airport Freeway", "Strip Mile", "Back Alley Run", "Riverside Chase"
+]
+
+@api_router.get("/car-chases/spawn")
+async def spawn_car_chases(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn car chase events near a location — 25% of areas have one"""
+    grid_lat = round(latitude * 150) / 150
+    grid_lng = round(longitude * 150) / 150
+    area_seed = hash(f"carchase_{grid_lat}_{grid_lng}")
+    rng = random.Random(area_seed)
+    
+    # 25% chance of car chase event in an area
+    if rng.random() > 0.25:
+        return []
+    
+    # Check if car chase already exists nearby
+    existing = await db.car_chases.find({
+        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
+        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
+    }).to_list(10)
+    
+    if existing:
+        for chase in existing:
+            chase.pop("_id", None)
+        return existing
+    
+    lat_offset = rng.uniform(-0.004, 0.004)
+    lng_offset = rng.uniform(-0.004, 0.004)
+    
+    # Difficulty scales with player level (1-10)
+    difficulty = min(10, max(1, (player_level // 5) + rng.randint(1, 3)))
+    
+    # Rewards scale with difficulty
+    base_cash = 150 + (difficulty * 100) + (player_level * 30)
+    
+    car_chase = {
+        "id": str(uuid.uuid4()),
+        "name": rng.choice(CAR_CHASE_NAMES),
+        "latitude": latitude + lat_offset,
+        "longitude": longitude + lng_offset,
+        "difficulty": difficulty,
+        "min_reward": int(base_cash * 0.8),
+        "max_reward": int(base_cash * 1.5),
+        "xp_reward": 20 + (difficulty * 5),
+        "rep_reward": 3 + difficulty,
+        "county_line_distance": 5000 + (difficulty * 1000),  # Distance to win
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.car_chases.insert_one(car_chase)
+    car_chase.pop("_id", None)
+    return [car_chase]
+
+
+@api_router.post("/car-chases/{chase_id}/start")
+async def start_car_chase(chase_id: str, player_id: str):
+    """Start a car chase mini-game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    car_chase = await db.car_chases.find_one({"id": chase_id})
+    if not car_chase:
+        raise HTTPException(status_code=404, detail="Car chase event not found")
+    
+    # Check cooldown (15 minutes per player per chase)
+    last_attempt = player.get("carchase_cooldowns", {}).get(chase_id)
+    if last_attempt:
+        last_time = datetime.fromisoformat(last_attempt)
+        if (datetime.utcnow() - last_time).total_seconds() < 900:  # 15 min
+            remaining = 900 - (datetime.utcnow() - last_time).total_seconds()
+            raise HTTPException(status_code=400, detail=f"Cooldown active. Try again in {int(remaining // 60)} minutes.")
+    
+    # Create game session
+    game = {
+        "id": str(uuid.uuid4()),
+        "player_id": player_id,
+        "chase_id": chase_id,
+        "chase_name": car_chase["name"],
+        "difficulty": car_chase["difficulty"],
+        "county_line_distance": car_chase["county_line_distance"],
+        "min_reward": car_chase["min_reward"],
+        "max_reward": car_chase["max_reward"],
+        "xp_reward": car_chase["xp_reward"],
+        "rep_reward": car_chase["rep_reward"],
+        "status": "active",
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.car_chase_games.insert_one(game)
+    game.pop("_id", None)
+    
+    return {
+        "game_id": game["id"],
+        "chase_name": car_chase["name"],
+        "difficulty": car_chase["difficulty"],
+        "county_line_distance": car_chase["county_line_distance"],
+    }
+
+
+@api_router.post("/car-chases/game/{game_id}/complete")
+async def complete_car_chase(game_id: str, won: bool, distance_traveled: int):
+    """Complete a car chase and award rewards if won"""
+    game = await db.car_chase_games.find_one({"id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    
+    if game["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already completed")
+    
+    player = await db.players.find_one({"id": game["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    chase_id = game["chase_id"]
+    
+    # Update game status
+    await db.car_chase_games.update_one(
+        {"id": game_id},
+        {"$set": {
+            "status": "completed",
+            "won": won,
+            "distance_traveled": distance_traveled,
+            "completed_at": datetime.utcnow().isoformat(),
+        }}
+    )
+    
+    # Set cooldown
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {f"carchase_cooldowns.{chase_id}": datetime.utcnow().isoformat()}}
+    )
+    
+    if won:
+        # Calculate rewards based on difficulty and distance
+        difficulty = game["difficulty"]
+        county_line = game["county_line_distance"]
+        
+        # Base reward + bonus for distance traveled
+        distance_bonus = min(1.5, distance_traveled / county_line)
+        base_cash = random.randint(game["min_reward"], game["max_reward"])
+        cash_reward = int(base_cash * distance_bonus)
+        
+        xp_reward = int(game["xp_reward"] * distance_bonus)
+        rep_reward = int(game["rep_reward"] * distance_bonus)
+        
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$inc": {"cash": cash_reward, "xp": xp_reward, "reputation": rep_reward}}
+        )
+        
+        updated_player = await db.players.find_one({"id": game["player_id"]})
+        
+        return {
+            "success": True,
+            "won": True,
+            "message": f"🚗💨 ESCAPED! You outran the cops on {game['chase_name']}!",
+            "chase_name": game["chase_name"],
+            "distance_traveled": distance_traveled,
+            "rewards": {
+                "cash": cash_reward,
+                "xp": xp_reward,
+                "reputation": rep_reward,
+            },
+            "cash": updated_player.get("cash", 0),
+        }
+    else:
+        return {
+            "success": True,
+            "won": False,
+            "message": f"🚔 BUSTED! The cops caught you on {game['chase_name']}!",
+            "chase_name": game["chase_name"],
+            "distance_traveled": distance_traveled,
+            "rewards": None,
+        }
+
+
 # ============== EQUIPMENT ENDPOINTS ==============
 
 @api_router.get("/items")

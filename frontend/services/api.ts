@@ -371,4 +371,20 @@ export const repairItem = async (playerId: string, itemIndex: number): Promise<{
   return response.data;
 };
 
+// Car Chase APIs
+export const spawnCarChases = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/car-chases/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const startCarChase = async (chaseId: string, playerId: string) => {
+  const response = await api.post(`/car-chases/${chaseId}/start?player_id=${playerId}`);
+  return response.data;
+};
+
+export const completeCarChase = async (gameId: string, won: boolean, distanceTraveled: number) => {
+  const response = await api.post(`/car-chases/game/${gameId}/complete?won=${won}&distance_traveled=${distanceTraveled}`);
+  return response.data;
+};
+
 export default api;

@@ -244,6 +244,27 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
             <Text style={styles.castleText}>CASTLE ASSAULT</Text>
           </TouchableOpacity>
 
+          {/* Car Chase Mini-game */}
+          <TouchableOpacity 
+            style={styles.carChaseRow} 
+            onPress={() => {
+              onClose();
+              setTimeout(() => router.push({
+                pathname: '/car-chase',
+                params: {
+                  standalone: 'true',
+                  chaseName: 'Practice Run',
+                  difficulty: '5',
+                  countyLineDistance: '8000',
+                },
+              }), 300);
+            }} 
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 18 }}>🚗💨</Text>
+            <Text style={styles.carChaseText}>CAR CHASE</Text>
+          </TouchableOpacity>
+
           {/* Quit Game */}
           {showQuit && (
             <>
@@ -415,6 +436,24 @@ const styles = StyleSheet.create({
   },
   castleText: {
     color: '#CD853F',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  carChaseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(231, 76, 60, 0.4)',
+    marginTop: 8,
+  },
+  carChaseText: {
+    color: '#e74c3c',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,
