@@ -12,7 +12,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../services/api';
@@ -58,11 +58,16 @@ const LEVELS = [
 // Note: Block, Enemy, and Cannonball interfaces are imported from useCastlePhysics
 
 export default function CastleLevelsScreen() {
+  // Get route params - if randomLevel is true, skip level selection and pick a random level
+  const params = useLocalSearchParams<{ randomLevel?: string }>();
+  const isRandomMode = params.randomLevel === 'true';
+  
   const [currentLevel, setCurrentLevel] = useState(1);
   const [unlockedLevel, setUnlockedLevel] = useState(1);
-  const [showLevelSelect, setShowLevelSelect] = useState(true);
+  const [showLevelSelect, setShowLevelSelect] = useState(!isRandomMode); // Skip level select in random mode
   const [showResults, setShowResults] = useState(false);
   const [won, setWon] = useState(false);
+  const isFromMap = isRandomMode; // Track if launched from map (read-only)
   
   // Game state
   const [angle, setAngle] = useState(45);
@@ -87,6 +92,19 @@ export default function CastleLevelsScreen() {
   useEffect(() => {
     loadProgress();
   }, []);
+
+  // Auto-start random level when launched from map (random mode)
+  useEffect(() => {
+    if (isRandomMode) {
+      // Pick a random level between 1-10
+      const randomLevelNum = Math.floor(Math.random() * 10) + 1;
+      setCurrentLevel(randomLevelNum);
+      // Generate the level immediately after state is set
+      setTimeout(() => {
+        generateLevel(randomLevelNum);
+      }, 100);
+    }
+  }, [isRandomMode]);
 
   // Keep refs in sync
   useEffect(() => {
@@ -412,11 +430,24 @@ export default function CastleLevelsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.gameHeader}>
-        <TouchableOpacity style={styles.backButton} onPress={() => setShowLevelSelect(true)}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => {
+            if (isFromMap) {
+              // Go back to map directly
+              router.back();
+            } else {
+              // Show level selection
+              setShowLevelSelect(true);
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={styles.gameHeaderCenter}>
-          <Text style={styles.gameHeaderTitle}>Level {currentLevel}</Text>
+          <Text style={styles.gameHeaderTitle}>
+            {isFromMap ? '🎲 Random ' : ''}Level {currentLevel}
+          </Text>
           <Text style={styles.gameHeaderSubtitle}>{config.name}</Text>
         </View>
         <View style={styles.shotsContainer}>
@@ -639,7 +670,7 @@ export default function CastleLevelsScreen() {
             )}
             
             <View style={styles.resultsButtons}>
-              {won && currentLevel < 10 && (
+              {won && currentLevel < 10 && !isFromMap && (
                 <TouchableOpacity
                   style={[styles.resultBtn, { backgroundColor: '#4ade80' }]}
                   onPress={() => {
@@ -648,6 +679,22 @@ export default function CastleLevelsScreen() {
                   }}
                 >
                   <Text style={styles.resultBtnText}>NEXT LEVEL →</Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* In random/map mode, allow playing another random level */}
+              {isFromMap && (
+                <TouchableOpacity
+                  style={[styles.resultBtn, { backgroundColor: '#4ade80' }]}
+                  onPress={() => {
+                    setShowResults(false);
+                    // Pick a new random level
+                    const newRandomLevel = Math.floor(Math.random() * 10) + 1;
+                    setCurrentLevel(newRandomLevel);
+                    generateLevel(newRandomLevel);
+                  }}
+                >
+                  <Text style={styles.resultBtnText}>🎲 RANDOM LEVEL</Text>
                 </TouchableOpacity>
               )}
               
@@ -664,11 +711,17 @@ export default function CastleLevelsScreen() {
               <TouchableOpacity
                 style={[styles.resultBtn, { backgroundColor: '#333' }]}
                 onPress={() => {
-                  setShowResults(false);
-                  setShowLevelSelect(true);
+                  if (isFromMap) {
+                    // Go back to map
+                    router.back();
+                  } else {
+                    // Show level selection
+                    setShowResults(false);
+                    setShowLevelSelect(true);
+                  }
                 }}
               >
-                <Text style={styles.resultBtnText}>LEVEL SELECT</Text>
+                <Text style={styles.resultBtnText}>{isFromMap ? 'EXIT TO MAP' : 'LEVEL SELECT'}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -419,9 +419,12 @@ export default function MapScreen() {
     
     setSelectedCastle(null);
     
-    // Navigate directly to castle-levels (unified castle mini-game)
-    // Uses the same component as the options panel
-    router.push('/castle-levels');
+    // Navigate to castle-levels with randomLevel flag
+    // This skips level selection and drops player into a random level
+    router.push({
+      pathname: '/castle-levels',
+      params: { randomLevel: 'true' },
+    });
   }, [playerId, selectedCastle, localCooldowns]);
 
   const handleStartCarChase = useCallback(async () => {
