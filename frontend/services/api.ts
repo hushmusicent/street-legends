@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Player, Monster, Mission, Battle, Guild, Skill, CharacterClass, NearbyPlayer, LeaderboardEntry, ChatMessage, Position } from '../types/game';
 
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+export const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../services/api';
 import {
   PHYSICS_CONSTANTS,
   Block,
@@ -26,8 +27,8 @@ import {
   generateLevelStructure,
 } from '../hooks/useCastlePhysics';
 
-// Pixel art gangster character sprite URL
-const GANGSTER_SPRITE_URL = 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/b41101c4d68b4e3c88bec1eb1999f5c9_1788011836917.jpg';
+// Pixel art gangster character sprite URL (transparent PNG served from backend)
+const GANGSTER_SPRITE_URL = `${API_URL}/static/gangster_sprite.png`;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
