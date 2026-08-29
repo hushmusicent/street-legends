@@ -90,7 +90,8 @@ export default function CastleMinigameScreen() {
   useEffect(() => {
     if (gameData?.layout) {
       const layout: GameLayout = gameData.layout;
-      const difficulty = gameData.difficulty || 1;
+      // Ensure minimum difficulty of 5 for map castles to produce heavy, stable fort structures
+      const difficulty = Math.max(5, gameData.difficulty || 5);
       
       // Get enemy names from layout or use defaults
       const enemyNames = layout.gang_members?.map(m => m.name) || ['Thug', 'Goon', 'Boss'];
