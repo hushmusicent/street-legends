@@ -8,6 +8,7 @@ import {
   Animated,
   PanResponder,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -24,6 +25,9 @@ import {
   updateEnemiesPhysics,
   generateLevelStructure,
 } from '../hooks/useCastlePhysics';
+
+// Pixel art gangster character sprite URL
+const GANGSTER_SPRITE_URL = 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/b41101c4d68b4e3c88bec1eb1999f5c9_1788011836917.jpg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -486,48 +490,41 @@ export default function CastleMinigameScreen() {
         );
       })}
       
-      {/* Green Pigs - Angry Birds style */}
+      {/* Gangster Enemies - Pixel art gangster characters */}
       {gangMembers.map(member => {
+        // Don't render if fallen far below ground
         if (member.y > GROUND_Y + 100) return null;
         
+        // When eliminated and falling, apply fade out animation
+        const isDisappearing = member.eliminated && member.falling;
+        
         return (
-          <View
+          <Animated.View
             key={member.id}
             style={[
-              styles.pig,
+              styles.gangsterContainer,
               {
-                left: member.x,
-                top: member.y,
-                opacity: member.eliminated ? 0.3 : 1,
+                left: member.x - 5, // Center the sprite
+                top: member.y - 10, // Adjust for taller sprite
+                opacity: isDisappearing ? 0.2 : (member.eliminated ? 0 : 1),
+                transform: [
+                  { rotate: member.falling ? `${(member.velocityX || 0) * 5}deg` : '0deg' }
+                ],
               },
             ]}
           >
-            {/* Pig body (green circle) */}
-            <View style={styles.pigBody}>
-              {/* Ears */}
-              <View style={[styles.pigEar, { left: -3, top: 2 }]} />
-              <View style={[styles.pigEar, { right: -3, top: 2 }]} />
-              {/* Eyes */}
-              <View style={styles.pigEyeLeft}>
-                <View style={styles.pigPupil} />
+            <Image
+              source={{ uri: GANGSTER_SPRITE_URL }}
+              style={styles.gangsterSprite}
+              resizeMode="contain"
+            />
+            {/* Health indicator when not eliminated */}
+            {!member.eliminated && (
+              <View style={styles.gangsterHealthBar}>
+                <View style={styles.gangsterHealthFill} />
               </View>
-              <View style={styles.pigEyeRight}>
-                <View style={styles.pigPupil} />
-              </View>
-              {/* Snout */}
-              <View style={styles.pigSnout}>
-                <View style={styles.pigNostril} />
-                <View style={[styles.pigNostril, { left: 12 }]} />
-              </View>
-              {/* Eyebrows when hit */}
-              {member.eliminated && (
-                <>
-                  <View style={[styles.pigBrow, { left: 6, transform: [{ rotate: '-20deg' }] }]} />
-                  <View style={[styles.pigBrow, { right: 6, transform: [{ rotate: '20deg' }] }]} />
-                </>
-              )}
-            </View>
-          </View>
+            )}
+          </Animated.View>
         );
       })}
     </View>
@@ -901,16 +898,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 2,
   },
-  // Pig styles (Angry Birds style green pigs)
-  pig: { position: 'absolute', width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  pigBody: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#7CB342', borderWidth: 3, borderColor: '#558B2F', position: 'relative', overflow: 'visible' },
-  pigEar: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#7CB342', borderWidth: 2, borderColor: '#558B2F' },
-  pigEyeLeft: { position: 'absolute', top: 8, left: 5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#333' },
-  pigEyeRight: { position: 'absolute', top: 8, right: 5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#333' },
-  pigPupil: { position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: '#333' },
-  pigSnout: { position: 'absolute', bottom: 4, left: '50%', marginLeft: -10, width: 20, height: 12, borderRadius: 6, backgroundColor: '#8BC34A', borderWidth: 2, borderColor: '#558B2F' },
-  pigNostril: { position: 'absolute', top: 3, left: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: '#558B2F' },
-  pigBrow: { position: 'absolute', top: 4, width: 8, height: 3, backgroundColor: '#333', borderRadius: 1 },
+  // Gangster sprite styles (pixel art gangster characters)
+  gangsterContainer: { 
+    position: 'absolute', 
+    width: 50, 
+    height: 60, 
+    alignItems: 'center', 
+    justifyContent: 'flex-end' 
+  },
+  gangsterSprite: { 
+    width: 48, 
+    height: 56, 
+  },
+  gangsterHealthBar: {
+    position: 'absolute',
+    bottom: -6,
+    width: 36,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  gangsterHealthFill: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#e74c3c',
+  },
   aimHUD: {
     position: 'absolute',
     top: 10,
