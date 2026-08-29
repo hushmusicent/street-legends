@@ -7,6 +7,7 @@ import {
   Dimensions,
   Alert,
   Animated,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -63,6 +64,74 @@ interface GameState {
   won: boolean;
 }
 
+// Reward calculation interface
+interface GameRewards {
+  baseCash: number;
+  distanceBonus: number;
+  timeBonus: number;
+  difficultyBonus: number;
+  totalCash: number;
+  baseXP: number;
+  totalXP: number;
+  reputation: number;
+}
+
+// Calculate rewards based on performance
+const calculateRewards = (
+  distance: number,
+  timeSeconds: number,
+  difficulty: number,
+  countyLineDistance: number,
+  won: boolean
+): GameRewards => {
+  if (!won) {
+    return {
+      baseCash: 0,
+      distanceBonus: 0,
+      timeBonus: 0,
+      difficultyBonus: 0,
+      totalCash: 0,
+      baseXP: 0,
+      totalXP: 0,
+      reputation: 0,
+    };
+  }
+  
+  // Base rewards for completing the chase
+  const baseCash = 100 + (difficulty * 20);
+  const baseXP = 50 + (difficulty * 10);
+  
+  // Distance bonus - reward for how far beyond minimum they traveled
+  // (distance should be at least countyLineDistance to win)
+  const distancePercent = Math.min(150, (distance / countyLineDistance) * 100);
+  const distanceBonus = Math.floor(baseCash * (distancePercent - 100) / 100 * 0.5);
+  
+  // Time bonus - longer survival = more rewards (capped at 120 seconds)
+  const effectiveTime = Math.min(120, timeSeconds);
+  const timeBonus = Math.floor(effectiveTime * 2);
+  
+  // Difficulty multiplier bonus
+  const difficultyMultiplier = 1 + (difficulty * 0.15);
+  const difficultyBonus = Math.floor((baseCash + distanceBonus + timeBonus) * (difficultyMultiplier - 1));
+  
+  const totalCash = baseCash + Math.max(0, distanceBonus) + timeBonus + difficultyBonus;
+  const totalXP = Math.floor(baseXP * difficultyMultiplier) + Math.floor(timeSeconds * 0.5);
+  
+  // Reputation scales with difficulty
+  const reputation = Math.floor(5 + difficulty * 2);
+  
+  return {
+    baseCash,
+    distanceBonus: Math.max(0, distanceBonus),
+    timeBonus,
+    difficultyBonus,
+    totalCash,
+    baseXP,
+    totalXP,
+    reputation,
+  };
+};
+
 export default function CarChaseGame() {
   const params = useLocalSearchParams();
   const chaseId = params.chaseId as string;
@@ -76,6 +145,8 @@ export default function CarChaseGame() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
+  const [showResultsModal, setShowResultsModal] = useState(false);
+  const [gameRewards, setGameRewards] = useState<GameRewards | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     playerLane: 1,
     obstacles: [],
@@ -90,6 +161,12 @@ export default function CarChaseGame() {
   const obstacleIdRef = useRef(0);
   const lastSpawnRef = useRef(0);
   const playerLaneAnim = useRef(new Animated.Value(1)).current;
+  const gameStartTimeRef = useRef<number>(0);
+  const rewardAnimValues = useRef({
+    cash: new Animated.Value(0),
+    xp: new Animated.Value(0),
+    rep: new Animated.Value(0),
+  }).current;
 
   // Initialize game
   useEffect(() => {
@@ -127,6 +204,9 @@ export default function CarChaseGame() {
 
   const startGame = () => {
     setGameStarted(true);
+    setShowResultsModal(false);
+    setGameRewards(null);
+    gameStartTimeRef.current = Date.now();
     setGameState({
       playerLane: 1,
       obstacles: [],
@@ -139,6 +219,10 @@ export default function CarChaseGame() {
     lastSpawnRef.current = 0;
     obstacleIdRef.current = 0;
     playerLaneAnim.setValue(1);
+    // Reset animation values
+    rewardAnimValues.cash.setValue(0);
+    rewardAnimValues.xp.setValue(0);
+    rewardAnimValues.rep.setValue(0);
     runGameLoop();
   };
 
@@ -272,25 +356,46 @@ export default function CarChaseGame() {
   }, [gameState.isGameOver]);
 
   const handleGameOver = async () => {
+    // Calculate time played
+    const timePlayedSeconds = (Date.now() - gameStartTimeRef.current) / 1000;
+    
+    // Calculate rewards based on performance
+    const rewards = calculateRewards(
+      gameState.distance,
+      timePlayedSeconds,
+      difficulty,
+      countyLineDistance,
+      gameState.won
+    );
+    
+    setGameRewards(rewards);
+    setShowResultsModal(true);
+    
+    // Animate reward values if won
+    if (gameState.won) {
+      Animated.sequence([
+        Animated.timing(rewardAnimValues.cash, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rewardAnimValues.xp, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rewardAnimValues.rep, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    
     if (!gameId) return;
     
     if (isStandalone) {
-      // Standalone mode - just show result
-      if (gameState.won) {
-        showGameToast({
-          type: 'success',
-          title: 'ESCAPED!',
-          message: `You reached the county line! Distance: ${Math.floor(gameState.distance)}m`,
-          duration: 3000,
-        });
-      } else {
-        showGameToast({
-          type: 'error',
-          title: 'BUSTED!',
-          message: `Caught at ${Math.floor(gameState.distance)}m`,
-          duration: 3000,
-        });
-      }
+      // Standalone mode - rewards are visual only
       return;
     }
     
@@ -300,16 +405,9 @@ export default function CarChaseGame() {
       if (result.won) {
         showGameToast({
           type: 'success',
-          title: 'ESCAPED!',
-          message: `+$${result.rewards.cash} | +${result.rewards.xp} XP`,
-          duration: 3000,
-        });
-      } else {
-        showGameToast({
-          type: 'error',
-          title: 'BUSTED!',
-          message: result.message,
-          duration: 3000,
+          title: 'REWARDS COLLECTED!',
+          message: `+$${result.rewards?.cash || rewards.totalCash} | +${result.rewards?.xp || rewards.totalXP} XP`,
+          duration: 2000,
         });
       }
     } catch (error) {
@@ -465,22 +563,13 @@ export default function CarChaseGame() {
               <Text style={styles.carEmoji}>🚘</Text>
             </Animated.View>
 
-            {/* Game Over Overlay */}
+            {/* Simple Overlay when game is over (full results shown in modal) */}
             {gameState.isGameOver && (
               <View style={styles.gameOverOverlay}>
-                <Text style={styles.gameOverEmoji}>{gameState.won ? '🏁' : '🚔'}</Text>
+                <Text style={styles.gameOverEmoji}>{gameState.won ? '🏁' : '💥'}</Text>
                 <Text style={[styles.gameOverText, { color: gameState.won ? '#4caf50' : '#e74c3c' }]}>
-                  {gameState.won ? 'ESCAPED!' : 'BUSTED!'}
+                  {gameState.won ? 'ESCAPED!' : 'CRASHED!'}
                 </Text>
-                <Text style={styles.gameOverDistance}>
-                  Distance: {Math.floor(gameState.distance)}m
-                </Text>
-                <TouchableOpacity style={styles.retryButton} onPress={startGame}>
-                  <Text style={styles.retryButtonText}>TRY AGAIN</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.exitButton} onPress={handleGoBack}>
-                  <Text style={styles.exitButtonText}>EXIT</Text>
-                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -508,6 +597,161 @@ export default function CarChaseGame() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Results Modal */}
+      <Modal
+        visible={showResultsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowResultsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.resultsModal}>
+            {gameState.won ? (
+              // WIN SCREEN - Show rewards
+              <>
+                <View style={styles.resultHeader}>
+                  <Text style={styles.resultEmoji}>🏁</Text>
+                  <Text style={styles.resultTitle}>ESCAPED!</Text>
+                  <Text style={styles.resultSubtitle}>You reached the county line!</Text>
+                </View>
+
+                <View style={styles.statsContainer}>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Distance:</Text>
+                    <Text style={styles.statValue}>{Math.floor(gameState.distance)}m</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Time:</Text>
+                    <Text style={styles.statValue}>
+                      {Math.floor((Date.now() - gameStartTimeRef.current) / 1000)}s
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.rewardsContainer}>
+                  <Text style={styles.rewardsTitle}>🎁 REWARDS</Text>
+                  
+                  <Animated.View style={[styles.rewardRow, { 
+                    opacity: rewardAnimValues.cash,
+                    transform: [{ 
+                      translateX: rewardAnimValues.cash.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-50, 0]
+                      })
+                    }]
+                  }]}>
+                    <View style={styles.rewardIcon}>
+                      <Text style={styles.rewardIconText}>💰</Text>
+                    </View>
+                    <View style={styles.rewardDetails}>
+                      <Text style={styles.rewardLabel}>Cash</Text>
+                      <Text style={styles.rewardValue}>+${gameRewards?.totalCash || 0}</Text>
+                      {gameRewards && gameRewards.distanceBonus > 0 && (
+                        <Text style={styles.rewardBonus}>
+                          (Base ${gameRewards.baseCash} + ${gameRewards.timeBonus} time + ${gameRewards.difficultyBonus} difficulty)
+                        </Text>
+                      )}
+                    </View>
+                  </Animated.View>
+
+                  <Animated.View style={[styles.rewardRow, { 
+                    opacity: rewardAnimValues.xp,
+                    transform: [{ 
+                      translateX: rewardAnimValues.xp.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-50, 0]
+                      })
+                    }]
+                  }]}>
+                    <View style={[styles.rewardIcon, { backgroundColor: '#2196f320' }]}>
+                      <Text style={styles.rewardIconText}>⭐</Text>
+                    </View>
+                    <View style={styles.rewardDetails}>
+                      <Text style={styles.rewardLabel}>Experience</Text>
+                      <Text style={[styles.rewardValue, { color: '#2196f3' }]}>
+                        +{gameRewards?.totalXP || 0} XP
+                      </Text>
+                    </View>
+                  </Animated.View>
+
+                  <Animated.View style={[styles.rewardRow, { 
+                    opacity: rewardAnimValues.rep,
+                    transform: [{ 
+                      translateX: rewardAnimValues.rep.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-50, 0]
+                      })
+                    }]
+                  }]}>
+                    <View style={[styles.rewardIcon, { backgroundColor: '#9c27b020' }]}>
+                      <Text style={styles.rewardIconText}>👑</Text>
+                    </View>
+                    <View style={styles.rewardDetails}>
+                      <Text style={styles.rewardLabel}>Reputation</Text>
+                      <Text style={[styles.rewardValue, { color: '#9c27b0' }]}>
+                        +{gameRewards?.reputation || 0}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                </View>
+
+                <TouchableOpacity style={styles.collectButton} onPress={handleGoBack}>
+                  <Ionicons name="checkmark-circle" size={24} color="#fff" />
+                  <Text style={styles.collectButtonText}>COLLECT REWARDS</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.playAgainButton} onPress={startGame}>
+                  <Text style={styles.playAgainText}>Play Again</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              // LOSE SCREEN - No rewards
+              <>
+                <View style={styles.resultHeader}>
+                  <Text style={styles.resultEmoji}>🚔</Text>
+                  <Text style={[styles.resultTitle, { color: '#e74c3c' }]}>BUSTED!</Text>
+                  <Text style={styles.resultSubtitle}>
+                    {gameState.policeY >= POLICE_CATCH_Y - 10 
+                      ? 'The police caught up with you!' 
+                      : 'You crashed into an obstacle!'}
+                  </Text>
+                </View>
+
+                <View style={styles.statsContainer}>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Distance Reached:</Text>
+                    <Text style={styles.statValue}>{Math.floor(gameState.distance)}m</Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Text style={styles.statLabel}>Progress:</Text>
+                    <Text style={styles.statValue}>
+                      {Math.floor((gameState.distance / countyLineDistance) * 100)}%
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.noRewardsBox}>
+                  <Ionicons name="close-circle" size={40} color="#e74c3c" />
+                  <Text style={styles.noRewardsText}>No Rewards</Text>
+                  <Text style={styles.noRewardsSubtext}>
+                    Reach the county line to earn rewards!
+                  </Text>
+                </View>
+
+                <TouchableOpacity style={styles.retryButtonLarge} onPress={startGame}>
+                  <Ionicons name="refresh" size={24} color="#fff" />
+                  <Text style={styles.retryButtonLargeText}>TRY AGAIN</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
+                  <Text style={styles.exitButtonLargeText}>Exit</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -758,5 +1002,187 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  // Results Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  resultsModal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#333',
+  },
+  resultHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  resultEmoji: {
+    fontSize: 64,
+    marginBottom: 8,
+  },
+  resultTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#4caf50',
+    marginBottom: 4,
+  },
+  resultSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+  },
+  statsContainer: {
+    width: '100%',
+    backgroundColor: '#0f0f1a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#888',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  rewardsContainer: {
+    width: '100%',
+    backgroundColor: '#0a2a0a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#4caf5040',
+  },
+  rewardsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4caf50',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  rewardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  rewardIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#4caf5020',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  rewardIconText: {
+    fontSize: 24,
+  },
+  rewardDetails: {
+    flex: 1,
+  },
+  rewardLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 2,
+  },
+  rewardValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#4caf50',
+  },
+  rewardBonus: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 2,
+  },
+  collectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4caf50',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    gap: 8,
+  },
+  collectButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  playAgainButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+  },
+  playAgainText: {
+    color: '#888',
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  noRewardsBox: {
+    width: '100%',
+    backgroundColor: '#2a0a0a',
+    borderRadius: 12,
+    padding: 24,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e74c3c40',
+  },
+  noRewardsText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#e74c3c',
+    marginTop: 8,
+  },
+  noRewardsSubtext: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  retryButtonLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f39c12',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    gap: 8,
+  },
+  retryButtonLargeText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  exitButtonLarge: {
+    marginTop: 12,
+    paddingVertical: 12,
+  },
+  exitButtonLargeText: {
+    color: '#888',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });
