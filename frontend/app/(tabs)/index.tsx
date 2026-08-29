@@ -34,7 +34,7 @@ import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
 import { SFX } from '../../hooks/useSoundEffects';
-import { useMapEntities, usePlayerData, useInvalidateMapQueries } from '../../hooks/useMapQueries';
+import { useMapEntities, usePlayerData, useInvalidateMapQueries, useMinigameCooldowns } from '../../hooks/useMapQueries';
 
 export default function MapScreen() {
   const {
@@ -91,6 +91,44 @@ export default function MapScreen() {
     playerId: playerId || '',
     enabled: !!playerId,
   });
+
+  // Mini-game cooldowns query
+  const { data: cooldownsData, refetch: refetchCooldowns } = useMinigameCooldowns({
+    playerId: playerId || '',
+    enabled: !!playerId,
+  });
+
+  // Local countdown state for smooth timer updates
+  const [localCooldowns, setLocalCooldowns] = useState<{ [key: string]: number }>({});
+  
+  // Initialize local cooldowns from server data
+  useEffect(() => {
+    if (cooldownsData) {
+      const newCooldowns: { [key: string]: number } = {};
+      Object.entries(cooldownsData).forEach(([key, cooldown]) => {
+        newCooldowns[key] = cooldown.remaining_seconds;
+      });
+      setLocalCooldowns(newCooldowns);
+    }
+  }, [cooldownsData]);
+  
+  // Countdown timer - updates every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLocalCooldowns(prev => {
+        const updated: { [key: string]: number } = {};
+        let hasActiveCooldowns = false;
+        Object.entries(prev).forEach(([key, secs]) => {
+          if (secs > 0) {
+            updated[key] = secs - 1;
+            hasActiveCooldowns = true;
+          }
+        });
+        return hasActiveCooldowns ? updated : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Sync TanStack Query player data to global store
   useEffect(() => {
@@ -470,23 +508,33 @@ export default function MapScreen() {
       name: b.name,
       icon: '🏦',
     })),
-    ...nearbyCastles.map((c) => ({
-      id: c.id,
-      coordinate: { latitude: c.latitude, longitude: c.longitude },
-      type: 'castle' as const,
-      name: c.name,
-      level: c.difficulty,
-      icon: '🏰',
-    })),
-    ...nearbyCarChases.map((cc) => ({
-      id: cc.id,
-      coordinate: { latitude: cc.latitude, longitude: cc.longitude },
-      type: 'carChase' as const,
-      name: cc.name,
-      level: cc.difficulty,
-      icon: '🚗',
-    })),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases]);
+    ...nearbyCastles.map((c) => {
+      const cooldownKey = `castle_${c.id}`;
+      const remainingSecs = localCooldowns[cooldownKey] || 0;
+      return {
+        id: c.id,
+        coordinate: { latitude: c.latitude, longitude: c.longitude },
+        type: 'castle' as const,
+        name: c.name,
+        level: c.difficulty,
+        icon: '🏰',
+        cooldownSeconds: remainingSecs,
+      };
+    }),
+    ...nearbyCarChases.map((cc) => {
+      const cooldownKey = `carchase_${cc.id}`;
+      const remainingSecs = localCooldowns[cooldownKey] || 0;
+      return {
+        id: cc.id,
+        coordinate: { latitude: cc.latitude, longitude: cc.longitude },
+        type: 'carChase' as const,
+        name: cc.name,
+        level: cc.difficulty,
+        icon: '🚗',
+        cooldownSeconds: remainingSecs,
+      };
+    }),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, localCooldowns]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -1016,9 +1064,19 @@ export default function MapScreen() {
                   <View style={styles.terrStatRow}>
                     <Ionicons name="time-outline" size={16} color="#888" />
                     <Text style={styles.terrStatLabel}>Cooldown:</Text>
-                    <Text style={styles.terrStatValue}>30 minutes</Text>
+                    <Text style={styles.terrStatValue}>15 minutes per attempt</Text>
                   </View>
                 </View>
+
+                {/* Show cooldown warning if active */}
+                {localCooldowns[`castle_${selectedCastle.id}`] > 0 && (
+                  <View style={styles.cooldownWarning}>
+                    <Ionicons name="time" size={20} color="#f39c12" />
+                    <Text style={styles.cooldownWarningText}>
+                      Cooldown: {Math.floor(localCooldowns[`castle_${selectedCastle.id}`] / 60)}m {localCooldowns[`castle_${selectedCastle.id}`] % 60}s
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.castleInfo}>
                   <Text style={styles.castleInfoTitle}>🎯 Mission Briefing</Text>
@@ -1033,12 +1091,20 @@ export default function MapScreen() {
 
                 <View style={styles.terrActions}>
                   <TouchableOpacity
-                    style={[styles.terrBtn, { backgroundColor: '#8B4513' }]}
+                    style={[
+                      styles.terrBtn, 
+                      { backgroundColor: localCooldowns[`castle_${selectedCastle.id}`] > 0 ? '#555' : '#8B4513' }
+                    ]}
                     onPress={handleStartCastleGame}
-                    disabled={startingCastleGame}
+                    disabled={startingCastleGame || localCooldowns[`castle_${selectedCastle.id}`] > 0}
                   >
                     {startingCastleGame ? (
                       <ActivityIndicator size="small" color="#fff" />
+                    ) : localCooldowns[`castle_${selectedCastle.id}`] > 0 ? (
+                      <>
+                        <Ionicons name="time" size={18} color="#aaa" />
+                        <Text style={[styles.terrBtnText, { color: '#aaa' }]}>ON COOLDOWN</Text>
+                      </>
                     ) : (
                       <>
                         <Ionicons name="flame" size={18} color="#fff" />
@@ -1092,9 +1158,19 @@ export default function MapScreen() {
                   </View>
                   <View style={styles.terrStatRow}>
                     <Text style={styles.terrStatLabel}>Cooldown:</Text>
-                    <Text style={styles.terrStatValue}>15 minutes</Text>
+                    <Text style={styles.terrStatValue}>15 minutes per attempt</Text>
                   </View>
                 </View>
+
+                {/* Show cooldown warning if active */}
+                {localCooldowns[`carchase_${selectedCarChase.id}`] > 0 && (
+                  <View style={styles.cooldownWarning}>
+                    <Ionicons name="time" size={20} color="#f39c12" />
+                    <Text style={styles.cooldownWarningText}>
+                      Cooldown: {Math.floor(localCooldowns[`carchase_${selectedCarChase.id}`] / 60)}m {localCooldowns[`carchase_${selectedCarChase.id}`] % 60}s
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.castleInfo}>
                   <Text style={styles.castleInfoTitle}>🚔 Mission Briefing</Text>
@@ -1109,12 +1185,20 @@ export default function MapScreen() {
 
                 <View style={styles.terrActions}>
                   <TouchableOpacity
-                    style={[styles.terrBtn, { backgroundColor: '#e74c3c' }]}
+                    style={[
+                      styles.terrBtn, 
+                      { backgroundColor: localCooldowns[`carchase_${selectedCarChase.id}`] > 0 ? '#555' : '#e74c3c' }
+                    ]}
                     onPress={handleStartCarChase}
-                    disabled={startingCarChase}
+                    disabled={startingCarChase || localCooldowns[`carchase_${selectedCarChase.id}`] > 0}
                   >
                     {startingCarChase ? (
                       <ActivityIndicator size="small" color="#fff" />
+                    ) : localCooldowns[`carchase_${selectedCarChase.id}`] > 0 ? (
+                      <>
+                        <Ionicons name="time" size={18} color="#aaa" />
+                        <Text style={[styles.terrBtnText, { color: '#aaa' }]}>ON COOLDOWN</Text>
+                      </>
                     ) : (
                       <>
                         <Ionicons name="car-sport" size={18} color="#fff" />
@@ -1219,4 +1303,23 @@ const styles = StyleSheet.create({
   castleInfo: { backgroundColor: '#2a1a0a', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#8B4513' },
   castleInfoTitle: { color: '#CD853F', fontSize: 14, fontWeight: '700', marginBottom: 8 },
   castleInfoText: { color: '#d1d5db', fontSize: 12, lineHeight: 20 },
+  
+  // Cooldown Warning
+  cooldownWarning: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    gap: 8, 
+    backgroundColor: 'rgba(243,156,18,0.15)', 
+    borderRadius: 10, 
+    padding: 12, 
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(243,156,18,0.3)',
+  },
+  cooldownWarningText: { 
+    color: '#f39c12', 
+    fontSize: 14, 
+    fontWeight: '700' 
+  },
 });

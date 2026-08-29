@@ -24,6 +24,7 @@ interface MapMarker {
   name?: string;
   icon?: string;
   isBoss?: boolean;
+  cooldownSeconds?: number;
 }
 
 interface MapTerritory {
@@ -368,16 +369,40 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             } else if (m.type === 'castle') {
               var castleName = m.name || 'Castle';
               var diffLevel = m.level || 1;
+              var cooldownSecs = m.cooldownSeconds || 0;
+              var cooldownHTML = '';
+              if (cooldownSecs > 0) {
+                var mins = Math.floor(cooldownSecs / 60);
+                var secs = cooldownSecs % 60;
+                var timeStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
+                cooldownHTML = '<div style="position:absolute;top:0;left:0;right:0;bottom:20px;background:rgba(0,0,0,0.7);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;">' +
+                  '<div style="font-size:10px;color:#ff6b6b;">⏱</div>' +
+                  '<div style="font-size:11px;color:#fff;font-weight:bold;">' + timeStr + '</div>' +
+                  '</div>';
+              }
               markerHTML = '<div style="width:56px;height:72px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
-                '<div style="width:50px;height:50px;border-radius:8px;background:linear-gradient(135deg,#8B4513,#5D3A1A);display:flex;align-items:center;justify-content:center;border:3px solid #CD853F;box-shadow:0 4px 14px rgba(139,69,19,0.7);font-size:28px;cursor:pointer;">\\u{1F3F0}</div>' +
+                '<div style="width:50px;height:50px;border-radius:8px;background:linear-gradient(135deg,#8B4513,#5D3A1A);display:flex;align-items:center;justify-content:center;border:3px solid ' + (cooldownSecs > 0 ? '#666' : '#CD853F') + ';box-shadow:0 4px 14px rgba(139,69,19,0.7);font-size:28px;cursor:pointer;' + (cooldownSecs > 0 ? 'filter:grayscale(50%);' : '') + '">\\u{1F3F0}</div>' +
+                cooldownHTML +
                 '<div style="position:absolute;top:-8px;right:-4px;background:#e74c3c;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">\\u{2694}' + diffLevel + '</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(139,69,19,0.95);color:#FFE4B5;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #CD853F;">' + castleName + '</div>' +
                 '</div>';
             } else if (m.type === 'carChase') {
               var chaseName = m.name || 'Car Chase';
               var chaseLevel = m.level || 1;
+              var chaseCooldownSecs = m.cooldownSeconds || 0;
+              var chaseCooldownHTML = '';
+              if (chaseCooldownSecs > 0) {
+                var cMins = Math.floor(chaseCooldownSecs / 60);
+                var cSecs = chaseCooldownSecs % 60;
+                var cTimeStr = cMins + ':' + (cSecs < 10 ? '0' : '') + cSecs;
+                chaseCooldownHTML = '<div style="position:absolute;top:0;left:0;right:0;bottom:20px;background:rgba(0,0,0,0.7);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;">' +
+                  '<div style="font-size:10px;color:#ff6b6b;">⏱</div>' +
+                  '<div style="font-size:11px;color:#fff;font-weight:bold;">' + cTimeStr + '</div>' +
+                  '</div>';
+              }
               markerHTML = '<div style="width:56px;height:72px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
-                '<div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#e74c3c,#c0392b);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 4px 14px rgba(231,76,60,0.7);font-size:26px;cursor:pointer;">🚗</div>' +
+                '<div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#e74c3c,#c0392b);display:flex;align-items:center;justify-content:center;border:3px solid ' + (chaseCooldownSecs > 0 ? '#666' : '#fff') + ';box-shadow:0 4px 14px rgba(231,76,60,0.7);font-size:26px;cursor:pointer;' + (chaseCooldownSecs > 0 ? 'filter:grayscale(50%);' : '') + '">🚗</div>' +
+                chaseCooldownHTML +
                 '<div style="position:absolute;top:-8px;right:-4px;background:#f39c12;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">🚔' + chaseLevel + '</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(231,76,60,0.95);color:#fff;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + chaseName + '</div>' +
                 '</div>';
@@ -538,6 +563,7 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
         type: m.type,
         level: m.level || 0,
         name: m.name || '',
+        cooldownSeconds: (m as any).cooldownSeconds || 0,
       }))
     );
     // Double-escape for injectJavaScript string

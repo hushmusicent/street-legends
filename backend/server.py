@@ -3163,6 +3163,54 @@ async def spawn_castles(latitude: float, longitude: float, player_level: int = 1
     return [castle]
 
 
+@api_router.get("/minigames/cooldowns/{player_id}")
+async def get_minigame_cooldowns(player_id: str):
+    """Get all active cooldowns for mini-games (castles and car chases)"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    cooldowns = {}
+    now = datetime.utcnow()
+    cooldown_duration = 900  # 15 minutes in seconds
+    
+    # Get castle cooldowns
+    castle_cooldowns = player.get("castle_cooldowns", {})
+    for castle_id, last_attempt in castle_cooldowns.items():
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (now - last_dt).total_seconds()
+            if secs_since < cooldown_duration:
+                remaining = int(cooldown_duration - secs_since)
+                cooldowns[f"castle_{castle_id}"] = {
+                    "type": "castle",
+                    "marker_id": castle_id,
+                    "remaining_seconds": remaining,
+                    "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
+                }
+        except (ValueError, TypeError):
+            pass
+    
+    # Get car chase cooldowns
+    carchase_cooldowns = player.get("carchase_cooldowns", {})
+    for chase_id, last_attempt in carchase_cooldowns.items():
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (now - last_dt).total_seconds()
+            if secs_since < cooldown_duration:
+                remaining = int(cooldown_duration - secs_since)
+                cooldowns[f"carchase_{chase_id}"] = {
+                    "type": "carchase",
+                    "marker_id": chase_id,
+                    "remaining_seconds": remaining,
+                    "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
+                }
+        except (ValueError, TypeError):
+            pass
+    
+    return cooldowns
+
+
 @api_router.post("/castles/{castle_id}/start")
 async def start_castle_minigame(castle_id: str, player_id: str):
     """Start a castle cannon mini-game and return the layout"""
@@ -3174,18 +3222,20 @@ async def start_castle_minigame(castle_id: str, player_id: str):
     if not castle:
         raise HTTPException(status_code=404, detail="Castle not found")
     
-    # Check cooldown (30 minutes per player per castle)
+    # Check cooldown (15 minutes per player per castle)
     cooldown_key = f"castle_cooldowns.{castle_id}"
     last_attempt = player.get("castle_cooldowns", {}).get(castle_id)
     if last_attempt:
         try:
             last_dt = datetime.fromisoformat(last_attempt)
-            mins_since = (datetime.utcnow() - last_dt).total_seconds() / 60
-            if mins_since < 30:
-                remaining = round(30 - mins_since, 1)
+            secs_since = (datetime.utcnow() - last_dt).total_seconds()
+            if secs_since < 900:  # 15 minutes = 900 seconds
+                remaining_secs = int(900 - secs_since)
+                mins = remaining_secs // 60
+                secs = remaining_secs % 60
                 raise HTTPException(
                     status_code=400,
-                    detail=f"The fortress is on high alert! Wait {remaining} minutes before attacking again."
+                    detail=f"The fortress is on high alert! Wait {mins}m {secs}s before attacking again."
                 )
         except (ValueError, TypeError):
             pass
@@ -3194,7 +3244,7 @@ async def start_castle_minigame(castle_id: str, player_id: str):
     game_seed = hash(f"{castle_id}_{player_id}_{datetime.utcnow().timestamp()}")
     layout = generate_castle_layout(castle["difficulty"], game_seed)
     
-    # Create game session
+    # Create game session with exactly 3 shots
     game_session = {
         "id": str(uuid.uuid4()),
         "castle_id": castle_id,
@@ -3202,7 +3252,7 @@ async def start_castle_minigame(castle_id: str, player_id: str):
         "castle_name": castle["name"],
         "difficulty": castle["difficulty"],
         "layout": layout,
-        "shots_remaining": 3,
+        "shots_remaining": 3,  # Always exactly 3 shots
         "shots_fired": [],
         "members_eliminated": 0,
         "total_members": layout["total_members"],
@@ -3380,10 +3430,19 @@ async def start_car_chase(chase_id: str, player_id: str):
     # Check cooldown (15 minutes per player per chase)
     last_attempt = player.get("carchase_cooldowns", {}).get(chase_id)
     if last_attempt:
-        last_time = datetime.fromisoformat(last_attempt)
-        if (datetime.utcnow() - last_time).total_seconds() < 900:  # 15 min
-            remaining = 900 - (datetime.utcnow() - last_time).total_seconds()
-            raise HTTPException(status_code=400, detail=f"Cooldown active. Try again in {int(remaining // 60)} minutes.")
+        try:
+            last_time = datetime.fromisoformat(last_attempt)
+            secs_since = (datetime.utcnow() - last_time).total_seconds()
+            if secs_since < 900:  # 15 min = 900 seconds
+                remaining_secs = int(900 - secs_since)
+                mins = remaining_secs // 60
+                secs = remaining_secs % 60
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Police are patrolling the area! Wait {mins}m {secs}s before another chase."
+                )
+        except (ValueError, TypeError):
+            pass
     
     # Create game session
     game = {

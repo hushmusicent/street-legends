@@ -387,4 +387,10 @@ export const completeCarChase = async (gameId: string, won: boolean, distanceTra
   return response.data;
 };
 
+// Get mini-game cooldowns for a player
+export const getMinigameCooldowns = async (playerId: string) => {
+  const response = await api.get(`/minigames/cooldowns/${playerId}`);
+  return response.data;
+};
+
 export default api;

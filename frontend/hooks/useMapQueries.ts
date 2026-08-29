@@ -12,6 +12,7 @@ import {
   spawnCarChases,
   getPlayer,
   updatePlayerPosition,
+  getMinigameCooldowns,
 } from '../services/api';
 import { Monster, Mission, NearbyPlayer, Player } from '../types/game';
 
@@ -25,6 +26,7 @@ const roundPosition = (lat: number, lng: number) => ({
 export const mapQueryKeys = {
   all: ['map'] as const,
   player: (playerId: string) => ['player', playerId] as const,
+  cooldowns: (playerId: string) => ['cooldowns', playerId] as const,
   entities: (lat: number, lng: number, level: number) => {
     const rounded = roundPosition(lat, lng);
     return ['entities', rounded.lat, rounded.lng, level] as const;
@@ -131,6 +133,36 @@ export const usePlayerData = ({ playerId, enabled = true }: UsePlayerDataOptions
   });
 };
 
+// Cooldown data structure from backend
+export interface MinigameCooldown {
+  type: 'castle' | 'carchase';
+  marker_id: string;
+  remaining_seconds: number;
+  expires_at: string;
+}
+
+export interface CooldownsData {
+  [key: string]: MinigameCooldown;
+}
+
+/**
+ * Hook to fetch mini-game cooldowns (castles and car chases)
+ * Updates every 10 seconds for accurate countdown timers
+ */
+export const useMinigameCooldowns = ({ playerId, enabled = true }: UsePlayerDataOptions) => {
+  return useQuery<CooldownsData>({
+    queryKey: mapQueryKeys.cooldowns(playerId),
+    queryFn: () => getMinigameCooldowns(playerId),
+    enabled: enabled && !!playerId,
+    staleTime: 5 * 1000, // 5 seconds - cooldowns need frequent updates
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: 10 * 1000, // 10 seconds - for timer accuracy
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
+};
+
 /**
  * Hook to invalidate map queries (for manual refresh)
  */
@@ -141,6 +173,8 @@ export const useInvalidateMapQueries = () => {
     invalidateEntities: () => queryClient.invalidateQueries({ queryKey: ['entities'] }),
     invalidatePlayer: (playerId: string) =>
       queryClient.invalidateQueries({ queryKey: mapQueryKeys.player(playerId) }),
+    invalidateCooldowns: (playerId: string) =>
+      queryClient.invalidateQueries({ queryKey: mapQueryKeys.cooldowns(playerId) }),
     invalidateAll: () => queryClient.invalidateQueries({ queryKey: mapQueryKeys.all }),
   };
 };
