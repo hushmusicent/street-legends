@@ -13,17 +13,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  PHYSICS_CONSTANTS,
+  Block,
+  Enemy,
+  Cannonball,
+  checkBallRectCollision,
+  updateBlocksPhysics,
+  updateEnemiesPhysics,
+  generateLevelStructure,
+} from '../hooks/useCastlePhysics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Game constants
-const WORLD_WIDTH = 1200;
-const WORLD_HEIGHT = 500;
+// Use constants from shared physics module
+const WORLD_WIDTH = PHYSICS_CONSTANTS.WORLD_WIDTH;
+const WORLD_HEIGHT = PHYSICS_CONSTANTS.WORLD_HEIGHT;
 const VIEWPORT_WIDTH = SCREEN_WIDTH;
 const VIEWPORT_HEIGHT = 400;
-const GROUND_Y = WORLD_HEIGHT - 60;
-const GRAVITY = 0.4;
-const INITIAL_VELOCITY = 22;
+const GROUND_Y = PHYSICS_CONSTANTS.GROUND_Y;
+const GRAVITY = PHYSICS_CONSTANTS.GRAVITY;
+const INITIAL_VELOCITY = PHYSICS_CONSTANTS.INITIAL_VELOCITY;
 
 // Level configurations (rewards scaled to 25% for mini-game balance)
 const LEVELS = [
@@ -39,44 +49,7 @@ const LEVELS = [
   { level: 10, name: 'Dragon Citadel', blocks: 30, enemies: 6, shots: 6, xpReward: 250, cashReward: 500 },
 ];
 
-interface Block {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  destroyed: boolean;
-  velocityX: number;
-  velocityY: number;
-  falling: boolean;
-  rotation: number;
-  type: 'wood' | 'ice' | 'stone'; // Block material type
-  shape: 'square' | 'plank_h' | 'plank_v' | 'pillar'; // Block shape
-  mass: number; // Higher mass = harder to move
-  friction: number; // Higher friction = resists sliding
-  hitCount: number; // Track number of hits before breaking
-}
-
-interface Enemy {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  eliminated: boolean;
-  velocityX: number;
-  velocityY: number;
-  falling: boolean;
-}
-
-interface Cannonball {
-  x: number;
-  y: number;
-  velocityX: number;
-  velocityY: number;
-  active: boolean;
-  trail: { x: number; y: number }[];
-}
+// Note: Block, Enemy, and Cannonball interfaces are imported from useCastlePhysics
 
 export default function CastleLevelsScreen() {
   const [currentLevel, setCurrentLevel] = useState(1);
@@ -140,265 +113,15 @@ export default function CastleLevelsScreen() {
     }
   };
 
-  // Generate level layout - Angry Birds style structures
+  // Generate level layout - uses shared physics module for identical structures as castle-game.tsx
   const generateLevel = useCallback((levelNum: number) => {
     const config = LEVELS[levelNum - 1];
-    const newBlocks: Block[] = [];
-    const newEnemies: Enemy[] = [];
     
-    // Fort position - farther from cannon for longer cannonball arc
-    const fortX = 650;
+    // Use shared level structure generator - ensures identical structures as castle-game.tsx
+    const { blocks: generatedBlocks, enemies: generatedEnemies } = generateLevelStructure(levelNum);
     
-    // Material properties - VERY HIGH mass and friction to prevent chain reactions
-    // Only direct hits should move blocks, minimal force transfer
-    const materialProps = {
-      wood: { mass: 15.0, friction: 0.95, hitsToBreak: 1 },
-      ice: { mass: 8.0, friction: 0.85, hitsToBreak: 1 },
-      stone: { mass: 30.0, friction: 0.98, hitsToBreak: 2 },
-    };
-    
-    // Helper to create blocks
-    const addBlock = (x: number, y: number, type: 'wood' | 'ice' | 'stone', shape: 'square' | 'plank_h' | 'plank_v' | 'pillar') => {
-      let width = 40, height = 40;
-      if (shape === 'plank_h') { width = 80; height = 20; }
-      if (shape === 'plank_v') { width = 20; height = 80; }
-      if (shape === 'pillar') { width = 15; height = 100; }
-      
-      const props = materialProps[type];
-      
-      newBlocks.push({
-        id: `block-${newBlocks.length}`,
-        x, y: GROUND_Y - y,
-        width, height,
-        destroyed: false,
-        velocityX: 0, velocityY: 0,
-        falling: false, rotation: 0,
-        type, shape,
-        mass: props.mass,
-        friction: props.friction,
-        hitCount: 0,
-      });
-    };
-    
-    // Helper to add enemy (pig)
-    const addPig = (x: number, y: number) => {
-      newEnemies.push({
-        id: `pig-${newEnemies.length}`,
-        x, y: GROUND_Y - y,
-        width: 40, height: 40,
-        eliminated: false,
-        velocityX: 0, velocityY: 0,
-        falling: false,
-      });
-    };
-    
-    // Level-specific designs inspired by Angry Birds
-    switch (levelNum) {
-      case 1: // Simple tower - Training Ground
-        addBlock(fortX, 100, 'stone', 'pillar');
-        addBlock(fortX + 60, 100, 'stone', 'pillar');
-        addBlock(fortX - 10, 110, 'wood', 'plank_h');
-        addPig(fortX + 10, 140);
-        break;
-        
-      case 2: // Two pillars with pigs - Small Outpost
-        addBlock(fortX, 100, 'stone', 'pillar');
-        addBlock(fortX + 100, 100, 'stone', 'pillar');
-        addBlock(fortX - 10, 110, 'wood', 'plank_h');
-        addBlock(fortX + 90, 110, 'wood', 'plank_h');
-        addPig(fortX + 10, 140);
-        addPig(fortX + 110, 140);
-        break;
-        
-      case 3: // Tall wooden tower - Guard Tower
-        addBlock(fortX, 40, 'wood', 'square');
-        addBlock(fortX + 45, 40, 'wood', 'square');
-        addBlock(fortX, 85, 'wood', 'plank_v');
-        addBlock(fortX + 65, 85, 'wood', 'plank_v');
-        addBlock(fortX - 10, 135, 'wood', 'plank_h');
-        addBlock(fortX, 175, 'wood', 'plank_v');
-        addBlock(fortX + 65, 175, 'wood', 'plank_v');
-        addBlock(fortX - 10, 225, 'wood', 'plank_h');
-        addPig(fortX + 20, 130);
-        addPig(fortX + 20, 255);
-        break;
-        
-      case 4: // Ice structure - Watchtower
-        addBlock(fortX, 100, 'stone', 'pillar');
-        addBlock(fortX + 80, 100, 'stone', 'pillar');
-        addBlock(fortX - 10, 110, 'ice', 'plank_h');
-        addBlock(fortX, 130, 'ice', 'square');
-        addBlock(fortX + 45, 130, 'ice', 'square');
-        addBlock(fortX, 175, 'ice', 'square');
-        addBlock(fortX + 45, 175, 'ice', 'square');
-        addBlock(fortX + 90, 175, 'ice', 'square');
-        addBlock(fortX - 10, 220, 'ice', 'plank_h');
-        addPig(fortX + 20, 115);
-        addPig(fortX + 20, 250);
-        addPig(fortX + 100, 220);
-        break;
-        
-      case 5: // Multi-tower - Fort Minor
-        // Left tower
-        addBlock(fortX - 50, 100, 'stone', 'pillar');
-        addBlock(fortX + 30, 100, 'stone', 'pillar');
-        addBlock(fortX - 60, 110, 'wood', 'plank_h');
-        addPig(fortX - 30, 145);
-        // Right tower
-        addBlock(fortX + 100, 100, 'stone', 'pillar');
-        addBlock(fortX + 180, 100, 'stone', 'pillar');
-        addBlock(fortX + 90, 110, 'wood', 'plank_h');
-        addBlock(fortX + 90, 130, 'ice', 'square');
-        addBlock(fortX + 135, 130, 'ice', 'square');
-        addBlock(fortX + 90, 180, 'ice', 'plank_h');
-        addPig(fortX + 120, 115);
-        addPig(fortX + 120, 215);
-        break;
-        
-      case 6: // House structure - Stone Keep
-        // Foundation
-        addBlock(fortX, 40, 'stone', 'square');
-        addBlock(fortX + 45, 40, 'stone', 'square');
-        addBlock(fortX + 90, 40, 'stone', 'square');
-        // Walls
-        addBlock(fortX, 130, 'wood', 'plank_v');
-        addBlock(fortX + 115, 130, 'wood', 'plank_v');
-        // Roof frame (ice)
-        addBlock(fortX - 20, 180, 'ice', 'plank_v');
-        addBlock(fortX + 135, 180, 'ice', 'plank_v');
-        addBlock(fortX + 20, 250, 'ice', 'plank_h');
-        addBlock(fortX + 60, 280, 'ice', 'square');
-        // Interior
-        addBlock(fortX + 30, 85, 'wood', 'plank_h');
-        addPig(fortX + 50, 50);
-        addPig(fortX + 50, 120);
-        addPig(fortX + 50, 200);
-        addPig(fortX - 30, 50);
-        break;
-        
-      case 7: // Complex fortress - Battle Fortress
-        // Base pillars
-        addBlock(fortX - 30, 100, 'stone', 'pillar');
-        addBlock(fortX + 50, 100, 'stone', 'pillar');
-        addBlock(fortX + 130, 100, 'stone', 'pillar');
-        addBlock(fortX + 210, 100, 'stone', 'pillar');
-        // First floor
-        addBlock(fortX - 40, 110, 'wood', 'plank_h');
-        addBlock(fortX + 40, 110, 'wood', 'plank_h');
-        addBlock(fortX + 120, 110, 'wood', 'plank_h');
-        // Second floor pillars
-        addBlock(fortX, 200, 'wood', 'plank_v');
-        addBlock(fortX + 80, 200, 'wood', 'plank_v');
-        addBlock(fortX + 160, 200, 'wood', 'plank_v');
-        // Ice top
-        addBlock(fortX - 10, 250, 'ice', 'plank_h');
-        addBlock(fortX + 70, 250, 'ice', 'plank_h');
-        addBlock(fortX + 40, 280, 'ice', 'square');
-        addBlock(fortX + 120, 280, 'ice', 'square');
-        addPig(fortX, 145);
-        addPig(fortX + 80, 145);
-        addPig(fortX + 160, 145);
-        addPig(fortX + 80, 310);
-        break;
-        
-      case 8: // War Castle
-        // Ground level structures
-        for (let i = 0; i < 4; i++) {
-          addBlock(fortX + i * 70, 100, 'stone', 'pillar');
-          addBlock(fortX + i * 70 - 10, 110, 'wood', 'plank_h');
-        }
-        // Middle layer - ice
-        addBlock(fortX + 20, 150, 'ice', 'square');
-        addBlock(fortX + 90, 150, 'ice', 'square');
-        addBlock(fortX + 160, 150, 'ice', 'square');
-        addBlock(fortX - 10, 200, 'ice', 'plank_h');
-        addBlock(fortX + 70, 200, 'ice', 'plank_h');
-        addBlock(fortX + 150, 200, 'ice', 'plank_h');
-        // Top
-        addBlock(fortX + 50, 250, 'wood', 'plank_v');
-        addBlock(fortX + 130, 250, 'wood', 'plank_v');
-        addBlock(fortX + 40, 300, 'wood', 'plank_h');
-        addPig(fortX + 30, 145);
-        addPig(fortX + 100, 145);
-        addPig(fortX + 170, 145);
-        addPig(fortX + 50, 235);
-        addPig(fortX + 130, 235);
-        break;
-        
-      case 9: // Imperial Stronghold
-        // Multiple structures spread out
-        // Structure 1 - Left
-        addBlock(fortX - 100, 100, 'stone', 'pillar');
-        addBlock(fortX - 20, 100, 'stone', 'pillar');
-        addBlock(fortX - 110, 110, 'wood', 'plank_h');
-        addBlock(fortX - 70, 150, 'ice', 'square');
-        addBlock(fortX - 70, 200, 'ice', 'square');
-        addPig(fortX - 60, 145);
-        addPig(fortX - 60, 240);
-        // Structure 2 - Center tower
-        addBlock(fortX + 60, 100, 'stone', 'pillar');
-        addBlock(fortX + 140, 100, 'stone', 'pillar');
-        addBlock(fortX + 50, 110, 'wood', 'plank_h');
-        addBlock(fortX + 50, 150, 'wood', 'square');
-        addBlock(fortX + 95, 150, 'wood', 'square');
-        addBlock(fortX + 70, 250, 'wood', 'plank_v');
-        addBlock(fortX + 110, 250, 'wood', 'plank_v');
-        addBlock(fortX + 60, 300, 'wood', 'plank_h');
-        addPig(fortX + 70, 145);
-        addPig(fortX + 90, 335);
-        // Structure 3 - Right
-        addBlock(fortX + 220, 100, 'stone', 'pillar');
-        addBlock(fortX + 220, 45, 'ice', 'square');
-        addPig(fortX + 215, 145);
-        break;
-        
-      case 10: // Dragon Citadel - Epic final level
-        // Grand castle structure
-        // Base layer
-        for (let i = 0; i < 5; i++) {
-          addBlock(fortX - 50 + i * 60, 100, 'stone', 'pillar');
-        }
-        // First floor
-        addBlock(fortX - 60, 110, 'wood', 'plank_h');
-        addBlock(fortX + 20, 110, 'wood', 'plank_h');
-        addBlock(fortX + 100, 110, 'wood', 'plank_h');
-        addBlock(fortX + 180, 110, 'wood', 'plank_h');
-        // Ice walls
-        addBlock(fortX - 30, 200, 'ice', 'plank_v');
-        addBlock(fortX + 50, 200, 'ice', 'plank_v');
-        addBlock(fortX + 130, 200, 'ice', 'plank_v');
-        addBlock(fortX + 210, 200, 'ice', 'plank_v');
-        // Second platform
-        addBlock(fortX - 40, 250, 'ice', 'plank_h');
-        addBlock(fortX + 40, 250, 'ice', 'plank_h');
-        addBlock(fortX + 120, 250, 'ice', 'plank_h');
-        // Top tower
-        addBlock(fortX + 40, 290, 'wood', 'square');
-        addBlock(fortX + 85, 290, 'wood', 'square');
-        addBlock(fortX + 130, 290, 'wood', 'square');
-        addBlock(fortX + 50, 380, 'wood', 'plank_v');
-        addBlock(fortX + 120, 380, 'wood', 'plank_v');
-        addBlock(fortX + 40, 430, 'wood', 'plank_h');
-        addBlock(fortX + 85, 460, 'ice', 'square');
-        // Pigs everywhere
-        addPig(fortX - 20, 145);
-        addPig(fortX + 60, 145);
-        addPig(fortX + 140, 145);
-        addPig(fortX + 220, 145);
-        addPig(fortX + 90, 285);
-        addPig(fortX + 90, 465);
-        break;
-        
-      default:
-        // Fallback simple structure
-        addBlock(fortX, 100, 'stone', 'pillar');
-        addBlock(fortX + 60, 100, 'stone', 'pillar');
-        addBlock(fortX - 10, 110, 'wood', 'plank_h');
-        addPig(fortX + 10, 140);
-    }
-    
-    setBlocks(newBlocks);
-    setEnemies(newEnemies);
+    setBlocks(generatedBlocks);
+    setEnemies(generatedEnemies);
     setShotsRemaining(config.shots);
     setGameOver(false);
     setWon(false);
@@ -450,29 +173,15 @@ export default function CastleLevelsScreen() {
     return points;
   }, [angle, power]);
 
-  // Collision detection
-  const checkBallRectCollision = (ballX: number, ballY: number, rect: { x: number; y: number; width: number; height: number }) => {
-    const ballRadius = 18;
-    const closestX = Math.max(rect.x, Math.min(ballX, rect.x + rect.width));
-    const closestY = Math.max(rect.y, Math.min(ballY, rect.y + rect.height));
-    const distanceX = ballX - closestX;
-    const distanceY = ballY - closestY;
-    return (distanceX * distanceX + distanceY * distanceY) < (ballRadius * ballRadius);
-  };
+  // Note: Collision detection functions (checkBallRectCollision, checkRectRectCollision) 
+  // are imported from useCastlePhysics
 
-  const checkRectRectCollision = (r1: { x: number; y: number; width: number; height: number }, r2: { x: number; y: number; width: number; height: number }) => {
-    return r1.x < r2.x + r2.width &&
-           r1.x + r1.width > r2.x &&
-           r1.y < r2.y + r2.height &&
-           r1.y + r1.height > r2.y;
-  };
-
-  // Physics update
+  // Physics update - uses shared physics module for identical behavior as castle-game.tsx
   const updatePhysics = useCallback(() => {
     const ball = cannonballRef.current;
     const currentBlocks = blocksRef.current;
     
-    // Update cannonball
+    // Update cannonball position (local calculation for real-time updates)
     if (ball && ball.active) {
       let newX = ball.x + ball.velocityX;
       let newY = ball.y + ball.velocityY;
@@ -482,6 +191,7 @@ export default function CastleLevelsScreen() {
       
       const newTrail = [...ball.trail, { x: ball.x, y: ball.y }].slice(-20);
       
+      // Check collision with blocks using shared function
       currentBlocks.forEach(block => {
         if (!block.destroyed) {
           if (checkBallRectCollision(newX, newY, block)) {
@@ -495,7 +205,7 @@ export default function CastleLevelsScreen() {
         stillActive = false;
       }
       
-      const updatedBall = {
+      const updatedBall: Cannonball = {
         ...ball,
         x: newX,
         y: newY,
@@ -516,217 +226,41 @@ export default function CastleLevelsScreen() {
       setCameraX(prev => prev + (targetCameraX - prev) * 0.15);
     }
 
-    // Update blocks - physics with material-based behavior
+    // Update blocks using SHARED physics function - identical to castle-game.tsx
     setBlocks(prev => {
-      // First pass: handle cannonball collisions and basic physics
-      const updatedBlocks = prev.map(block => {
-        if (block.destroyed && block.y >= GROUND_Y + 100) return block;
-        
-        const ballX = ballPositionRef.current.x;
-        const ballY = ballPositionRef.current.y;
-        const ballActive = ballPositionRef.current.active;
-        const ball = cannonballRef.current;
-        
-        // Direct cannonball hits
-        if (!block.destroyed && !block.falling && ballActive && ball) {
-          if (checkBallRectCollision(ballX, ballY, block)) {
-            const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
-            const impactAngle = Math.atan2(ballY - (block.y + block.height/2), ballX - (block.x + block.width/2));
-            
-            // Mark structure as hit - now support checks can happen
-            structureHitRef.current = true;
-            
-            // Direct cannonball hit - ONLY this specific block moves
-            // Very LOW velocity transfer to prevent chain reactions
-            const velocityMult = block.type === 'stone' ? 0.08 : (block.type === 'ice' ? 0.15 : 0.12);
-            return {
-              ...block,
-              destroyed: true,
-              falling: true,
-              hitCount: block.hitCount + 1,
-              // Minimal velocity - block moves slowly, doesn't fly
-              velocityX: -Math.cos(impactAngle) * impactForce * velocityMult,
-              velocityY: -Math.abs(Math.sin(impactAngle) * impactForce * velocityMult * 0.3) - 1,
-            };
-          }
-        }
-        
-        // Physics for falling/destroyed blocks ONLY
-        if (block.falling || block.destroyed) {
-          let newX = block.x + block.velocityX;
-          let newY = block.y + block.velocityY;
-          // Slow falling, high drag
-          let newVelY = block.velocityY + GRAVITY * 0.6;
-          // Very high friction - blocks slow down fast
-          let newVelX = block.velocityX * 0.85;
-          let newRotation = block.rotation + block.velocityX * 0.5;
-          
-          // Ground collision - blocks stop quickly
-          if (newY > GROUND_Y - 10) {
-            newY = GROUND_Y - 10;
-            newVelY = 0; // No bounce
-            newVelX *= 0.2; // High ground friction
-          }
-          
-          // Cap maximum velocity to prevent blocks flying too fast
-          newVelX = Math.max(-3, Math.min(3, newVelX));
-          newVelY = Math.max(-5, Math.min(8, newVelY));
-          
-          return {
-            ...block,
-            x: newX,
-            y: newY,
-            velocityX: newVelX,
-            velocityY: newVelY,
-            rotation: newRotation,
-          };
-        }
-        
-        // Stationary blocks stay stationary until hit
-        return block;
-      });
+      const ball = cannonballRef.current;
+      const ballX = ballPositionRef.current.x;
+      const ballY = ballPositionRef.current.y;
+      const ballActive = ballPositionRef.current.active;
       
-      // Second pass: block-to-block collisions - VERY restrictive
-      // ONLY if structure has been hit at least once
-      if (!structureHitRef.current) {
-        return updatedBlocks;
-      }
-      
-      return updatedBlocks.map(block => {
-        if (block.destroyed || block.falling) return block;
-        
-        // Check if hit by falling/moving block
-        for (const other of updatedBlocks) {
-          if (other.id === block.id) continue;
-          if (!other.falling && !other.destroyed) continue;
-          
-          // Calculate the momentum of the falling block
-          const otherSpeed = Math.sqrt(other.velocityX * other.velocityX + other.velocityY * other.velocityY);
-          const otherMomentum = otherSpeed * other.mass;
-          
-          if (!checkRectRectCollision(other, block)) continue;
-          
-          // VERY HIGH force thresholds - blocks barely affect each other
-          // Only a fast, heavy block can move another block
-          const forceNeeded = block.type === 'stone' ? 100 : (block.type === 'ice' ? 40 : 60);
-          
-          if (otherMomentum > forceNeeded) {
-            // Very rare - only happens with very fast, heavy blocks
-            // Even then, minimal velocity transfer
-            const pushDirection = other.x < block.x ? 1 : -1;
-            return {
-              ...block,
-              destroyed: true,
-              falling: true,
-              // Minimal velocity - block barely moves
-              velocityX: pushDirection * 0.5,
-              velocityY: -0.5,
-            };
-          }
-        }
-        
-        // DISABLED support check - blocks don't fall just because support is removed
-        // They only move when directly hit or pushed by a fast-moving block
-        // This prevents the whole structure collapsing
-        
-        return block;
-      });
+      return updateBlocksPhysics(
+        prev,
+        ballX,
+        ballY,
+        ballActive,
+        ball,
+        structureHitRef.current,
+        () => { structureHitRef.current = true; }
+      );
     });
 
-    // Update enemies (pigs) - can be hit by cannonball or falling blocks
+    // Update enemies using SHARED physics function - identical to castle-game.tsx
     setEnemies(prev => {
       const currentBlocksNow = blocksRef.current;
+      const ball = cannonballRef.current;
+      const ballX = ballPositionRef.current.x;
+      const ballY = ballPositionRef.current.y;
+      const ballActive = ballPositionRef.current.active;
       
-      return prev.map(enemy => {
-        if (enemy.eliminated && enemy.y >= GROUND_Y + 100) return enemy;
-        
-        const ballX = ballPositionRef.current.x;
-        const ballY = ballPositionRef.current.y;
-        const ballActive = ballPositionRef.current.active;
-        const ball = cannonballRef.current;
-        
-        // Direct cannonball hit eliminates pig
-        if (!enemy.eliminated && ballActive && ball) {
-          if (checkBallRectCollision(ballX, ballY, enemy)) {
-            return {
-              ...enemy,
-              eliminated: true,
-              falling: true,
-              velocityX: ball.velocityX * 0.4,
-              velocityY: -8,
-            };
-          }
-        }
-        
-        // Falling blocks can knock pigs - any block with enough momentum
-        if (!enemy.eliminated && !enemy.falling) {
-          for (const b of currentBlocksNow) {
-            if (!b.falling && !b.destroyed) continue;
-            if (!checkRectRectCollision(b, enemy)) continue;
-            
-            // Calculate block momentum (mass * velocity)
-            const blockMomentum = b.mass * Math.sqrt(b.velocityX * b.velocityX + b.velocityY * b.velocityY);
-            
-            // Stone blocks need less speed because they're heavy
-            // Wood blocks need more speed
-            const momentumThreshold = b.type === 'stone' ? 3 : (b.type === 'ice' ? 2 : 4);
-            
-            if (blockMomentum > momentumThreshold) {
-              const pushDir = b.x < enemy.x ? 1 : -1;
-              return {
-                ...enemy,
-                eliminated: true,
-                falling: true,
-                velocityX: pushDir * 3 + b.velocityX * 0.3,
-                velocityY: -6,
-              };
-            }
-          }
-        }
-        
-        // Pigs fall if their support is destroyed (only after structure hit)
-        if (!enemy.falling && !enemy.eliminated && structureHitRef.current) {
-          const supportBlock = currentBlocksNow.find(b => 
-            !b.destroyed &&
-            !b.falling &&
-            enemy.x + enemy.width * 0.3 > b.x &&
-            enemy.x + enemy.width * 0.7 < b.x + b.width &&
-            Math.abs((enemy.y + enemy.height) - b.y) < 20
-          );
-          
-          const isOnGround = enemy.y + enemy.height >= GROUND_Y - 25;
-          
-          if (!supportBlock && !isOnGround) {
-            return {
-              ...enemy,
-              falling: true,
-              velocityX: 0,
-              velocityY: 0,
-            };
-          }
-        }
-        
-        // Physics for falling pigs
-        if (enemy.falling) {
-          let newY = enemy.y + enemy.velocityY;
-          let newVelY = enemy.velocityY + GRAVITY;
-          
-          // Hit ground = eliminated
-          if (newY > GROUND_Y - 20) {
-            return { ...enemy, eliminated: true, y: GROUND_Y - 20, velocityY: 0, falling: false };
-          }
-          
-          return {
-            ...enemy,
-            x: enemy.x + enemy.velocityX,
-            y: newY,
-            velocityX: enemy.velocityX * 0.98,
-            velocityY: newVelY,
-          };
-        }
-        
-        return enemy;
-      });
+      return updateEnemiesPhysics(
+        prev,
+        currentBlocksNow,
+        ballX,
+        ballY,
+        ballActive,
+        ball,
+        structureHitRef.current
+      );
     });
 
     const ballActive = ballPositionRef.current.active;
