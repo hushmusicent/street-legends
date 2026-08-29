@@ -27,7 +27,6 @@ import {
   eatAtRestaurant,
   visitNightclub,
   robBank,
-  startCastleGame,
   startCarChase,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
@@ -63,7 +62,6 @@ export default function MapScreen() {
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
   const [robbingBank, setRobbingBank] = useState(false);
-  const [startingCastleGame, setStartingCastleGame] = useState(false);
   const [startingCarChase, setStartingCarChase] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
@@ -410,25 +408,21 @@ export default function MapScreen() {
   }, [playerId, selectedBank, robbingBank, refetchPlayer]);
 
   const handleStartCastleGame = useCallback(async () => {
-    if (!playerId || !selectedCastle || startingCastleGame) return;
-    setStartingCastleGame(true);
+    if (!playerId || !selectedCastle) return;
     
-    try {
-      const gameData = await startCastleGame(selectedCastle.id, playerId);
-      setSelectedCastle(null);
-      
-      // Navigate to the castle game screen
-      router.push({
-        pathname: '/castle-game',
-        params: { gameData: JSON.stringify(gameData) },
-      });
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.detail || 'Failed to start castle game';
-      Alert.alert('Cannot Attack', errorMsg);
-    } finally {
-      setStartingCastleGame(false);
+    // Check cooldown
+    const cooldownKey = `castle_${selectedCastle.id}`;
+    if (localCooldowns[cooldownKey] > 0) {
+      Alert.alert('Cooldown Active', 'Wait for the cooldown to expire before attacking again.');
+      return;
     }
-  }, [playerId, selectedCastle, startingCastleGame]);
+    
+    setSelectedCastle(null);
+    
+    // Navigate directly to castle-levels (unified castle mini-game)
+    // Uses the same component as the options panel
+    router.push('/castle-levels');
+  }, [playerId, selectedCastle, localCooldowns]);
 
   const handleStartCarChase = useCallback(async () => {
     if (!playerId || !selectedCarChase || startingCarChase) return;
@@ -1096,11 +1090,9 @@ export default function MapScreen() {
                       { backgroundColor: localCooldowns[`castle_${selectedCastle.id}`] > 0 ? '#555' : '#8B4513' }
                     ]}
                     onPress={handleStartCastleGame}
-                    disabled={startingCastleGame || localCooldowns[`castle_${selectedCastle.id}`] > 0}
+                    disabled={localCooldowns[`castle_${selectedCastle.id}`] > 0}
                   >
-                    {startingCastleGame ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : localCooldowns[`castle_${selectedCastle.id}`] > 0 ? (
+                    {localCooldowns[`castle_${selectedCastle.id}`] > 0 ? (
                       <>
                         <Ionicons name="time" size={18} color="#aaa" />
                         <Text style={[styles.terrBtnText, { color: '#aaa' }]}>ON COOLDOWN</Text>
