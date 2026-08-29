@@ -28,6 +28,13 @@ const OBSTACLE_SIZE = 50;
 const POLICE_CAR_START_Y = -150;
 const POLICE_CATCH_Y = GAME_HEIGHT - CAR_HEIGHT - 30;
 
+// Balanced gameplay constants - challenging but fair
+const INITIAL_SPEED = 2.5; // Start slow for reaction time
+const MAX_SPEED = 8; // Cap max speed for manageability
+const SPEED_INCREMENT = 0.0008; // Very gradual speed increase
+const BASE_SPAWN_INTERVAL = 280; // More spacing between obstacles
+const MIN_SPAWN_INTERVAL = 150; // Minimum gap even at high difficulty
+
 // Obstacle types
 const OBSTACLES = [
   { type: 'car', emoji: '🚗', color: '#e74c3c' },
@@ -74,7 +81,7 @@ export default function CarChaseGame() {
     obstacles: [],
     policeY: POLICE_CAR_START_Y,
     distance: 0,
-    speed: 5,
+    speed: INITIAL_SPEED,
     isGameOver: false,
     won: false,
   });
@@ -125,7 +132,7 @@ export default function CarChaseGame() {
       obstacles: [],
       policeY: POLICE_CAR_START_Y,
       distance: 0,
-      speed: 5 + difficulty * 0.5,
+      speed: INITIAL_SPEED + (difficulty * 0.2), // Slight difficulty adjustment
       isGameOver: false,
       won: false,
     });
@@ -141,24 +148,30 @@ export default function CarChaseGame() {
         if (prev.isGameOver) return prev;
 
         const newDistance = prev.distance + prev.speed;
-        const newSpeed = Math.min(15, prev.speed + 0.002);
+        // Gradual speed increase - slow ramp up for fair gameplay
+        const newSpeed = Math.min(MAX_SPEED, prev.speed + SPEED_INCREMENT);
         
-        // Spawn obstacles
+        // Spawn obstacles with more spacing
         let newObstacles = [...prev.obstacles];
-        const spawnInterval = Math.max(60, 120 - difficulty * 8);
+        // Larger spawn interval = more gaps between obstacles
+        const spawnInterval = Math.max(MIN_SPAWN_INTERVAL, BASE_SPAWN_INTERVAL - (difficulty * 10));
         
         if (newDistance - lastSpawnRef.current > spawnInterval) {
           lastSpawnRef.current = newDistance;
           
-          // Spawn 1-2 obstacles (more with higher difficulty)
-          const spawnCount = Math.random() < (difficulty * 0.1) ? 2 : 1;
+          // Much lower chance of spawning 2 obstacles at once (only at high difficulty)
+          // Difficulty 1-5: always 1 obstacle
+          // Difficulty 6-10: 10-30% chance of 2 obstacles
+          const spawnCount = (difficulty >= 6 && Math.random() < (difficulty - 5) * 0.06) ? 2 : 1;
           const usedLanes: number[] = [];
           
           for (let i = 0; i < spawnCount; i++) {
             let lane = Math.floor(Math.random() * LANE_COUNT);
             // Avoid spawning in same lane
-            while (usedLanes.includes(lane)) {
+            let attempts = 0;
+            while (usedLanes.includes(lane) && attempts < 10) {
               lane = Math.floor(Math.random() * LANE_COUNT);
+              attempts++;
             }
             usedLanes.push(lane);
             
@@ -174,7 +187,7 @@ export default function CarChaseGame() {
           }
         }
         
-        // Move obstacles
+        // Move obstacles at current speed
         newObstacles = newObstacles
           .map(obs => ({ ...obs, y: obs.y + newSpeed }))
           .filter(obs => obs.y < GAME_HEIGHT + OBSTACLE_SIZE);
@@ -187,12 +200,13 @@ export default function CarChaseGame() {
           const obsX = obs.lane * LANE_WIDTH + LANE_WIDTH / 2 - OBSTACLE_SIZE / 2;
           const obsY = obs.y;
           
-          // Simple box collision
+          // Simple box collision with slight forgiveness (smaller hitbox)
+          const hitboxPadding = 5;
           if (
-            playerX < obsX + OBSTACLE_SIZE &&
-            playerX + CAR_WIDTH > obsX &&
-            playerY < obsY + OBSTACLE_SIZE &&
-            playerY + CAR_HEIGHT > obsY
+            playerX + hitboxPadding < obsX + OBSTACLE_SIZE - hitboxPadding &&
+            playerX + CAR_WIDTH - hitboxPadding > obsX + hitboxPadding &&
+            playerY + hitboxPadding < obsY + OBSTACLE_SIZE - hitboxPadding &&
+            playerY + CAR_HEIGHT - hitboxPadding > obsY + hitboxPadding
           ) {
             // Collision detected!
             return {
@@ -205,8 +219,8 @@ export default function CarChaseGame() {
           }
         }
         
-        // Police car gets closer over time
-        const policeSpeed = 0.05 + (difficulty * 0.01);
+        // Police car pursues more slowly - gives player more time
+        const policeSpeed = 0.02 + (difficulty * 0.005);
         const newPoliceY = Math.min(POLICE_CATCH_Y, prev.policeY + policeSpeed);
         
         // Check if police caught player
