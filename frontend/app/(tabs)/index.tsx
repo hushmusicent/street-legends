@@ -417,13 +417,13 @@ export default function MapScreen() {
       return;
     }
     
+    const castleId = selectedCastle.id;
     setSelectedCastle(null);
     
-    // Navigate to castle-levels with randomLevel flag
-    // This skips level selection and drops player into a random level
+    // Navigate to castle-levels with randomLevel flag and castle ID
     router.push({
       pathname: '/castle-levels',
-      params: { randomLevel: 'true' },
+      params: { randomLevel: 'true', castleId: castleId },
     });
   }, [playerId, selectedCastle, localCooldowns]);
 

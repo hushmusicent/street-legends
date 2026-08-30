@@ -332,6 +332,14 @@ export const startCastleGame = async (castleId: string, playerId: string) => {
   return response.data;
 };
 
+// Start a random castle game from the map
+export const startRandomCastleGame = async (playerId: string, castleId?: string) => {
+  const params = new URLSearchParams({ player_id: playerId });
+  if (castleId) params.append('castle_id', castleId);
+  const response = await api.post(`/castles/start-random?${params.toString()}`);
+  return response.data;
+};
+
 export const completeCastleGame = async (gameId: string, membersEliminated: number, won: boolean) => {
   const response = await api.post(`/castles/game/${gameId}/complete?members_eliminated=${membersEliminated}&won=${won}`);
   return response.data;

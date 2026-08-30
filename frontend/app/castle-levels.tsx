@@ -15,7 +15,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../services/api';
+import { API_URL, startRandomCastleGame, completeCastleGame } from '../services/api';
+import { useGameStore } from '../stores/gameStore';
+import { showGameToast } from '../components/GameToast';
+import { useInvalidateMapQueries } from '../hooks/useMapQueries';
 import {
   PHYSICS_CONSTANTS,
   Block,
@@ -59,8 +62,13 @@ const LEVELS = [
 
 export default function CastleLevelsScreen() {
   // Get route params - if randomLevel is true, skip level selection and pick a random level
-  const params = useLocalSearchParams<{ randomLevel?: string }>();
+  const params = useLocalSearchParams<{ randomLevel?: string; castleId?: string }>();
   const isRandomMode = params.randomLevel === 'true';
+  const mapCastleId = params.castleId;
+  
+  // Get player ID from store
+  const { playerId, refreshPlayer } = useGameStore();
+  const { invalidateCooldowns, invalidatePlayer } = useInvalidateMapQueries();
   
   const [currentLevel, setCurrentLevel] = useState(1);
   const [unlockedLevel, setUnlockedLevel] = useState(1);
@@ -68,6 +76,11 @@ export default function CastleLevelsScreen() {
   const [showResults, setShowResults] = useState(false);
   const [won, setWon] = useState(false);
   const isFromMap = isRandomMode; // Track if launched from map (read-only)
+  
+  // Game session state for map-based games
+  const [gameSessionId, setGameSessionId] = useState<string | null>(null);
+  const [gameRewards, setGameRewards] = useState<{ cash: number; xp: number; reputation: number } | null>(null);
+  const [isSubmittingResult, setIsSubmittingResult] = useState(false);
   
   // Game state
   const [angle, setAngle] = useState(45);
@@ -95,16 +108,39 @@ export default function CastleLevelsScreen() {
 
   // Auto-start random level when launched from map (random mode)
   useEffect(() => {
-    if (isRandomMode) {
-      // Pick a random level between 1-10
-      const randomLevelNum = Math.floor(Math.random() * 10) + 1;
+    if (isRandomMode && playerId) {
+      startMapGame();
+    }
+  }, [isRandomMode, playerId]);
+  
+  // Start a game session when coming from the map
+  const startMapGame = async () => {
+    if (!playerId) return;
+    
+    try {
+      const session = await startRandomCastleGame(playerId, mapCastleId || undefined);
+      setGameSessionId(session.id);
+      
+      // Use the random level from the backend
+      const randomLevelNum = session.random_level || Math.floor(Math.random() * 10) + 1;
       setCurrentLevel(randomLevelNum);
-      // Generate the level immediately after state is set
+      
+      // Generate the level
       setTimeout(() => {
         generateLevel(randomLevelNum);
       }, 100);
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || 'Failed to start game';
+      showGameToast({
+        type: 'error',
+        title: 'Cannot Start',
+        message: errorMsg,
+        duration: 3000,
+      });
+      // Go back to map
+      router.back();
     }
-  }, [isRandomMode]);
+  };
 
   // Keep refs in sync
   useEffect(() => {
@@ -317,21 +353,70 @@ export default function CastleLevelsScreen() {
         setCameraX(0);
         
         const remainingEnemies = enemies.filter(e => !e.eliminated).length;
+        const eliminatedCount = enemies.length - remainingEnemies;
         
         if (remainingEnemies === 0) {
           setWon(true);
           setGameOver(true);
           saveProgress(currentLevel);
-          setShowResults(true);
+          
+          // If from map, submit result to backend for rewards
+          if (isFromMap && gameSessionId) {
+            submitGameResult(true, eliminatedCount);
+          } else {
+            setShowResults(true);
+          }
         } else if (shotsRemaining <= 0) {
           setWon(false);
           setGameOver(true);
-          setShowResults(true);
+          
+          // If from map, submit result to backend (cooldown still applies)
+          if (isFromMap && gameSessionId) {
+            submitGameResult(false, eliminatedCount);
+          } else {
+            setShowResults(true);
+          }
         }
       }, 1500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cannonball?.active, firing, enemies, shotsRemaining, currentLevel]);
+  }, [cannonball?.active, firing, enemies, shotsRemaining, currentLevel, isFromMap, gameSessionId]);
+  
+  // Submit game result to backend for map-based games
+  const submitGameResult = async (didWin: boolean, eliminatedCount: number) => {
+    if (!gameSessionId || isSubmittingResult) return;
+    
+    setIsSubmittingResult(true);
+    
+    try {
+      const result = await completeCastleGame(gameSessionId, eliminatedCount, didWin);
+      
+      if (didWin && result.rewards) {
+        setGameRewards(result.rewards);
+        showGameToast({
+          type: 'success',
+          title: '🏰 VICTORY!',
+          message: `+$${result.rewards.cash} | +${result.rewards.xp} XP | +${result.rewards.reputation} Rep`,
+          duration: 3000,
+        });
+        // Refresh player stats
+        if (refreshPlayer) refreshPlayer();
+      }
+      
+      // Refresh cooldowns so the map shows the timer
+      if (playerId) {
+        invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
+      }
+      
+      setShowResults(true);
+    } catch (error) {
+      console.error('Failed to submit castle game result:', error);
+      setShowResults(true);
+    } finally {
+      setIsSubmittingResult(false);
+    }
+  };
 
   const fireCannon = () => {
     if (firing || shotsRemaining <= 0 || gameOver) return;
@@ -660,12 +745,22 @@ export default function CastleLevelsScreen() {
                 <Text style={styles.rewardsTitle}>REWARDS</Text>
                 <View style={styles.rewardRow}>
                   <Text style={styles.rewardIcon}>💰</Text>
-                  <Text style={styles.rewardValue}>+${config.cashReward}</Text>
+                  <Text style={styles.rewardValue}>
+                    +${isFromMap && gameRewards ? gameRewards.cash : config.cashReward}
+                  </Text>
                 </View>
                 <View style={styles.rewardRow}>
                   <Text style={styles.rewardIcon}>⭐</Text>
-                  <Text style={styles.rewardValue}>+{config.xpReward} XP</Text>
+                  <Text style={styles.rewardValue}>
+                    +{isFromMap && gameRewards ? gameRewards.xp : config.xpReward} XP
+                  </Text>
                 </View>
+                {isFromMap && gameRewards && (
+                  <View style={styles.rewardRow}>
+                    <Text style={styles.rewardIcon}>👑</Text>
+                    <Text style={styles.rewardValue}>+{gameRewards.reputation} Rep</Text>
+                  </View>
+                )}
               </View>
             )}
             

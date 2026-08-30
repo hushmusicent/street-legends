@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../stores/gameStore';
 import { startCarChase, completeCarChase } from '../services/api';
 import { showGameToast } from '../components/GameToast';
+import { useInvalidateMapQueries } from '../hooks/useMapQueries';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -140,7 +141,8 @@ export default function CarChaseGame() {
   const countyLineDistance = parseInt(params.countyLineDistance as string) || 8000;
   const isStandalone = params.standalone === 'true';
   
-  const { playerId } = useGameStore();
+  const { playerId, refreshPlayer } = useGameStore();
+  const { invalidateCooldowns, invalidatePlayer } = useInvalidateMapQueries();
   
   const [gameId, setGameId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -409,6 +411,15 @@ export default function CarChaseGame() {
           message: `+$${result.rewards?.cash || rewards.totalCash} | +${result.rewards?.xp || rewards.totalXP} XP`,
           duration: 2000,
         });
+        
+        // Refresh player stats to show new cash/XP
+        if (refreshPlayer) refreshPlayer();
+      }
+      
+      // Refresh cooldowns so the map shows the timer
+      if (playerId) {
+        invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
       }
     } catch (error) {
       console.error('Failed to complete car chase:', error);

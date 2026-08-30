@@ -3275,6 +3275,71 @@ async def start_castle_minigame(castle_id: str, player_id: str):
     return game_session
 
 
+@api_router.post("/castles/start-random")
+async def start_random_castle_game(player_id: str, castle_id: str = None):
+    """Start a random castle game from the map - picks a random difficulty level"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Check cooldown if castle_id provided
+    if castle_id:
+        last_attempt = player.get("castle_cooldowns", {}).get(castle_id)
+        if last_attempt:
+            try:
+                last_dt = datetime.fromisoformat(last_attempt)
+                secs_since = (datetime.utcnow() - last_dt).total_seconds()
+                if secs_since < 900:  # 15 minutes
+                    remaining_secs = int(900 - secs_since)
+                    mins = remaining_secs // 60
+                    secs = remaining_secs % 60
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cooldown active! Wait {mins}m {secs}s"
+                    )
+            except (ValueError, TypeError):
+                pass
+    
+    # Pick random difficulty 1-10
+    random_level = random.randint(1, 10)
+    
+    # Level-based rewards
+    level_rewards = {
+        1: {"min": 25, "max": 50, "xp": 12, "rep": 2},
+        2: {"min": 35, "max": 70, "xp": 18, "rep": 3},
+        3: {"min": 50, "max": 100, "xp": 25, "rep": 4},
+        4: {"min": 75, "max": 150, "xp": 35, "rep": 5},
+        5: {"min": 100, "max": 200, "xp": 50, "rep": 6},
+        6: {"min": 125, "max": 250, "xp": 75, "rep": 7},
+        7: {"min": 175, "max": 350, "xp": 100, "rep": 8},
+        8: {"min": 225, "max": 450, "xp": 125, "rep": 9},
+        9: {"min": 300, "max": 600, "xp": 185, "rep": 10},
+        10: {"min": 500, "max": 1000, "xp": 250, "rep": 15},
+    }
+    rewards = level_rewards.get(random_level, level_rewards[5])
+    
+    # Create game session
+    game_session = {
+        "id": str(uuid.uuid4()),
+        "castle_id": castle_id or f"random_{str(uuid.uuid4())[:8]}",
+        "player_id": player_id,
+        "castle_name": f"Random Fortress Lv.{random_level}",
+        "difficulty": random_level,
+        "random_level": random_level,
+        "status": "active",
+        "min_reward": rewards["min"],
+        "max_reward": rewards["max"],
+        "xp_reward": rewards["xp"],
+        "rep_reward": rewards["rep"],
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.castle_games.insert_one(game_session)
+    game_session.pop("_id", None)
+    
+    return game_session
+
+
 @api_router.post("/castles/game/{game_id}/complete")
 async def complete_castle_game(game_id: str, members_eliminated: int, won: bool):
     """Complete a castle mini-game and award rewards if won"""
