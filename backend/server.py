@@ -114,12 +114,13 @@ DURABILITY_LOSS = {
 }
 
 # Repair cost multiplier by rarity (cost = base_value * multiplier * damage_percent)
+# Increased by 50% for game balance
 REPAIR_COST_MULTIPLIER = {
-    "common": 0.3,
-    "uncommon": 0.4,
-    "rare": 0.5,
-    "epic": 0.6,
-    "legendary": 0.8,
+    "common": 0.45,      # was 0.3, +50%
+    "uncommon": 0.6,     # was 0.4, +50%
+    "rare": 0.75,        # was 0.5, +50%
+    "epic": 0.9,         # was 0.6, +50%
+    "legendary": 1.2,    # was 0.8, +50%
 }
 
 def get_max_durability(item_id: str) -> int:
