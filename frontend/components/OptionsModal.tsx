@@ -29,6 +29,7 @@ interface OptionsModalProps {
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
   const { clearPlayer, playerId } = useGameStore();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showMiniGames, setShowMiniGames] = useState(false);
 
   const shareMessage = '🎮 Check out Street Legends - A GTA-style GPS RPG game! Fight enemies, capture territories, and build your criminal empire in real life locations! Download now: https://street-empire-test.preview.emergentagent.com';
 
@@ -231,39 +232,71 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
 
           <View style={styles.divider} />
 
-          {/* Castle Assault Mini-game */}
+          {/* Mini Games Button */}
           <TouchableOpacity 
-            style={styles.castleRow} 
-            onPress={() => {
-              onClose();
-              setTimeout(() => router.push('/castle-levels'), 300);
-            }} 
+            style={styles.miniGamesRow} 
+            onPress={() => setShowMiniGames(!showMiniGames)} 
             activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 18 }}>🏰</Text>
-            <Text style={styles.castleText}>CASTLE ASSAULT</Text>
+            <View style={styles.miniGamesLeft}>
+              <Text style={{ fontSize: 18 }}>🎮</Text>
+              <Text style={styles.miniGamesText}>MINI GAMES</Text>
+            </View>
+            <Ionicons 
+              name={showMiniGames ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color="#9b59b6" 
+            />
           </TouchableOpacity>
 
-          {/* Car Chase Mini-game */}
-          <TouchableOpacity 
-            style={styles.carChaseRow} 
-            onPress={() => {
-              onClose();
-              setTimeout(() => router.push({
-                pathname: '/car-chase',
-                params: {
-                  standalone: 'true',
-                  chaseName: 'Practice Run',
-                  difficulty: '5',
-                  countyLineDistance: '8000',
-                },
-              }), 300);
-            }} 
-            activeOpacity={0.7}
-          >
-            <Text style={{ fontSize: 18 }}>🚗💨</Text>
-            <Text style={styles.carChaseText}>CAR CHASE</Text>
-          </TouchableOpacity>
+          {/* Mini Games Sub-menu */}
+          {showMiniGames && (
+            <View style={styles.miniGamesMenu}>
+              {/* Castle Assault Mini-game */}
+              <TouchableOpacity 
+                style={styles.miniGameItem} 
+                onPress={() => {
+                  onClose();
+                  setShowMiniGames(false);
+                  setTimeout(() => router.push('/castle-levels'), 300);
+                }} 
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 22 }}>🏰</Text>
+                <View style={styles.miniGameInfo}>
+                  <Text style={styles.miniGameTitle}>Castle Assault</Text>
+                  <Text style={styles.miniGameDesc}>Cannon physics puzzle game</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#CD853F" />
+              </TouchableOpacity>
+
+              {/* Car Chase Mini-game */}
+              <TouchableOpacity 
+                style={styles.miniGameItem} 
+                onPress={() => {
+                  onClose();
+                  setShowMiniGames(false);
+                  setTimeout(() => router.push({
+                    pathname: '/car-chase',
+                    params: {
+                      standalone: 'true',
+                      chaseName: 'Practice Run',
+                      difficulty: '5',
+                      countyLineDistance: '8000',
+                    },
+                  }), 300);
+                }} 
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 22 }}>🚗</Text>
+                <View style={styles.miniGameInfo}>
+                  <Text style={styles.miniGameTitle}>Car Chase</Text>
+                  <Text style={styles.miniGameDesc}>Dodge traffic & escape cops</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Quit Game */}
           {showQuit && (
@@ -423,40 +456,57 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
   },
-  castleRow: {
+  // Mini Games Menu Styles
+  miniGamesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
     paddingVertical: 14,
-    backgroundColor: 'rgba(139, 69, 19, 0.15)',
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(155, 89, 182, 0.12)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(139, 69, 19, 0.4)',
+    borderColor: 'rgba(155, 89, 182, 0.3)',
   },
-  castleText: {
-    color: '#CD853F',
+  miniGamesLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  miniGamesText: {
+    color: '#9b59b6',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 2,
   },
-  carChaseRow: {
+  miniGamesMenu: {
+    marginTop: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
+    padding: 8,
+    gap: 8,
+  },
+  miniGameItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(231, 76, 60, 0.15)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(231, 76, 60, 0.4)',
-    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    gap: 12,
   },
-  carChaseText: {
-    color: '#e74c3c',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 2,
+  miniGameInfo: {
+    flex: 1,
+  },
+  miniGameTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  miniGameDesc: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 2,
   },
   deleteRow: {
     flexDirection: 'row',
