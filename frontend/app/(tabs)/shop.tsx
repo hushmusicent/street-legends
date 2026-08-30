@@ -17,7 +17,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { getConsumableShop, buyConsumable, getPlayer } from '../../services/api';
 import api from '../../services/api';
 
-type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'extra_health' | 'extra_energy';
+type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -31,8 +31,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: keyof typeof Ionico
   health_recharge: { label: 'Health', icon: 'heart', color: '#e74c3c' },
   energy_recharge: { label: 'Energy', icon: 'battery-charging', color: '#3498db' },
   combo: { label: 'Combo', icon: 'fast-food', color: '#2ecc71' },
-  extra_health: { label: '+Max HP', icon: 'heart-circle', color: '#e91e63' },
-  extra_energy: { label: '+Max EN', icon: 'flash', color: '#9c27b0' },
+  consumable: { label: 'Stims', icon: 'fitness', color: '#9c27b0' },
 };
 
 const ITEM_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -152,8 +151,7 @@ export default function ShopTabScreen() {
     { key: 'health_recharge', label: 'HP', icon: 'heart' },
     { key: 'energy_recharge', label: 'EN', icon: 'battery-charging' },
     { key: 'combo', label: 'Combo', icon: 'fast-food' },
-    { key: 'extra_health', label: '+HP', icon: 'heart-circle' },
-    { key: 'extra_energy', label: '+EN', icon: 'flash' },
+    { key: 'consumable', label: 'Stims', icon: 'fitness' },
   ];
 
   const getEffectText = (effect: Record<string, any>): string[] => {
@@ -164,6 +162,8 @@ export default function ShopTabScreen() {
     if (effect.restore_energy_full) lines.push('Full Energy Restore');
     if (effect.temp_max_health) lines.push(`+${effect.temp_max_health} Max HP (${effect.duration_battles} battles)`);
     if (effect.temp_max_energy) lines.push(`+${effect.temp_max_energy} Max EN (${effect.duration_battles} battles)`);
+    if (effect.temp_health_percent) lines.push(`+${Math.round(effect.temp_health_percent * 100)}% HP (instant)`);
+    if (effect.temp_energy_percent) lines.push(`+${Math.round(effect.temp_energy_percent * 100)}% Energy (instant)`);
     return lines;
   };
 
@@ -273,8 +273,7 @@ export default function ShopTabScreen() {
             const canBuy = (player?.cash || 0) >= item.price && (player?.level || 0) >= item.level_requirement;
             const isBuying = buying === item.id;
             const effectLines = getEffectText(item.effect);
-            const isPermanent = false; // All boosts are now temporary
-            const isBoost = item.category === 'extra_health' || item.category === 'extra_energy';
+            const isStim = item.category === 'consumable';
 
             return (
               <View key={item.id} style={[styles.itemCard, { borderLeftColor: catConfig?.color || rarityColor, borderLeftWidth: 3 }]}>
@@ -296,8 +295,8 @@ export default function ShopTabScreen() {
                   <Text style={styles.itemDesc} numberOfLines={1}>{item.description}</Text>
                   <View style={styles.effectsRow}>
                     {effectLines.map((eff, idx) => (
-                      <View key={idx} style={[styles.effectChip, isBoost && styles.effectChipSpecial]}>
-                        <Text style={[styles.effectText, isBoost && styles.effectTextSpecial]}>{eff}</Text>
+                      <View key={idx} style={[styles.effectChip, isStim && styles.effectChipSpecial]}>
+                        <Text style={[styles.effectText, isStim && styles.effectTextSpecial]}>{eff}</Text>
                       </View>
                     ))}
                   </View>

@@ -203,11 +203,11 @@ export default function InstructionsScreen() {
           </View>
 
           <Step number={1} text="Navigate to the Map and find a Health Store marker (green cross)." />
-          <Step number={2} text="Browse available implants and boosters." />
-          <Step number={3} text="Purchase upgrades using your hard-earned cash." />
-          <Step number={4} text="Effects apply immediately and permanently!" />
+          <Step number={2} text="Browse available stims and consumables." />
+          <Step number={3} text="Purchase items using your hard-earned cash." />
+          <Step number={4} text="Use stims from Inventory for instant HP/Energy boosts!" />
           
-          <Tip>Higher level Health Stores have better implants - explore different areas!</Tip>
+          <Tip>Health and Energy Stims give temporary boosts that can exceed your max stats!</Tip>
         </Section>
 
         {/* Leveling Up */}
