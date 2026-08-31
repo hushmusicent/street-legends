@@ -28,6 +28,7 @@ import {
   visitNightclub,
   robBank,
   startCarChase,
+  startRunaway,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -59,10 +60,12 @@ export default function MapScreen() {
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
   const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
   const [selectedCarChase, setSelectedCarChase] = useState<any | null>(null);
+  const [selectedRunaway, setSelectedRunaway] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
   const [robbingBank, setRobbingBank] = useState(false);
   const [startingCarChase, setStartingCarChase] = useState(false);
+  const [startingRunaway, setStartingRunaway] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -146,6 +149,7 @@ export default function MapScreen() {
   const nearbyBanks = useMemo(() => entitiesData?.banks || [], [entitiesData?.banks]);
   const nearbyCastles = useMemo(() => entitiesData?.castles || [], [entitiesData?.castles]);
   const nearbyCarChases = useMemo(() => entitiesData?.carChases || [], [entitiesData?.carChases]);
+  const nearbyRunaways = useMemo(() => entitiesData?.runaways || [], [entitiesData?.runaways]);
 
   // Update global store when entities change
   useEffect(() => {
@@ -454,6 +458,32 @@ export default function MapScreen() {
     }
   }, [playerId, selectedCarChase, startingCarChase]);
 
+  const handleStartRunaway = useCallback(async () => {
+    if (!playerId || !selectedRunaway || startingRunaway) return;
+    setStartingRunaway(true);
+    
+    try {
+      const gameData = await startRunaway(selectedRunaway.id, playerId);
+      setSelectedRunaway(null);
+      
+      // Navigate to the runaway simulator game screen
+      router.push({
+        pathname: '/runaway-simulator',
+        params: {
+          runawayId: selectedRunaway.id,
+          runawayName: selectedRunaway.name,
+          difficulty: selectedRunaway.difficulty.toString(),
+          gameId: gameData.game_id,
+        },
+      });
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || 'Failed to start runaway';
+      Alert.alert('Cannot Start Runaway', errorMsg);
+    } finally {
+      setStartingRunaway(false);
+    }
+  }, [playerId, selectedRunaway, startingRunaway]);
+
   // Memoize markers to prevent re-renders
   const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
@@ -531,7 +561,20 @@ export default function MapScreen() {
         cooldownSeconds: remainingSecs,
       };
     }),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, localCooldowns]);
+    ...nearbyRunaways.map((r) => {
+      const cooldownKey = `runaway_${r.id}`;
+      const remainingSecs = localCooldowns[cooldownKey] || 0;
+      return {
+        id: r.id,
+        coordinate: { latitude: r.latitude, longitude: r.longitude },
+        type: 'runaway' as const,
+        name: r.name,
+        level: r.difficulty,
+        icon: '🚔',
+        cooldownSeconds: remainingSecs,
+      };
+    }),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, localCooldowns]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -561,8 +604,11 @@ export default function MapScreen() {
     } else if (marker.type === 'carChase') {
       const carChase = nearbyCarChases.find((cc) => cc.id === marker.id);
       if (carChase) setSelectedCarChase(carChase);
+    } else if (marker.type === 'runaway') {
+      const runaway = nearbyRunaways.find((r) => r.id === marker.id);
+      if (runaway) setSelectedRunaway(runaway);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways]);
 
   if (loading) {
     return (
@@ -1017,16 +1063,16 @@ export default function MapScreen() {
         </Pressable>
       </Modal>
 
-      {/* Castle Cannon Mini-game Modal */}
+      {/* Castle Cannon / Car Chase / Runaway Mini-game Modal */}
       <Modal
-        visible={!!selectedCastle || !!selectedCarChase}
+        visible={!!selectedCastle || !!selectedCarChase || !!selectedRunaway}
         transparent
         animationType="fade"
-        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); }}
+        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); }}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); }}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); }}>
           <Pressable style={styles.terrModal} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); }}>
+            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); }}>
               <Ionicons name="close" size={22} color="#666" />
             </TouchableOpacity>
 
@@ -1198,6 +1244,92 @@ export default function MapScreen() {
                       <>
                         <Ionicons name="car-sport" size={18} color="#fff" />
                         <Text style={styles.terrBtnText}>START CHASE</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+            
+            {/* Runaway Modal Content */}
+            {selectedRunaway && (
+              <>
+                <View style={styles.terrHeader}>
+                  <View style={styles.terrEmoji}>
+                    <Text style={{ fontSize: 36 }}>🚔</Text>
+                  </View>
+                  <View style={styles.terrInfo}>
+                    <Text style={[styles.terrName, { color: '#00b894' }]}>{selectedRunaway.name}</Text>
+                    <Text style={styles.terrType}>Runaway Simulator</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.terrStats}>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Difficulty:</Text>
+                    <Text style={styles.terrStatValue}>
+                      {'⭐'.repeat(Math.min(5, Math.ceil(selectedRunaway.difficulty / 4)))} (Level {selectedRunaway.difficulty})
+                    </Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Hideout:</Text>
+                    <Text style={styles.terrStatValue}>{selectedRunaway.hideout_distance}m to safety</Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Reward:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#f39c12' }]}>
+                      ${selectedRunaway.min_reward} - ${selectedRunaway.max_reward}
+                    </Text>
+                  </View>
+                  <View style={styles.terrStatRow}>
+                    <Text style={styles.terrStatLabel}>Bonus:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#2196f3' }]}>
+                      +{selectedRunaway.xp_reward} XP / +{selectedRunaway.rep_reward} Rep
+                    </Text>
+                  </View>
+                </View>
+                
+                <Text style={styles.terrDesc}>
+                  🏃 Run through the streets and avoid obstacles!{'\n'}
+                  Jump over low obstacles and duck under high ones.{'\n'}
+                  Reach the hideout to escape the cops!
+                </Text>
+                
+                {localCooldowns[`runaway_${selectedRunaway.id}`] > 0 && (
+                  <View style={styles.cooldownWarning}>
+                    <Ionicons name="time" size={16} color="#f39c12" />
+                    <Text style={styles.cooldownText}>
+                      Cooldown: {Math.floor(localCooldowns[`runaway_${selectedRunaway.id}`] / 60)}m {localCooldowns[`runaway_${selectedRunaway.id}`] % 60}s
+                    </Text>
+                  </View>
+                )}
+                
+                <View style={styles.terrActions}>
+                  <TouchableOpacity 
+                    style={styles.terrBtnSecondary} 
+                    onPress={() => setSelectedRunaway(null)}
+                  >
+                    <Text style={styles.terrBtnSecondaryText}>CANCEL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[
+                      styles.terrBtnPrimary, 
+                      { backgroundColor: localCooldowns[`runaway_${selectedRunaway.id}`] > 0 ? '#555' : '#00b894' }
+                    ]}
+                    onPress={handleStartRunaway}
+                    disabled={startingRunaway || localCooldowns[`runaway_${selectedRunaway.id}`] > 0}
+                  >
+                    {startingRunaway ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : localCooldowns[`runaway_${selectedRunaway.id}`] > 0 ? (
+                      <>
+                        <Ionicons name="time" size={18} color="#aaa" />
+                        <Text style={[styles.terrBtnText, { color: '#aaa' }]}>ON COOLDOWN</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="walk" size={18} color="#fff" />
+                        <Text style={styles.terrBtnText}>START RUNNING</Text>
                       </>
                     )}
                   </TouchableOpacity>

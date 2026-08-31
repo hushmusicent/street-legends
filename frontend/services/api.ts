@@ -401,4 +401,20 @@ export const getMinigameCooldowns = async (playerId: string) => {
   return response.data;
 };
 
+// Runaway Simulator APIs
+export const spawnRunaways = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/runaways/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const startRunaway = async (runawayId: string, playerId: string) => {
+  const response = await api.post(`/runaways/${runawayId}/start?player_id=${playerId}`);
+  return response.data;
+};
+
+export const completeRunaway = async (gameId: string, won: boolean, distanceTraveled: number) => {
+  const response = await api.post(`/runaways/game/${gameId}/complete?won=${won}&distance_traveled=${distanceTraveled}`);
+  return response.data;
+};
+
 export default api;

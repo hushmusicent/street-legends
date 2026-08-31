@@ -3171,7 +3171,7 @@ async def spawn_castles(latitude: float, longitude: float, player_level: int = 1
 
 @api_router.get("/minigames/cooldowns/{player_id}")
 async def get_minigame_cooldowns(player_id: str):
-    """Get all active cooldowns for mini-games (castles and car chases)"""
+    """Get all active cooldowns for mini-games (castles, car chases, and runaways)"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -3208,6 +3208,23 @@ async def get_minigame_cooldowns(player_id: str):
                 cooldowns[f"carchase_{chase_id}"] = {
                     "type": "carchase",
                     "marker_id": chase_id,
+                    "remaining_seconds": remaining,
+                    "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
+                }
+        except (ValueError, TypeError):
+            pass
+    
+    # Get runaway cooldowns
+    runaway_cooldowns = player.get("runaway_cooldowns", {})
+    for runaway_id, last_attempt in runaway_cooldowns.items():
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (now - last_dt).total_seconds()
+            if secs_since < cooldown_duration:
+                remaining = int(cooldown_duration - secs_since)
+                cooldowns[f"runaway_{runaway_id}"] = {
+                    "type": "runaway",
+                    "marker_id": runaway_id,
                     "remaining_seconds": remaining,
                     "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
                 }
@@ -3614,6 +3631,185 @@ async def complete_car_chase(game_id: str, won: bool, distance_traveled: int):
             "won": False,
             "message": f"🚔 BUSTED! The cops caught you on {game['chase_name']}!",
             "chase_name": game["chase_name"],
+            "distance_traveled": distance_traveled,
+            "rewards": None,
+        }
+
+
+# ============== RUNAWAY SIMULATOR MINI-GAME ==============
+
+RUNAWAY_NAMES = [
+    "Downtown Dash", "Alley Escape", "Street Sprint", "Metro Run",
+    "Subway Getaway", "Backstreet Bolt", "Night Runner", "Urban Flight",
+    "Side Street Slip", "Avenue Pursuit", "Block Runner", "City Chase",
+]
+
+@api_router.get("/runaways/spawn")
+async def spawn_runaways(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn runaway simulator markers near the player"""
+    # Create deterministic ID based on grid location
+    grid_lat = round(latitude * 100) / 100
+    grid_lng = round(longitude * 100) / 100
+    area_seed = hash(f"runaway_{grid_lat}_{grid_lng}")
+    random.seed(area_seed)
+    
+    runaway_id = f"runaway_{abs(area_seed) % 100000}"
+    
+    # Check if runaway already exists
+    existing = await db.runaways.find({
+        "latitude": {"$gte": grid_lat - 0.01, "$lte": grid_lat + 0.01},
+        "longitude": {"$gte": grid_lng - 0.01, "$lte": grid_lng + 0.01}
+    }).to_list(length=10)
+    
+    if existing:
+        return [serialize_doc(r) for r in existing]
+    
+    # Generate a new runaway location
+    # Difficulty scales with player level (1-20 range)
+    difficulty = min(20, max(1, (player_level // 3) + random.randint(1, 5)))
+    
+    runaway = {
+        "id": runaway_id,
+        "name": RUNAWAY_NAMES[abs(area_seed) % len(RUNAWAY_NAMES)],
+        "latitude": grid_lat + (random.random() - 0.5) * 0.005,
+        "longitude": grid_lng + (random.random() - 0.5) * 0.005,
+        "difficulty": difficulty,
+        "hideout_distance": 2500 + difficulty * 200,  # Matching frontend calculation
+        "min_reward": 60 + difficulty * 20,
+        "max_reward": 120 + difficulty * 30,
+        "xp_reward": 40 + difficulty * 15,
+        "rep_reward": 3 + difficulty // 3,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.runaways.insert_one(runaway)
+    runaway.pop("_id", None)
+    return [runaway]
+
+
+@api_router.post("/runaways/{runaway_id}/start")
+async def start_runaway(runaway_id: str, player_id: str):
+    """Start a runaway simulator game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    runaway = await db.runaways.find_one({"id": runaway_id})
+    if not runaway:
+        raise HTTPException(status_code=404, detail="Runaway location not found")
+    
+    # Check cooldown (15 minutes per player per runaway)
+    last_attempt = player.get("runaway_cooldowns", {}).get(runaway_id)
+    if last_attempt:
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (datetime.utcnow() - last_dt).total_seconds()
+            if secs_since < 900:  # 15 minutes
+                remaining = int(900 - secs_since)
+                mins = remaining // 60
+                secs = remaining % 60
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cooldown active. Wait {mins}:{secs:02d} before trying again."
+                )
+        except ValueError:
+            pass
+    
+    # Create game session
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "runaway_id": runaway_id,
+        "runaway_name": runaway["name"],
+        "difficulty": runaway["difficulty"],
+        "hideout_distance": runaway["hideout_distance"],
+        "min_reward": runaway["min_reward"],
+        "max_reward": runaway["max_reward"],
+        "xp_reward": runaway["xp_reward"],
+        "rep_reward": runaway["rep_reward"],
+        "status": "active",
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.runaway_games.insert_one(game)
+    
+    return {
+        "game_id": game_id,
+        "runaway_name": runaway["name"],
+        "difficulty": runaway["difficulty"],
+        "hideout_distance": runaway["hideout_distance"],
+    }
+
+
+@api_router.post("/runaways/game/{game_id}/complete")
+async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
+    """Complete a runaway game and award rewards if won"""
+    game = await db.runaway_games.find_one({"id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    
+    if game["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already completed")
+    
+    player = await db.players.find_one({"id": game["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    runaway_id = game["runaway_id"]
+    
+    # Update game status
+    await db.runaway_games.update_one(
+        {"id": game_id},
+        {"$set": {
+            "status": "completed",
+            "won": won,
+            "distance_traveled": distance_traveled,
+            "completed_at": datetime.utcnow().isoformat(),
+        }}
+    )
+    
+    # Set cooldown (15 minutes win or lose)
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {f"runaway_cooldowns.{runaway_id}": datetime.utcnow().isoformat()}}
+    )
+    
+    if won:
+        # Calculate rewards based on difficulty
+        difficulty = game["difficulty"]
+        
+        # Base reward scaled by difficulty
+        cash_reward = 80 + difficulty * 25
+        xp_reward = 40 + difficulty * 15
+        rep_reward = 3 + difficulty // 3
+        
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$inc": {"cash": cash_reward, "xp": xp_reward, "reputation": rep_reward}}
+        )
+        
+        updated_player = await db.players.find_one({"id": game["player_id"]})
+        
+        return {
+            "success": True,
+            "won": True,
+            "message": f"🏠💨 ESCAPED! You made it to the hideout on {game['runaway_name']}!",
+            "runaway_name": game["runaway_name"],
+            "distance_traveled": distance_traveled,
+            "rewards": {
+                "cash": cash_reward,
+                "xp": xp_reward,
+                "reputation": rep_reward,
+            },
+            "cash": updated_player.get("cash", 0),
+        }
+    else:
+        return {
+            "success": True,
+            "won": False,
+            "message": f"🚔 BUSTED! The cops caught you on {game['runaway_name']}!",
+            "runaway_name": game["runaway_name"],
             "distance_traveled": distance_traveled,
             "rewards": None,
         }

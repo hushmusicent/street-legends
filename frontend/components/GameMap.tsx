@@ -19,7 +19,7 @@ interface Position {
 interface MapMarker {
   id: string;
   coordinate: Position;
-  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub' | 'bank' | 'castle' | 'carChase';
+  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub' | 'bank' | 'castle' | 'carChase' | 'runaway';
   level?: number;
   name?: string;
   icon?: string;
@@ -148,8 +148,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513', carChase: '#e74c3c' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513', carChase: '#e74c3c', runaway: '#00b894' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     function getEnemyImage(name) {
@@ -406,6 +406,26 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 '<div style="position:absolute;top:-8px;right:-4px;background:#f39c12;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">🚔' + chaseLevel + '</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(231,76,60,0.95);color:#fff;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + chaseName + '</div>' +
                 '</div>';
+            } else if (m.type === 'runaway') {
+              var runawayName = m.name || 'Runaway';
+              var runawayLevel = m.level || 1;
+              var runawayCooldownSecs = m.cooldownSeconds || 0;
+              var runawayCooldownHTML = '';
+              if (runawayCooldownSecs > 0) {
+                var rMins = Math.floor(runawayCooldownSecs / 60);
+                var rSecs = runawayCooldownSecs % 60;
+                var rTimeStr = rMins + ':' + (rSecs < 10 ? '0' : '') + rSecs;
+                runawayCooldownHTML = '<div style="position:absolute;top:0;left:0;right:0;bottom:20px;background:rgba(0,0,0,0.7);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;">' +
+                  '<div style="font-size:10px;color:#ff6b6b;">⏱</div>' +
+                  '<div style="font-size:11px;color:#fff;font-weight:bold;">' + rTimeStr + '</div>' +
+                  '</div>';
+              }
+              markerHTML = '<div style="width:56px;height:72px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                '<div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#00b894,#00a085);display:flex;align-items:center;justify-content:center;border:3px solid ' + (runawayCooldownSecs > 0 ? '#666' : '#fff') + ';box-shadow:0 4px 14px rgba(0,184,148,0.7);font-size:26px;cursor:pointer;' + (runawayCooldownSecs > 0 ? 'filter:grayscale(50%);' : '') + '">🚔</div>' +
+                runawayCooldownHTML +
+                '<div style="position:absolute;top:-8px;right:-4px;background:#00cec9;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">🏃' + runawayLevel + '</div>' +
+                '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(0,184,148,0.95);color:#fff;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + runawayName + '</div>' +
+                '</div>';
             } else if (enemyImg) {
               var isBoss = m.isBoss || false;
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:' + (isBoss ? '#FFD700' : '#ff6b35') + ';color:' + (isBoss ? '#000' : '#fff') + ';padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
@@ -427,9 +447,10 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var isBankMarker = (m.type === 'bank');
             var isCastleMarker = (m.type === 'castle');
             var isCarChaseMarker = (m.type === 'carChase');
-            var markerWidth = (isCastleMarker || isCarChaseMarker) ? 56 : (isLocationMarker ? 48 : (isBankMarker ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32))));
-            var markerHeight = (isCastleMarker || isCarChaseMarker) ? 72 : (isLocationMarker ? 62 : (isBankMarker ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32))));
-            var iconAnchorY = (isCastleMarker || isCarChaseMarker) ? 36 : (isLocationMarker ? 31 : (isBankMarker ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));
+            var isRunawayMarker = (m.type === 'runaway');
+            var markerWidth = (isCastleMarker || isCarChaseMarker || isRunawayMarker) ? 56 : (isLocationMarker ? 48 : (isBankMarker ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32))));
+            var markerHeight = (isCastleMarker || isCarChaseMarker || isRunawayMarker) ? 72 : (isLocationMarker ? 62 : (isBankMarker ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32))));
+            var iconAnchorY = (isCastleMarker || isCarChaseMarker || isRunawayMarker) ? 36 : (isLocationMarker ? 31 : (isBankMarker ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,

@@ -10,6 +10,7 @@ import {
   spawnBanks,
   spawnCastles,
   spawnCarChases,
+  spawnRunaways,
   getPlayer,
   updatePlayerPosition,
   getMinigameCooldowns,
@@ -44,6 +45,7 @@ export interface MapEntitiesData {
   banks: any[];
   castles: any[];
   carChases: any[];
+  runaways: any[];
 }
 
 interface UseMapEntitiesOptions {
@@ -83,6 +85,7 @@ export const useMapEntities = ({
         spawnBanks(latitude, longitude, playerLevel),
         spawnCastles(latitude, longitude, playerLevel),
         spawnCarChases(latitude, longitude, playerLevel),
+        spawnRunaways(latitude, longitude, playerLevel),
       ]);
 
       return {
@@ -96,6 +99,7 @@ export const useMapEntities = ({
         banks: results[7].status === 'fulfilled' ? results[7].value : [],
         castles: results[8].status === 'fulfilled' ? results[8].value : [],
         carChases: results[9].status === 'fulfilled' ? results[9].value : [],
+        runaways: results[10].status === 'fulfilled' ? results[10].value : [],
       };
     },
     enabled: enabled && !!playerId && !!latitude && !!longitude,
@@ -135,7 +139,7 @@ export const usePlayerData = ({ playerId, enabled = true }: UsePlayerDataOptions
 
 // Cooldown data structure from backend
 export interface MinigameCooldown {
-  type: 'castle' | 'carchase';
+  type: 'castle' | 'carchase' | 'runaway';
   marker_id: string;
   remaining_seconds: number;
   expires_at: string;
