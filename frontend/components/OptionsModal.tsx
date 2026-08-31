@@ -29,17 +29,19 @@ interface OptionsModalProps {
 }
 
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
-  const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel, packageGrabLevel, setPackageGrabLevel, savePackageGrabLevel, loadPackageGrabLevel } = useGameStore();
+  const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel, packageGrabLevel, setPackageGrabLevel, savePackageGrabLevel, loadPackageGrabLevel, shootoutLevel, setShootoutLevel, saveShootoutLevel, loadShootoutLevel } = useGameStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMiniGames, setShowMiniGames] = useState(false);
   const [showRunawayLevels, setShowRunawayLevels] = useState(false);
   const [showPackageGrabLevels, setShowPackageGrabLevels] = useState(false);
+  const [showShootoutLevels, setShowShootoutLevels] = useState(false);
 
   // Load mini-game levels from storage when modal opens
   useEffect(() => {
     if (visible) {
       loadRunawayLevel();
       loadPackageGrabLevel();
+      loadShootoutLevel();
     }
   }, [visible]);
 
@@ -512,6 +514,111 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                     >
                       <Ionicons name="car" size={18} color="#fff" />
                       <Text style={styles.playRunawayText}>PLAY LEVEL {packageGrabLevel}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+              
+              {/* Shootout Simulator Mini-game with Level Selection */}
+              <View style={[styles.runawayContainer, { backgroundColor: 'rgba(192, 57, 43, 0.08)' }]}>
+                <TouchableOpacity 
+                  style={styles.miniGameItem} 
+                  onPress={() => setShowShootoutLevels(!showShootoutLevels)} 
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 22 }}>🔫</Text>
+                  <View style={styles.miniGameInfo}>
+                    <Text style={styles.miniGameTitle}>Shootout Simulator</Text>
+                    <Text style={styles.miniGameDesc}>Target shooting • Level {shootoutLevel}</Text>
+                  </View>
+                  <Ionicons 
+                    name={showShootoutLevels ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#c0392b" 
+                  />
+                </TouchableOpacity>
+
+                {/* Level Selection Panel */}
+                {showShootoutLevels && (
+                  <View style={[styles.levelSelectionPanel, { borderTopColor: 'rgba(192, 57, 43, 0.2)' }]}>
+                    <Text style={[styles.levelSelectionTitle, { color: '#c0392b' }]}>SELECT LEVEL</Text>
+                    <Text style={styles.levelSelectionHint}>Higher levels = faster crosshair, less time</Text>
+                    
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.levelScrollContent}
+                    >
+                      {Array.from({ length: 20 }, (_, i) => i + 1).map((level) => {
+                        const isSelected = shootoutLevel === level;
+                        // Calculate time and reward for shootout
+                        const timeLimit = Math.max(15, 45 - (level - 1) * 1.5);
+                        const hitReward = 5 + level * 2;
+                        
+                        return (
+                          <TouchableOpacity
+                            key={level}
+                            style={[
+                              styles.levelCard,
+                              isSelected && [styles.levelCardSelected, { backgroundColor: 'rgba(192, 57, 43, 0.2)', borderColor: '#c0392b' }],
+                            ]}
+                            onPress={() => {
+                              setShootoutLevel(level);
+                              saveShootoutLevel(level);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.levelNumber, isSelected && { color: '#c0392b' }]}>
+                              {level}
+                            </Text>
+                            <Text style={styles.levelDistance}>{Math.floor(timeLimit)}s</Text>
+                            <Text style={styles.levelReward}>${hitReward}/hit</Text>
+                            {isSelected && (
+                              <View style={[styles.selectedBadge, { backgroundColor: '#c0392b' }]}>
+                                <Ionicons name="checkmark" size={10} color="#fff" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Current Level Stats */}
+                    <View style={styles.currentLevelStats}>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Time Limit</Text>
+                        <Text style={styles.statValue}>{Math.floor(Math.max(15, 45 - (shootoutLevel - 1) * 1.5))}s</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Per Hit</Text>
+                        <Text style={[styles.statValue, { color: '#f39c12' }]}>${5 + shootoutLevel * 2}</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Shots</Text>
+                        <Text style={[styles.statValue, { color: '#c0392b' }]}>12</Text>
+                      </View>
+                    </View>
+
+                    {/* Play Button */}
+                    <TouchableOpacity
+                      style={[styles.playRunawayButton, { backgroundColor: '#c0392b' }]}
+                      onPress={() => {
+                        onClose();
+                        setShowMiniGames(false);
+                        setShowShootoutLevels(false);
+                        setTimeout(() => router.push({
+                          pathname: '/shootout-simulator',
+                          params: {
+                            standalone: 'true',
+                            shootoutName: `Level ${shootoutLevel} Shootout`,
+                            difficulty: shootoutLevel.toString(),
+                          },
+                        }), 300);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="flash" size={18} color="#fff" />
+                      <Text style={styles.playRunawayText}>PLAY LEVEL {shootoutLevel}</Text>
                     </TouchableOpacity>
                   </View>
                 )}

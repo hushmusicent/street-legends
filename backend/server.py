@@ -3171,7 +3171,7 @@ async def spawn_castles(latitude: float, longitude: float, player_level: int = 1
 
 @api_router.get("/minigames/cooldowns/{player_id}")
 async def get_minigame_cooldowns(player_id: str):
-    """Get all active cooldowns for mini-games (castles, car chases, runaways, and package grabs)"""
+    """Get all active cooldowns for mini-games (castles, car chases, runaways, package grabs, and shootouts)"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -3242,6 +3242,23 @@ async def get_minigame_cooldowns(player_id: str):
                 cooldowns[f"packagegrab_{grab_id}"] = {
                     "type": "packagegrab",
                     "marker_id": grab_id,
+                    "remaining_seconds": remaining,
+                    "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
+                }
+        except (ValueError, TypeError):
+            pass
+    
+    # Get shootout cooldowns
+    shootout_cooldowns = player.get("shootout_cooldowns", {})
+    for shootout_id, last_attempt in shootout_cooldowns.items():
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (now - last_dt).total_seconds()
+            if secs_since < cooldown_duration:
+                remaining = int(cooldown_duration - secs_since)
+                cooldowns[f"shootout_{shootout_id}"] = {
+                    "type": "shootout",
+                    "marker_id": shootout_id,
                     "remaining_seconds": remaining,
                     "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
                 }
@@ -4015,6 +4032,168 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
             "grab_name": game["grab_name"],
             "boxes_collected": 0,
             "distance_traveled": distance_traveled,
+            "rewards": None,
+        }
+
+
+# ============== SHOOTOUT SIMULATOR MINI-GAME ==============
+
+SHOOTOUT_NAMES = [
+    "Back Alley Brawl", "Street Showdown", "Gang Turf", "Warehouse Fight",
+    "Dock Shootout", "Corner Clash", "Night Battle", "Urban Warfare",
+    "Block War", "Territory Dispute", "Street Justice", "Gang Rumble",
+]
+
+@api_router.get("/shootouts/spawn")
+async def spawn_shootouts(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn shootout simulator markers near the player"""
+    # Create deterministic ID based on grid location
+    grid_lat = round(latitude * 100) / 100
+    grid_lng = round(longitude * 100) / 100
+    area_seed = hash(f"shootout_{grid_lat}_{grid_lng}")
+    random.seed(area_seed)
+    
+    shootout_id = f"shootout_{abs(area_seed) % 100000}"
+    
+    # Check if shootout already exists
+    existing = await db.shootouts.find({
+        "latitude": {"$gte": grid_lat - 0.01, "$lte": grid_lat + 0.01},
+        "longitude": {"$gte": grid_lng - 0.01, "$lte": grid_lng + 0.01}
+    }).to_list(length=10)
+    
+    if existing:
+        return [serialize_doc(r) for r in existing]
+    
+    # Generate a new shootout location
+    shootout = {
+        "id": shootout_id,
+        "name": SHOOTOUT_NAMES[abs(area_seed) % len(SHOOTOUT_NAMES)],
+        "latitude": grid_lat + (random.random() - 0.5) * 0.007,
+        "longitude": grid_lng + (random.random() - 0.5) * 0.007,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.shootouts.insert_one(shootout)
+    shootout.pop("_id", None)
+    return [shootout]
+
+
+@api_router.post("/shootouts/{shootout_id}/start")
+async def start_shootout(shootout_id: str, player_id: str):
+    """Start a shootout simulator game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    shootout = await db.shootouts.find_one({"id": shootout_id})
+    if not shootout:
+        raise HTTPException(status_code=404, detail="Shootout location not found")
+    
+    # Check cooldown (15 minutes per player per shootout)
+    last_attempt = player.get("shootout_cooldowns", {}).get(shootout_id)
+    if last_attempt:
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (datetime.utcnow() - last_dt).total_seconds()
+            if secs_since < 900:  # 15 minutes
+                remaining = int(900 - secs_since)
+                mins = remaining // 60
+                secs = remaining % 60
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cooldown active. Wait {mins}:{secs:02d} before trying again."
+                )
+        except ValueError:
+            pass
+    
+    # Create game session
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "shootout_id": shootout_id,
+        "shootout_name": shootout["name"],
+        "status": "active",
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.shootout_games.insert_one(game)
+    
+    return {
+        "game_id": game_id,
+        "shootout_name": shootout["name"],
+    }
+
+
+@api_router.post("/shootouts/game/{game_id}/complete")
+async def complete_shootout(game_id: str, hits: int):
+    """Complete a shootout game and award rewards based on hits"""
+    game = await db.shootout_games.find_one({"id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    
+    if game["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already completed")
+    
+    player = await db.players.find_one({"id": game["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    shootout_id = game["shootout_id"]
+    
+    # Update game status
+    await db.shootout_games.update_one(
+        {"id": game_id},
+        {"$set": {
+            "status": "completed",
+            "hits": hits,
+            "completed_at": datetime.utcnow().isoformat(),
+        }}
+    )
+    
+    # Set cooldown (15 minutes win or lose)
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {f"shootout_cooldowns.{shootout_id}": datetime.utcnow().isoformat()}}
+    )
+    
+    if hits > 0:
+        # Calculate rewards based on hits and level
+        level = player.get("shootout_level", 1)
+        
+        # Rewards per hit scale with level
+        hit_reward = 5 + level * 2
+        xp_per_hit = 2 + level // 2
+        
+        cash_reward = hits * hit_reward
+        xp_reward = hits * xp_per_hit
+        rep_reward = max(1, hits // 3 + level // 5)
+        
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$inc": {"cash": cash_reward, "xp": xp_reward, "reputation": rep_reward}}
+        )
+        
+        updated_player = await db.players.find_one({"id": game["player_id"]})
+        
+        return {
+            "success": True,
+            "hits": hits,
+            "message": f"🎯🔫 SHOOTOUT COMPLETE! {hits} hits on {game['shootout_name']}!",
+            "shootout_name": game["shootout_name"],
+            "rewards": {
+                "cash": cash_reward,
+                "xp": xp_reward,
+                "reputation": rep_reward,
+            },
+            "cash": updated_player.get("cash", 0),
+        }
+    else:
+        return {
+            "success": True,
+            "hits": 0,
+            "message": f"💨 NO HITS! Better luck next time at {game['shootout_name']}!",
+            "shootout_name": game["shootout_name"],
             "rewards": None,
         }
 

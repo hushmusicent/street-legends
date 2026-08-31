@@ -32,6 +32,7 @@ interface GameState {
   // Mini-game levels (selected in options)
   runawayLevel: number; // 1-20, selected level for Runaway Simulator
   packageGrabLevel: number; // 1-20, selected level for Package Grab
+  shootoutLevel: number; // 1-20, selected level for Shootout Simulator
   
   // Data refresh triggers
   missionRefreshTrigger: number;
@@ -53,6 +54,7 @@ interface GameState {
   setMuted: (muted: boolean) => void;
   setRunawayLevel: (level: number) => void;
   setPackageGrabLevel: (level: number) => void;
+  setShootoutLevel: (level: number) => void;
   triggerMissionRefresh: () => void;
   clearPlayer: () => void;
   
@@ -63,6 +65,8 @@ interface GameState {
   saveRunawayLevel: (level: number) => Promise<void>;
   loadPackageGrabLevel: () => Promise<number>;
   savePackageGrabLevel: (level: number) => Promise<void>;
+  loadShootoutLevel: () => Promise<number>;
+  saveShootoutLevel: (level: number) => Promise<void>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -81,6 +85,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   isMuted: false,
   runawayLevel: 1, // Default to level 1
   packageGrabLevel: 1, // Default to level 1
+  shootoutLevel: 1, // Default to level 1
   missionRefreshTrigger: 0,
   
   // Actions
@@ -104,6 +109,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setMuted: (muted) => set({ isMuted: muted }),
   setRunawayLevel: (level) => set({ runawayLevel: Math.min(20, Math.max(1, level)) }),
   setPackageGrabLevel: (level) => set({ packageGrabLevel: Math.min(20, Math.max(1, level)) }),
+  setShootoutLevel: (level) => set({ shootoutLevel: Math.min(20, Math.max(1, level)) }),
   triggerMissionRefresh: () => set((state) => ({ missionRefreshTrigger: state.missionRefreshTrigger + 1 })),
   
   clearPlayer: () => set({
@@ -184,6 +190,29 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ packageGrabLevel: validLevel });
     } catch (error) {
       console.error('Error saving package grab level:', error);
+    }
+  },
+  
+  loadShootoutLevel: async () => {
+    try {
+      const level = await AsyncStorage.getItem('shootoutLevel');
+      const parsedLevel = level ? parseInt(level, 10) : 1;
+      const validLevel = Math.min(20, Math.max(1, parsedLevel || 1));
+      set({ shootoutLevel: validLevel });
+      return validLevel;
+    } catch (error) {
+      console.error('Error loading shootout level:', error);
+      return 1;
+    }
+  },
+  
+  saveShootoutLevel: async (level) => {
+    try {
+      const validLevel = Math.min(20, Math.max(1, level));
+      await AsyncStorage.setItem('shootoutLevel', validLevel.toString());
+      set({ shootoutLevel: validLevel });
+    } catch (error) {
+      console.error('Error saving shootout level:', error);
     }
   },
 }));

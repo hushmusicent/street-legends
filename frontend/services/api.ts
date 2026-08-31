@@ -433,4 +433,20 @@ export const completePackageGrab = async (gameId: string, won: boolean, boxesCol
   return response.data;
 };
 
+// Shootout Simulator APIs
+export const spawnShootouts = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/shootouts/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const startShootout = async (shootoutId: string, playerId: string) => {
+  const response = await api.post(`/shootouts/${shootoutId}/start?player_id=${playerId}`);
+  return response.data;
+};
+
+export const completeShootout = async (gameId: string, hits: number) => {
+  const response = await api.post(`/shootouts/game/${gameId}/complete?hits=${hits}`);
+  return response.data;
+};
+
 export default api;

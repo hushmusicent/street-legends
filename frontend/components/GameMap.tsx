@@ -19,7 +19,7 @@ interface Position {
 interface MapMarker {
   id: string;
   coordinate: Position;
-  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub' | 'bank' | 'castle' | 'carChase' | 'runaway' | 'packageGrab';
+  type: 'monster' | 'mission' | 'bounty' | 'player' | 'self' | 'restaurant' | 'nightclub' | 'bank' | 'castle' | 'carChase' | 'runaway' | 'packageGrab' | 'shootout';
   level?: number;
   name?: string;
   icon?: string;
@@ -148,8 +148,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513', carChase: '#e74c3c', runaway: '#00b894', packageGrab: '#e67e22' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔', packageGrab: '📦' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513', carChase: '#e74c3c', runaway: '#00b894', packageGrab: '#e67e22', shootout: '#c0392b' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔', packageGrab: '📦', shootout: '🔫' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     function getEnemyImage(name) {
@@ -469,9 +469,10 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var isCarChaseMarker = (m.type === 'carChase');
             var isRunawayMarker = (m.type === 'runaway');
             var isPackageGrabMarker = (m.type === 'packageGrab');
-            var markerWidth = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker) ? 56 : (isLocationMarker ? 48 : (isBankMarker ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32))));
-            var markerHeight = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker) ? 72 : (isLocationMarker ? 62 : (isBankMarker ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32))));
-            var iconAnchorY = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker) ? 36 : (isLocationMarker ? 31 : (isBankMarker ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));
+            var isShootoutMarker = (m.type === 'shootout');
+            var markerWidth = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 56 : (isLocationMarker ? 48 : (isBankMarker ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32))));
+            var markerHeight = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 72 : (isLocationMarker ? 62 : (isBankMarker ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32))));
+            var iconAnchorY = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : (isBankMarker ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,

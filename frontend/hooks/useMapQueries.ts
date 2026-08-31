@@ -12,6 +12,7 @@ import {
   spawnCarChases,
   spawnRunaways,
   spawnPackageGrabs,
+  spawnShootouts,
   getPlayer,
   updatePlayerPosition,
   getMinigameCooldowns,
@@ -48,6 +49,7 @@ export interface MapEntitiesData {
   carChases: any[];
   runaways: any[];
   packageGrabs: any[];
+  shootouts: any[];
 }
 
 interface UseMapEntitiesOptions {
@@ -89,6 +91,7 @@ export const useMapEntities = ({
         spawnCarChases(latitude, longitude, playerLevel),
         spawnRunaways(latitude, longitude, playerLevel),
         spawnPackageGrabs(latitude, longitude, playerLevel),
+        spawnShootouts(latitude, longitude, playerLevel),
       ]);
 
       return {
@@ -104,6 +107,7 @@ export const useMapEntities = ({
         carChases: results[9].status === 'fulfilled' ? results[9].value : [],
         runaways: results[10].status === 'fulfilled' ? results[10].value : [],
         packageGrabs: results[11].status === 'fulfilled' ? results[11].value : [],
+        shootouts: results[12].status === 'fulfilled' ? results[12].value : [],
       };
     },
     enabled: enabled && !!playerId && !!latitude && !!longitude,
@@ -143,7 +147,7 @@ export const usePlayerData = ({ playerId, enabled = true }: UsePlayerDataOptions
 
 // Cooldown data structure from backend
 export interface MinigameCooldown {
-  type: 'castle' | 'carchase' | 'runaway' | 'packagegrab';
+  type: 'castle' | 'carchase' | 'runaway' | 'packagegrab' | 'shootout';
   marker_id: string;
   remaining_seconds: number;
   expires_at: string;

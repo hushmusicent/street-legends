@@ -30,6 +30,7 @@ import {
   startCarChase,
   startRunaway,
   startPackageGrab,
+  startShootout,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -63,12 +64,14 @@ export default function MapScreen() {
   const [selectedCarChase, setSelectedCarChase] = useState<any | null>(null);
   const [selectedRunaway, setSelectedRunaway] = useState<any | null>(null);
   const [selectedPackageGrab, setSelectedPackageGrab] = useState<any | null>(null);
+  const [selectedShootout, setSelectedShootout] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
   const [robbingBank, setRobbingBank] = useState(false);
   const [startingCarChase, setStartingCarChase] = useState(false);
   const [startingRunaway, setStartingRunaway] = useState(false);
   const [startingPackageGrab, setStartingPackageGrab] = useState(false);
+  const [startingShootout, setStartingShootout] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -154,6 +157,7 @@ export default function MapScreen() {
   const nearbyCarChases = useMemo(() => entitiesData?.carChases || [], [entitiesData?.carChases]);
   const nearbyRunaways = useMemo(() => entitiesData?.runaways || [], [entitiesData?.runaways]);
   const nearbyPackageGrabs = useMemo(() => entitiesData?.packageGrabs || [], [entitiesData?.packageGrabs]);
+  const nearbyShootouts = useMemo(() => entitiesData?.shootouts || [], [entitiesData?.shootouts]);
 
   // Update global store when entities change
   useEffect(() => {
@@ -521,6 +525,35 @@ export default function MapScreen() {
     }
   }, [playerId, selectedPackageGrab, startingPackageGrab]);
 
+  const handleStartShootout = useCallback(async () => {
+    if (!playerId || !selectedShootout || startingShootout) return;
+    setStartingShootout(true);
+    
+    try {
+      const gameData = await startShootout(selectedShootout.id, playerId);
+      setSelectedShootout(null);
+      
+      // Get the selected shootout level from the store
+      const { shootoutLevel } = useGameStore.getState();
+      
+      // Navigate to the shootout simulator game screen
+      router.push({
+        pathname: '/shootout-simulator',
+        params: {
+          shootoutId: selectedShootout.id,
+          shootoutName: selectedShootout.name,
+          difficulty: shootoutLevel.toString(),
+          gameId: gameData.game_id,
+        },
+      });
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || 'Failed to start shootout';
+      Alert.alert('Cannot Start Shootout', errorMsg);
+    } finally {
+      setStartingShootout(false);
+    }
+  }, [playerId, selectedShootout, startingShootout]);
+
   // Memoize markers to prevent re-renders
   const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
@@ -624,7 +657,20 @@ export default function MapScreen() {
         cooldownSeconds: remainingSecs,
       };
     }),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, localCooldowns]);
+    ...nearbyShootouts.map((s) => {
+      const cooldownKey = `shootout_${s.id}`;
+      const remainingSecs = localCooldowns[cooldownKey] || 0;
+      return {
+        id: s.id,
+        coordinate: { latitude: s.latitude, longitude: s.longitude },
+        type: 'shootout' as const,
+        name: s.name,
+        level: useGameStore.getState().shootoutLevel,
+        icon: '🔫',
+        cooldownSeconds: remainingSecs,
+      };
+    }),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, nearbyShootouts, localCooldowns]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -660,8 +706,11 @@ export default function MapScreen() {
     } else if (marker.type === 'packageGrab') {
       const grab = nearbyPackageGrabs.find((g) => g.id === marker.id);
       if (grab) setSelectedPackageGrab(grab);
+    } else if (marker.type === 'shootout') {
+      const shootout = nearbyShootouts.find((s) => s.id === marker.id);
+      if (shootout) setSelectedShootout(shootout);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, nearbyShootouts]);
 
   if (loading) {
     return (
@@ -1116,16 +1165,16 @@ export default function MapScreen() {
         </Pressable>
       </Modal>
 
-      {/* Castle Cannon / Car Chase / Runaway / Package Grab Mini-game Modal */}
+      {/* Castle Cannon / Car Chase / Runaway / Package Grab / Shootout Mini-game Modal */}
       <Modal
-        visible={!!selectedCastle || !!selectedCarChase || !!selectedRunaway || !!selectedPackageGrab}
+        visible={!!selectedCastle || !!selectedCarChase || !!selectedRunaway || !!selectedPackageGrab || !!selectedShootout}
         transparent
         animationType="fade"
-        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); }}
+        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); setSelectedShootout(null); }}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); }}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); setSelectedShootout(null); }}>
           <Pressable style={styles.terrModal} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); }}>
+            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); setSelectedShootout(null); }}>
               <Ionicons name="close" size={22} color="#666" />
             </TouchableOpacity>
 
@@ -1441,7 +1490,7 @@ export default function MapScreen() {
                   </View>
                   <View style={styles.runawayInstructionRow}>
                     <Text style={styles.runawayInstructionIcon}>🚧</Text>
-                    <Text style={styles.runawayInstructionText}>Avoid obstacles or you'll crash!</Text>
+                    <Text style={styles.runawayInstructionText}>Avoid obstacles or you will crash!</Text>
                   </View>
                   <View style={styles.runawayInstructionRow}>
                     <Text style={styles.runawayInstructionIcon}>🏁</Text>
@@ -1491,6 +1540,104 @@ export default function MapScreen() {
                       <>
                         <Ionicons name="car" size={22} color="#fff" />
                         <Text style={styles.runawayStartText}>START DELIVERY</Text>
+                        <Ionicons name="arrow-forward" size={20} color="#fff" />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+            
+            {/* Shootout Modal Content */}
+            {selectedShootout && (
+              <>
+                {/* Header */}
+                <View style={styles.runawayHeader}>
+                  <View style={[styles.runawayIconContainer, { backgroundColor: 'rgba(192,57,43,0.2)', borderColor: '#c0392b' }]}>
+                    <Text style={styles.runawayIcon}>🔫</Text>
+                  </View>
+                  <View style={styles.runawayHeaderText}>
+                    <Text style={[styles.runawayTitle, { color: '#c0392b' }]}>{selectedShootout.name}</Text>
+                    <Text style={styles.runawaySubtitle}>Shootout Simulator</Text>
+                  </View>
+                </View>
+                
+                {/* Selected Level Card */}
+                <View style={[styles.runawayLevelCard, { backgroundColor: 'rgba(192,57,43,0.12)', borderColor: 'rgba(192,57,43,0.25)' }]}>
+                  <View style={styles.runawayLevelRow}>
+                    <Text style={styles.runawayLevelLabel}>Selected Level:</Text>
+                    <Text style={[styles.runawayLevelValue, { color: '#c0392b' }]}>
+                      Level {useGameStore.getState().shootoutLevel} {'⭐'.repeat(Math.min(5, Math.ceil(useGameStore.getState().shootoutLevel / 4)))}
+                    </Text>
+                  </View>
+                  <Text style={styles.runawayLevelHint}>
+                    Change level in Options → Mini Games → Shootout
+                  </Text>
+                </View>
+                
+                {/* Instructions Card */}
+                <View style={styles.runawayInstructionsCard}>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>🎯</Text>
+                    <Text style={styles.runawayInstructionText}>Crosshair moves automatically</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>👆</Text>
+                    <Text style={styles.runawayInstructionText}>Tap anywhere to shoot (12 shots total)</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>🧍</Text>
+                    <Text style={styles.runawayInstructionText}>Hit gang members for cash & XP</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>⏱️</Text>
+                    <Text style={styles.runawayInstructionText}>Score before time runs out!</Text>
+                  </View>
+                </View>
+                
+                {/* Cooldown Warning */}
+                {localCooldowns[`shootout_${selectedShootout.id}`] > 0 && (
+                  <View style={styles.cooldownWarning}>
+                    <Ionicons name="time" size={18} color="#f39c12" />
+                    <Text style={styles.cooldownWarningText}>
+                      Cooldown: {Math.floor(localCooldowns[`shootout_${selectedShootout.id}`] / 60)}m {localCooldowns[`shootout_${selectedShootout.id}`] % 60}s
+                    </Text>
+                  </View>
+                )}
+                
+                {/* Action Buttons */}
+                <View style={styles.runawayButtonContainer}>
+                  <TouchableOpacity 
+                    style={styles.runawayCancelButton} 
+                    onPress={() => setSelectedShootout(null)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close-circle-outline" size={20} color="#888" />
+                    <Text style={styles.runawayCancelText}>CANCEL</Text>
+                  </TouchableOpacity>
+                  
+                  {/* Start Button */}
+                  <TouchableOpacity 
+                    style={[
+                      styles.runawayStartButton, 
+                      { backgroundColor: '#c0392b', borderColor: '#e74c3c' },
+                      localCooldowns[`shootout_${selectedShootout.id}`] > 0 && styles.runawayStartButtonDisabled
+                    ]}
+                    onPress={handleStartShootout}
+                    disabled={startingShootout || localCooldowns[`shootout_${selectedShootout.id}`] > 0}
+                    activeOpacity={0.8}
+                  >
+                    {startingShootout ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : localCooldowns[`shootout_${selectedShootout.id}`] > 0 ? (
+                      <>
+                        <Ionicons name="time" size={22} color="#888" />
+                        <Text style={styles.runawayStartTextDisabled}>ON COOLDOWN</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="flash" size={22} color="#fff" />
+                        <Text style={styles.runawayStartText}>START SHOOTOUT</Text>
                         <Ionicons name="arrow-forward" size={20} color="#fff" />
                       </>
                     )}
