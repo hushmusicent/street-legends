@@ -45,17 +45,89 @@ const GRAVITY = PHYSICS_CONSTANTS.GRAVITY;
 const INITIAL_VELOCITY = PHYSICS_CONSTANTS.INITIAL_VELOCITY;
 
 // Level configurations (rewards scaled to 25% for mini-game balance)
+// All 68 levels with progressive difficulty
 const LEVELS = [
-  { level: 1, name: 'Training Ground', blocks: 4, enemies: 1, shots: 3, xpReward: 12, cashReward: 25 },
-  { level: 2, name: 'Small Outpost', blocks: 6, enemies: 2, shots: 3, xpReward: 18, cashReward: 35 },
+  // Original Levels 1-10
+  { level: 1, name: 'Training Ground', blocks: 3, enemies: 1, shots: 3, xpReward: 12, cashReward: 25 },
+  { level: 2, name: 'Small Outpost', blocks: 4, enemies: 2, shots: 3, xpReward: 18, cashReward: 35 },
   { level: 3, name: 'Guard Tower', blocks: 8, enemies: 2, shots: 3, xpReward: 25, cashReward: 50 },
-  { level: 4, name: 'Watchtower', blocks: 10, enemies: 3, shots: 4, xpReward: 35, cashReward: 75 },
-  { level: 5, name: 'Fort Minor', blocks: 12, enemies: 3, shots: 4, xpReward: 50, cashReward: 100 },
-  { level: 6, name: 'Stone Keep', blocks: 15, enemies: 4, shots: 4, xpReward: 75, cashReward: 125 },
-  { level: 7, name: 'Battle Fortress', blocks: 18, enemies: 4, shots: 5, xpReward: 100, cashReward: 175 },
-  { level: 8, name: 'War Castle', blocks: 20, enemies: 5, shots: 5, xpReward: 125, cashReward: 225 },
-  { level: 9, name: 'Imperial Stronghold', blocks: 24, enemies: 5, shots: 5, xpReward: 185, cashReward: 300 },
-  { level: 10, name: 'Dragon Citadel', blocks: 30, enemies: 6, shots: 6, xpReward: 250, cashReward: 500 },
+  { level: 4, name: 'Watchtower', blocks: 9, enemies: 3, shots: 4, xpReward: 35, cashReward: 75 },
+  { level: 5, name: 'Fort Minor', blocks: 9, enemies: 3, shots: 4, xpReward: 50, cashReward: 100 },
+  { level: 6, name: 'Stone Keep', blocks: 10, enemies: 4, shots: 4, xpReward: 75, cashReward: 125 },
+  { level: 7, name: 'Battle Fortress', blocks: 14, enemies: 4, shots: 5, xpReward: 100, cashReward: 175 },
+  { level: 8, name: 'War Castle', blocks: 17, enemies: 5, shots: 5, xpReward: 125, cashReward: 225 },
+  { level: 9, name: 'Imperial Stronghold', blocks: 16, enemies: 5, shots: 5, xpReward: 185, cashReward: 300 },
+  { level: 10, name: 'Dragon Citadel', blocks: 20, enemies: 6, shots: 6, xpReward: 250, cashReward: 500 },
+  
+  // New Levels 11-20
+  { level: 11, name: 'Dual Tower', blocks: 15, enemies: 4, shots: 4, xpReward: 55, cashReward: 110 },
+  { level: 12, name: 'Ice Tower', blocks: 12, enemies: 3, shots: 4, xpReward: 60, cashReward: 120 },
+  { level: 13, name: 'Stone Fortress', blocks: 11, enemies: 3, shots: 4, xpReward: 65, cashReward: 130 },
+  { level: 14, name: 'TNT Introduction', blocks: 9, enemies: 3, shots: 4, xpReward: 70, cashReward: 140 },
+  { level: 15, name: 'Glass House', blocks: 11, enemies: 3, shots: 4, xpReward: 75, cashReward: 150 },
+  { level: 16, name: 'Boulder Drop', blocks: 11, enemies: 3, shots: 4, xpReward: 80, cashReward: 160 },
+  { level: 17, name: 'TNT Chain', blocks: 10, enemies: 3, shots: 4, xpReward: 85, cashReward: 170 },
+  { level: 18, name: 'Wheel Cart', blocks: 11, enemies: 3, shots: 4, xpReward: 90, cashReward: 180 },
+  { level: 19, name: 'Triangle Support', blocks: 9, enemies: 3, shots: 4, xpReward: 95, cashReward: 190 },
+  { level: 20, name: 'Pitched Roof', blocks: 14, enemies: 2, shots: 4, xpReward: 100, cashReward: 200 },
+  
+  // Levels 21-30
+  { level: 21, name: 'Boulder Pyramid', blocks: 14, enemies: 3, shots: 5, xpReward: 110, cashReward: 220 },
+  { level: 22, name: 'Double TNT Tower', blocks: 11, enemies: 5, shots: 5, xpReward: 120, cashReward: 240 },
+  { level: 23, name: 'Glass Castle', blocks: 11, enemies: 4, shots: 5, xpReward: 130, cashReward: 260 },
+  { level: 24, name: 'Mixed Fortress', blocks: 12, enemies: 4, shots: 5, xpReward: 140, cashReward: 280 },
+  { level: 25, name: 'Wheel Wagon', blocks: 10, enemies: 3, shots: 5, xpReward: 150, cashReward: 300 },
+  { level: 26, name: 'TNT Surprise', blocks: 11, enemies: 3, shots: 5, xpReward: 160, cashReward: 320 },
+  { level: 27, name: 'Triple Tower', blocks: 10, enemies: 4, shots: 5, xpReward: 170, cashReward: 340 },
+  { level: 28, name: 'Boulder Crusher', blocks: 14, enemies: 4, shots: 5, xpReward: 180, cashReward: 360 },
+  { level: 29, name: 'Glass Menagerie', blocks: 12, enemies: 5, shots: 5, xpReward: 190, cashReward: 380 },
+  { level: 30, name: 'Fortified Base', blocks: 15, enemies: 4, shots: 5, xpReward: 200, cashReward: 400 },
+  
+  // Levels 31-40
+  { level: 31, name: 'TNT Chain Reaction', blocks: 10, enemies: 5, shots: 5, xpReward: 220, cashReward: 440 },
+  { level: 32, name: 'Rolling Thunder', blocks: 13, enemies: 4, shots: 5, xpReward: 240, cashReward: 480 },
+  { level: 33, name: 'Ice Palace', blocks: 14, enemies: 5, shots: 5, xpReward: 260, cashReward: 520 },
+  { level: 34, name: 'Wheel Tower', blocks: 12, enemies: 3, shots: 5, xpReward: 280, cashReward: 560 },
+  { level: 35, name: 'Triangle Mountain', blocks: 12, enemies: 4, shots: 5, xpReward: 300, cashReward: 600 },
+  { level: 36, name: 'Double Deck', blocks: 10, enemies: 4, shots: 5, xpReward: 320, cashReward: 640 },
+  { level: 37, name: 'TNT Bunker', blocks: 11, enemies: 3, shots: 5, xpReward: 340, cashReward: 680 },
+  { level: 38, name: 'Wheel Fortress', blocks: 11, enemies: 4, shots: 5, xpReward: 360, cashReward: 720 },
+  { level: 39, name: 'Glass Towers', blocks: 12, enemies: 6, shots: 6, xpReward: 380, cashReward: 760 },
+  { level: 40, name: 'Boulder Canyon', blocks: 16, enemies: 4, shots: 6, xpReward: 400, cashReward: 800 },
+  
+  // Levels 41-50
+  { level: 41, name: 'TNT Mountain', blocks: 10, enemies: 4, shots: 5, xpReward: 425, cashReward: 850 },
+  { level: 42, name: 'Wheel Madness', blocks: 13, enemies: 4, shots: 5, xpReward: 450, cashReward: 900 },
+  { level: 43, name: 'Stone Citadel', blocks: 15, enemies: 4, shots: 6, xpReward: 475, cashReward: 950 },
+  { level: 44, name: 'Glass Palace', blocks: 14, enemies: 5, shots: 6, xpReward: 500, cashReward: 1000 },
+  { level: 45, name: 'Multi Boulder', blocks: 16, enemies: 3, shots: 6, xpReward: 525, cashReward: 1050 },
+  { level: 46, name: 'Triangle Fortress', blocks: 12, enemies: 4, shots: 6, xpReward: 550, cashReward: 1100 },
+  { level: 47, name: 'Ice Kingdom', blocks: 17, enemies: 6, shots: 6, xpReward: 575, cashReward: 1150 },
+  { level: 48, name: 'Wheel Castle', blocks: 16, enemies: 4, shots: 6, xpReward: 600, cashReward: 1200 },
+  { level: 49, name: 'TNT Surprise Party', blocks: 13, enemies: 4, shots: 6, xpReward: 625, cashReward: 1250 },
+  { level: 50, name: 'Grand Fortress', blocks: 22, enemies: 6, shots: 7, xpReward: 650, cashReward: 1300 },
+  
+  // Levels 51-60
+  { level: 51, name: 'Boulder Madness', blocks: 16, enemies: 3, shots: 6, xpReward: 700, cashReward: 1400 },
+  { level: 52, name: 'Glass Labyrinth', blocks: 19, enemies: 6, shots: 6, xpReward: 750, cashReward: 1500 },
+  { level: 53, name: 'TNT Cascade', blocks: 11, enemies: 5, shots: 6, xpReward: 800, cashReward: 1600 },
+  { level: 54, name: 'Wheel Highway', blocks: 15, enemies: 4, shots: 6, xpReward: 850, cashReward: 1700 },
+  { level: 55, name: 'Triangle Symphony', blocks: 13, enemies: 5, shots: 6, xpReward: 900, cashReward: 1800 },
+  { level: 56, name: 'Ice Fortress', blocks: 20, enemies: 6, shots: 7, xpReward: 950, cashReward: 1900 },
+  { level: 57, name: 'Boulder Valley', blocks: 18, enemies: 4, shots: 7, xpReward: 1000, cashReward: 2000 },
+  { level: 58, name: 'Wheel Arena', blocks: 21, enemies: 6, shots: 7, xpReward: 1050, cashReward: 2100 },
+  { level: 59, name: 'TNT Volcano', blocks: 12, enemies: 5, shots: 7, xpReward: 1100, cashReward: 2200 },
+  { level: 60, name: 'Ultimate Challenge', blocks: 27, enemies: 8, shots: 8, xpReward: 1200, cashReward: 2400 },
+  
+  // Final Levels 61-68
+  { level: 61, name: 'Boulder Apocalypse', blocks: 20, enemies: 4, shots: 7, xpReward: 1300, cashReward: 2600 },
+  { level: 62, name: 'Glass Kingdom', blocks: 19, enemies: 7, shots: 7, xpReward: 1400, cashReward: 2800 },
+  { level: 63, name: 'Wheel Empire', blocks: 22, enemies: 7, shots: 8, xpReward: 1500, cashReward: 3000 },
+  { level: 64, name: 'TNT Fortress', blocks: 15, enemies: 6, shots: 7, xpReward: 1600, cashReward: 3200 },
+  { level: 65, name: 'Triangle Temple', blocks: 15, enemies: 6, shots: 7, xpReward: 1700, cashReward: 3400 },
+  { level: 66, name: 'Ice Apocalypse', blocks: 22, enemies: 8, shots: 8, xpReward: 1800, cashReward: 3600 },
+  { level: 67, name: 'Final Assault', blocks: 29, enemies: 9, shots: 8, xpReward: 2000, cashReward: 4000 },
+  { level: 68, name: "Dragon's Lair", blocks: 36, enemies: 13, shots: 10, xpReward: 2500, cashReward: 5000 },
 ];
 
 // Note: Block, Enemy, and Cannonball interfaces are imported from useCastlePhysics
@@ -100,6 +172,7 @@ export default function CastleLevelsScreen() {
   const blocksRef = useRef<Block[]>([]);
   const enemiesRef = useRef<Enemy[]>([]);
   const structureHitRef = useRef(false); // Track if any block has been hit
+  const tntExplosionsRef = useRef<{ x: number; y: number }[]>([]); // Track TNT explosions for enemy damage
 
   // Load progress on mount
   useEffect(() => {
@@ -190,6 +263,7 @@ export default function CastleLevelsScreen() {
     setCameraX(0);
     setShowTrajectory(true);
     structureHitRef.current = false; // Reset - no blocks hit yet
+    tntExplosionsRef.current = []; // Reset TNT explosions
   }, []);
 
   const startLevel = (level: number) => {
@@ -287,11 +361,15 @@ export default function CastleLevelsScreen() {
     }
 
     // Update blocks using SHARED physics function - identical to castle-game.tsx
+    // Now supports TNT explosions!
     setBlocks(prev => {
       const ball = cannonballRef.current;
       const ballX = ballPositionRef.current.x;
       const ballY = ballPositionRef.current.y;
       const ballActive = ballPositionRef.current.active;
+      
+      // Clear previous explosions
+      tntExplosionsRef.current = [];
       
       return updateBlocksPhysics(
         prev,
@@ -300,11 +378,16 @@ export default function CastleLevelsScreen() {
         ballActive,
         ball,
         structureHitRef.current,
-        () => { structureHitRef.current = true; }
+        () => { structureHitRef.current = true; },
+        // TNT explosion callback - track for enemy damage
+        (x: number, y: number) => {
+          tntExplosionsRef.current.push({ x, y });
+        }
       );
     });
 
     // Update enemies using SHARED physics function - identical to castle-game.tsx
+    // Now includes TNT explosion damage!
     setEnemies(prev => {
       const currentBlocksNow = blocksRef.current;
       const ball = cannonballRef.current;
@@ -319,7 +402,8 @@ export default function CastleLevelsScreen() {
         ballY,
         ballActive,
         ball,
-        structureHitRef.current
+        structureHitRef.current,
+        tntExplosionsRef.current // Pass TNT explosions for enemy damage
       );
     });
 
@@ -604,13 +688,25 @@ export default function CastleLevelsScreen() {
           {blocks.map(block => {
             if (block.y > GROUND_Y + 100) return null;
             
-            // Block colors based on type
-            const blockColors = {
+            // Block colors based on type - now supports all block types
+            const blockColors: Record<string, { bg: string; border: string; highlight: string }> = {
               wood: { bg: '#D2691E', border: '#8B4513', highlight: '#DEB887' },
               ice: { bg: '#87CEEB', border: '#4682B4', highlight: '#B0E0E6' },
               stone: { bg: '#808080', border: '#505050', highlight: '#A9A9A9' },
+              tnt: { bg: '#FF4444', border: '#AA0000', highlight: '#FF6666' },
+              boulder: { bg: '#6B5B4F', border: '#3D3D3D', highlight: '#8B7B6B' },
+              wheel: { bg: '#4A3A2A', border: '#2A2A2A', highlight: '#6A5A4A' },
+              glass: { bg: 'rgba(200,230,255,0.7)', border: '#88AACC', highlight: 'rgba(255,255,255,0.8)' },
+              triangle: { bg: '#9B8B7B', border: '#6B5B4B', highlight: '#AB9B8B' },
             };
             const colors = blockColors[block.type] || blockColors.wood;
+            
+            // Special shapes for boulder/wheel (circle) and triangles
+            const isCircle = block.shape === 'circle';
+            const isExploded = block.type === 'tnt' && block.exploded;
+            
+            // Don't render exploded TNT
+            if (isExploded) return null;
             
             return (
               <View
@@ -623,9 +719,9 @@ export default function CastleLevelsScreen() {
                     width: block.width,
                     height: block.height,
                     backgroundColor: colors.bg,
-                    borderWidth: 3,
+                    borderWidth: isCircle ? 4 : 3,
                     borderColor: colors.border,
-                    borderRadius: block.type === 'ice' ? 2 : 4,
+                    borderRadius: isCircle ? block.width / 2 : (block.type === 'ice' || block.type === 'glass' ? 2 : 4),
                     opacity: block.destroyed ? 0.6 : 1,
                     transform: [{ rotate: `${block.rotation}deg` }],
                     overflow: 'hidden',
@@ -639,15 +735,57 @@ export default function CastleLevelsScreen() {
                     <View style={{ position: 'absolute', top: '60%', left: 0, right: 0, height: 2, backgroundColor: colors.border, opacity: 0.4 }} />
                   </>
                 )}
-                {/* Ice shine */}
-                {block.type === 'ice' && (
-                  <View style={{ position: 'absolute', top: 3, left: 3, width: '40%', height: '30%', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
+                {/* Ice/Glass shine */}
+                {(block.type === 'ice' || block.type === 'glass') && (
+                  <View style={{ position: 'absolute', top: 3, left: 3, width: '40%', height: '30%', backgroundColor: colors.highlight, borderRadius: 2 }} />
                 )}
                 {/* Stone texture */}
                 {block.type === 'stone' && (
                   <>
                     <View style={{ position: 'absolute', top: 5, left: 5, width: 4, height: 4, backgroundColor: colors.highlight, borderRadius: 2 }} />
                     <View style={{ position: 'absolute', bottom: 5, right: 5, width: 4, height: 4, backgroundColor: colors.border, borderRadius: 2 }} />
+                  </>
+                )}
+                {/* TNT label and fuse */}
+                {block.type === 'tnt' && (
+                  <>
+                    <View style={{ position: 'absolute', top: '20%', left: '10%', right: '10%', backgroundColor: '#FFF', padding: 2, borderRadius: 2 }}>
+                      <Text style={{ color: '#FF0000', fontSize: 10, fontWeight: 'bold', textAlign: 'center' }}>TNT</Text>
+                    </View>
+                    {/* Fuse */}
+                    <View style={{ position: 'absolute', top: -8, left: '45%', width: 4, height: 10, backgroundColor: '#5A4A3A' }} />
+                    <View style={{ position: 'absolute', top: -12, left: '42%', width: 8, height: 8, backgroundColor: '#FF9900', borderRadius: 4 }} />
+                  </>
+                )}
+                {/* Boulder texture - circular rock pattern */}
+                {block.type === 'boulder' && (
+                  <>
+                    <View style={{ position: 'absolute', top: '20%', left: '20%', width: '30%', height: '25%', backgroundColor: colors.highlight, borderRadius: 20, opacity: 0.5 }} />
+                    <View style={{ position: 'absolute', bottom: '25%', right: '20%', width: '20%', height: '15%', backgroundColor: colors.border, borderRadius: 10, opacity: 0.6 }} />
+                    <View style={{ position: 'absolute', top: '50%', left: '10%', width: 8, height: 8, backgroundColor: colors.border, borderRadius: 4 }} />
+                  </>
+                )}
+                {/* Wheel spokes */}
+                {block.type === 'wheel' && (
+                  <>
+                    {/* Center hub */}
+                    <View style={{ position: 'absolute', top: '35%', left: '35%', width: '30%', height: '30%', backgroundColor: '#5A4A3A', borderRadius: 20 }} />
+                    {/* Spokes */}
+                    <View style={{ position: 'absolute', top: '48%', left: 0, right: 0, height: 4, backgroundColor: '#3A2A1A' }} />
+                    <View style={{ position: 'absolute', top: 0, bottom: 0, left: '48%', width: 4, backgroundColor: '#3A2A1A' }} />
+                    {/* Diagonal spokes approximation */}
+                    <View style={{ position: 'absolute', top: '25%', left: '25%', width: '50%', height: 3, backgroundColor: '#3A2A1A', transform: [{ rotate: '45deg' }] }} />
+                    <View style={{ position: 'absolute', top: '25%', left: '25%', width: '50%', height: 3, backgroundColor: '#3A2A1A', transform: [{ rotate: '-45deg' }] }} />
+                  </>
+                )}
+                {/* Triangle shape indicator - draw diagonal for angled blocks */}
+                {block.type === 'triangle' && (
+                  <>
+                    {block.shape === 'triangle_left' ? (
+                      <View style={{ position: 'absolute', top: 0, right: 0, width: 0, height: 0, borderTopWidth: block.height, borderRightWidth: block.width, borderTopColor: 'transparent', borderRightColor: colors.border, opacity: 0.3 }} />
+                    ) : (
+                      <View style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, borderTopWidth: block.height, borderLeftWidth: block.width, borderTopColor: 'transparent', borderLeftColor: colors.border, opacity: 0.3 }} />
+                    )}
                   </>
                 )}
               </View>
