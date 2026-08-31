@@ -152,6 +152,15 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
     var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔', packageGrab: '📦', shootout: '🔫' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
+    // Track mini-game markers that have been shown (for staggered appearance)
+    var shownMiniGameMarkers = {};
+    var miniGameTypes = ['castle', 'carChase', 'runaway', 'packageGrab', 'shootout'];
+    var pendingMiniGameTimers = {};
+    
+    function isMiniGameMarker(type) {
+      return miniGameTypes.indexOf(type) !== -1;
+    }
+    
     function getEnemyImage(name) {
       if (!name) return null;
       var lower = name.toLowerCase();
@@ -329,24 +338,39 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
       try {
         var newMarkers = JSON.parse(markersJSON);
         var newIds = {};
-
+        
+        // Separate mini-game markers from regular markers
+        var regularMarkers = [];
+        var miniGameMarkers = [];
+        
         newMarkers.forEach(function(m) {
+          if (isMiniGameMarker(m.type)) {
+            miniGameMarkers.push(m);
+          } else {
+            regularMarkers.push(m);
+          }
+        });
+        
+        // Helper function to create and add a marker
+        function createMarker(m) {
           newIds[m.id] = true;
           if (entityMarkers[m.id]) {
             // Update existing marker position
             entityMarkers[m.id].setLatLng([m.lat, m.lng]);
-          } else {
-            // Create new marker
-            var color = markerColors[m.type] || '#999';
-            var icon = markerIcons[m.type] || '?';
-            var levelHTML = m.level ? '<span style="position:absolute;bottom:-8px;background:white;padding:0 3px;border-radius:4px;font-size:9px;font-weight:bold;">' + m.level + '</span>' : '';
-            
-            var isThug = false;
-            var enemyImg = null;
-            if (m.type === 'monster' && m.name) {
-              enemyImg = getEnemyImage(m.name);
-            }
-            var markerHTML;
+            return;
+          }
+          
+          // Create new marker
+          var color = markerColors[m.type] || '#999';
+          var icon = markerIcons[m.type] || '?';
+          var levelHTML = m.level ? '<span style="position:absolute;bottom:-8px;background:white;padding:0 3px;border-radius:4px;font-size:9px;font-weight:bold;">' + m.level + '</span>' : '';
+          
+          var isThug = false;
+          var enemyImg = null;
+          if (m.type === 'monster' && m.name) {
+            enemyImg = getEnemyImage(m.name);
+          }
+          var markerHTML;
             if (m.type === 'restaurant') {
               var rIcon = m.name ? m.name.charAt(0) : '\\u{1F354}';
               var rName = m.name || 'Restaurant';
@@ -504,7 +528,44 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
               return function() { sendMessage({ type: 'marker', id: id, markerType: type }); };
             })(m.id, m.type));
             entityMarkers[m.id] = marker;
+        }
+        
+        // Process regular markers immediately
+        regularMarkers.forEach(function(m) {
+          createMarker(m);
+        });
+        
+        // Process mini-game markers with staggered delays
+        var staggerIndex = 0;
+        miniGameMarkers.forEach(function(m) {
+          newIds[m.id] = true;
+          
+          // If marker already exists, just update position
+          if (entityMarkers[m.id]) {
+            entityMarkers[m.id].setLatLng([m.lat, m.lng]);
+            return;
           }
+          
+          // If already shown or pending, skip
+          if (shownMiniGameMarkers[m.id] || pendingMiniGameTimers[m.id]) {
+            return;
+          }
+          
+          // Schedule this marker to appear with a random staggered delay
+          // Base delay: 500-1500ms + additional stagger of 300-800ms per marker
+          var baseDelay = 500 + Math.random() * 1000;
+          var staggerDelay = staggerIndex * (300 + Math.random() * 500);
+          var totalDelay = baseDelay + staggerDelay;
+          
+          pendingMiniGameTimers[m.id] = setTimeout((function(markerData) {
+            return function() {
+              delete pendingMiniGameTimers[markerData.id];
+              shownMiniGameMarkers[markerData.id] = true;
+              createMarker(markerData);
+            };
+          })(m), totalDelay);
+          
+          staggerIndex++;
         });
 
         // Remove markers no longer present
@@ -512,6 +573,12 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
           if (!newIds[id]) {
             map.removeLayer(entityMarkers[id]);
             delete entityMarkers[id];
+            delete shownMiniGameMarkers[id];
+            // Cancel any pending timers for removed markers
+            if (pendingMiniGameTimers[id]) {
+              clearTimeout(pendingMiniGameTimers[id]);
+              delete pendingMiniGameTimers[id];
+            }
           }
         });
       } catch(e) {
