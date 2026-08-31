@@ -8,6 +8,7 @@ import {
   Dimensions,
   Animated,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,6 +17,7 @@ import { useGameStore } from '../stores/gameStore';
 import { startShootout, completeShootout } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
+import Constants from 'expo-constants';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -23,9 +25,50 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GAME_WIDTH = Math.min(SCREEN_WIDTH - 20, 380);
 const GAME_HEIGHT = Math.min(SCREEN_HEIGHT - 280, 420);
 const CROSSHAIR_SIZE = 60;
-const GANG_MEMBER_WIDTH = 50;
-const GANG_MEMBER_HEIGHT = 80;
+const GANG_MEMBER_WIDTH = 70;
+const GANG_MEMBER_HEIGHT = 100;
 const TOTAL_SHOTS = 12;
+
+// API base URL for background removal
+const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_BACKEND_URL || process.env.EXPO_PUBLIC_API_URL || '';
+
+// Character sprite URLs
+const CHARACTER_SPRITES = {
+  cowboy: {
+    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/05168415d6654f72bab2f6c82452d7b0_AQPZH2SCZMVdkXQRiMWNEyzVehHj0Uw5NdWG-7hJbPMozETNm8mrmOmZ6STIjFFLLIKWtjwrDDFChRnmKlcLLXR7.jpg',
+    needsBgRemoval: true,
+    name: 'Cowboy',
+  },
+  bandana: {
+    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/c07d7e1fbb8c44eb962c77a46b74a893_AQMN4ikUKuAU-0zhhOSDaZOWw65Nj9dItWHT1ZNubA4ZREzZJpzpFwzpd4R_LiwVETxLOe84jK2gVm-y0AnU4kDm.jpg',
+    needsBgRemoval: true,
+    name: 'Bandana',
+  },
+  crewJacket: {
+    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/8dca7a6977dd4701b3e1d791602862fb_crew3_cutout.png',
+    needsBgRemoval: false,
+    name: 'Crew Jacket',
+  },
+  dualGuns: {
+    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/8b8d7d50201349a6a33bbeecbfb0ed5f_guy_2_guns_cutout.png',
+    needsBgRemoval: false,
+    name: 'Dual Guns',
+  },
+  girlRed: {
+    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/3ae4914efaaf4047acf32ef42f44f11d_violent_tech_cutout.png',
+    needsBgRemoval: false,
+    name: 'Girl Red',
+  },
+};
+
+// Get sprite URL (with background removal if needed)
+const getSpriteUrl = (spriteKey: keyof typeof CHARACTER_SPRITES): string => {
+  const sprite = CHARACTER_SPRITES[spriteKey];
+  if (sprite.needsBgRemoval) {
+    return `${API_BASE_URL}/api/sprites/remove-bg?url=${encodeURIComponent(sprite.original)}`;
+  }
+  return sprite.original;
+};
 
 // 24-bit pixel art colors
 const COLORS = {
@@ -36,37 +79,32 @@ const COLORS = {
   crosshair: '#ff3333',
   crosshairGlow: 'rgba(255, 51, 51, 0.3)',
   hitFlash: '#ffff00',
-  gangMember1: '#e74c3c',
-  gangMember2: '#9b59b6',
-  gangMember3: '#3498db',
-  gangMember4: '#27ae60',
 };
 
 // Level configuration - 20 levels
 interface LevelConfig {
   level: number;
-  timeLimit: number; // seconds
-  crosshairSpeed: number; // pixels per frame
-  crosshairErratic: number; // direction change frequency (lower = more erratic)
-  hitReward: number; // cash per hit
+  timeLimit: number;
+  crosshairSpeed: number;
+  crosshairErratic: number;
+  hitReward: number;
   xpPerHit: number;
+  characterCount: number; // 3 at low levels, 5 at high levels
 }
 
 const getLevelConfig = (level: number): LevelConfig => {
   const clampedLevel = Math.min(20, Math.max(1, level));
   
-  // Time decreases with level: L1 = 45s, L20 = 15s
   const timeLimit = Math.max(15, 45 - (clampedLevel - 1) * 1.5);
-  
-  // Speed increases: L1 = 2, L20 = 8
   const crosshairSpeed = 2 + (clampedLevel - 1) * 0.32;
-  
-  // Erratic-ness: L1 = 60 frames between direction changes, L20 = 10 frames
   const crosshairErratic = Math.max(10, 60 - (clampedLevel - 1) * 2.6);
-  
-  // Rewards scale with level
   const hitReward = 5 + clampedLevel * 2;
   const xpPerHit = 2 + Math.floor(clampedLevel / 2);
+  
+  // Lower levels (1-7): 3 characters, Medium (8-14): 4 characters, High (15-20): 5 characters
+  let characterCount = 3;
+  if (clampedLevel >= 15) characterCount = 5;
+  else if (clampedLevel >= 8) characterCount = 4;
   
   return {
     level: clampedLevel,
@@ -75,6 +113,7 @@ const getLevelConfig = (level: number): LevelConfig => {
     crosshairErratic,
     hitReward,
     xpPerHit,
+    characterCount,
   };
 };
 
@@ -83,9 +122,11 @@ interface GangMember {
   id: number;
   x: number;
   y: number;
-  color: string;
+  spriteKey: keyof typeof CHARACTER_SPRITES;
   isHit: boolean;
   hitAnim: Animated.Value;
+  width: number;
+  height: number;
 }
 
 // Reward calculation
@@ -106,6 +147,141 @@ const calculateRewards = (hits: number, level: number): GameRewards => {
   const reputation = Math.max(1, Math.floor(hits / 3) + Math.floor(level / 5));
   
   return { totalCash, totalXP, reputation };
+};
+
+// Position configurations for different levels
+const getPositionConfig = (level: number, characterCount: number): { x: number; y: number; spriteKey: keyof typeof CHARACTER_SPRITES; width: number; height: number }[] => {
+  const allSprites: (keyof typeof CHARACTER_SPRITES)[] = ['cowboy', 'bandana', 'crewJacket', 'dualGuns', 'girlRed'];
+  
+  // Shuffle sprites based on level to create variety
+  const shuffledSprites = [...allSprites].sort(() => {
+    // Use level as seed for consistent shuffling per level
+    return Math.sin(level * 12345) - 0.5;
+  });
+  
+  // Different layout patterns based on level ranges
+  const levelMod = level % 5; // Creates 5 different patterns
+  
+  if (characterCount === 3) {
+    // Lower levels - 3 characters with wide spacing
+    const positions3Wide = [
+      [
+        { x: 30, y: GAME_HEIGHT - 180, width: 70, height: 100 },
+        { x: GAME_WIDTH / 2 - 35, y: GAME_HEIGHT - 200, width: 70, height: 100 },
+        { x: GAME_WIDTH - 100, y: GAME_HEIGHT - 180, width: 70, height: 100 },
+      ],
+      [
+        { x: 50, y: GAME_HEIGHT - 190, width: 65, height: 95 },
+        { x: GAME_WIDTH / 2 - 32, y: GAME_HEIGHT - 170, width: 65, height: 95 },
+        { x: GAME_WIDTH - 115, y: GAME_HEIGHT - 195, width: 65, height: 95 },
+      ],
+      [
+        { x: 20, y: GAME_HEIGHT - 175, width: 75, height: 105 },
+        { x: GAME_WIDTH / 2 - 37, y: GAME_HEIGHT - 210, width: 75, height: 105 },
+        { x: GAME_WIDTH - 95, y: GAME_HEIGHT - 185, width: 75, height: 105 },
+      ],
+      [
+        { x: 60, y: GAME_HEIGHT - 185, width: 68, height: 98 },
+        { x: GAME_WIDTH / 2 - 34, y: GAME_HEIGHT - 195, width: 68, height: 98 },
+        { x: GAME_WIDTH - 128, y: GAME_HEIGHT - 175, width: 68, height: 98 },
+      ],
+      [
+        { x: 40, y: GAME_HEIGHT - 195, width: 72, height: 102 },
+        { x: GAME_WIDTH / 2 - 36, y: GAME_HEIGHT - 180, width: 72, height: 102 },
+        { x: GAME_WIDTH - 112, y: GAME_HEIGHT - 190, width: 72, height: 102 },
+      ],
+    ];
+    
+    return positions3Wide[levelMod].map((pos, i) => ({
+      ...pos,
+      spriteKey: shuffledSprites[i % shuffledSprites.length],
+    }));
+  }
+  
+  if (characterCount === 4) {
+    // Medium levels - 4 characters with moderate spacing
+    const positions4 = [
+      [
+        { x: 15, y: GAME_HEIGHT - 175, width: 65, height: 95 },
+        { x: GAME_WIDTH / 3 - 32, y: GAME_HEIGHT - 195, width: 65, height: 95 },
+        { x: (2 * GAME_WIDTH / 3) - 32, y: GAME_HEIGHT - 185, width: 65, height: 95 },
+        { x: GAME_WIDTH - 80, y: GAME_HEIGHT - 180, width: 65, height: 95 },
+      ],
+      [
+        { x: 25, y: GAME_HEIGHT - 185, width: 62, height: 92 },
+        { x: GAME_WIDTH / 4 - 31, y: GAME_HEIGHT - 200, width: 62, height: 92 },
+        { x: GAME_WIDTH / 2 - 31, y: GAME_HEIGHT - 175, width: 62, height: 92 },
+        { x: GAME_WIDTH - 87, y: GAME_HEIGHT - 190, width: 62, height: 92 },
+      ],
+      [
+        { x: 35, y: GAME_HEIGHT - 190, width: 68, height: 98 },
+        { x: GAME_WIDTH / 3 - 34, y: GAME_HEIGHT - 180, width: 68, height: 98 },
+        { x: (2 * GAME_WIDTH / 3) - 34, y: GAME_HEIGHT - 200, width: 68, height: 98 },
+        { x: GAME_WIDTH - 103, y: GAME_HEIGHT - 185, width: 68, height: 98 },
+      ],
+      [
+        { x: 20, y: GAME_HEIGHT - 180, width: 64, height: 94 },
+        { x: GAME_WIDTH / 4, y: GAME_HEIGHT - 195, width: 64, height: 94 },
+        { x: GAME_WIDTH / 2 + 10, y: GAME_HEIGHT - 185, width: 64, height: 94 },
+        { x: GAME_WIDTH - 84, y: GAME_HEIGHT - 195, width: 64, height: 94 },
+      ],
+      [
+        { x: 30, y: GAME_HEIGHT - 195, width: 66, height: 96 },
+        { x: GAME_WIDTH / 3 - 33, y: GAME_HEIGHT - 175, width: 66, height: 96 },
+        { x: (2 * GAME_WIDTH / 3) - 33, y: GAME_HEIGHT - 190, width: 66, height: 96 },
+        { x: GAME_WIDTH - 96, y: GAME_HEIGHT - 180, width: 66, height: 96 },
+      ],
+    ];
+    
+    return positions4[levelMod].map((pos, i) => ({
+      ...pos,
+      spriteKey: shuffledSprites[i % shuffledSprites.length],
+    }));
+  }
+  
+  // High levels - 5 characters with tighter/overlapping spacing
+  const positions5Tight = [
+    [
+      { x: 10, y: GAME_HEIGHT - 175, width: 58, height: 88 },
+      { x: 55, y: GAME_HEIGHT - 195, width: 58, height: 88 },
+      { x: GAME_WIDTH / 2 - 29, y: GAME_HEIGHT - 210, width: 58, height: 88 },
+      { x: GAME_WIDTH - 113, y: GAME_HEIGHT - 190, width: 58, height: 88 },
+      { x: GAME_WIDTH - 68, y: GAME_HEIGHT - 175, width: 58, height: 88 },
+    ],
+    [
+      { x: 15, y: GAME_HEIGHT - 185, width: 55, height: 85 },
+      { x: 60, y: GAME_HEIGHT - 175, width: 55, height: 85 },
+      { x: GAME_WIDTH / 2 - 27, y: GAME_HEIGHT - 200, width: 55, height: 85 },
+      { x: GAME_WIDTH - 115, y: GAME_HEIGHT - 180, width: 55, height: 85 },
+      { x: GAME_WIDTH - 60, y: GAME_HEIGHT - 195, width: 55, height: 85 },
+    ],
+    [
+      { x: 5, y: GAME_HEIGHT - 190, width: 60, height: 90 },
+      { x: 50, y: GAME_HEIGHT - 205, width: 60, height: 90 },
+      { x: GAME_WIDTH / 2 - 30, y: GAME_HEIGHT - 180, width: 60, height: 90 },
+      { x: GAME_WIDTH - 110, y: GAME_HEIGHT - 200, width: 60, height: 90 },
+      { x: GAME_WIDTH - 55, y: GAME_HEIGHT - 185, width: 60, height: 90 },
+    ],
+    [
+      { x: 20, y: GAME_HEIGHT - 180, width: 56, height: 86 },
+      { x: 65, y: GAME_HEIGHT - 200, width: 56, height: 86 },
+      { x: GAME_WIDTH / 2 - 28, y: GAME_HEIGHT - 190, width: 56, height: 86 },
+      { x: GAME_WIDTH - 121, y: GAME_HEIGHT - 175, width: 56, height: 86 },
+      { x: GAME_WIDTH - 65, y: GAME_HEIGHT - 200, width: 56, height: 86 },
+    ],
+    [
+      { x: 8, y: GAME_HEIGHT - 195, width: 57, height: 87 },
+      { x: 58, y: GAME_HEIGHT - 180, width: 57, height: 87 },
+      { x: GAME_WIDTH / 2 - 28, y: GAME_HEIGHT - 205, width: 57, height: 87 },
+      { x: GAME_WIDTH - 115, y: GAME_HEIGHT - 195, width: 57, height: 87 },
+      { x: GAME_WIDTH - 58, y: GAME_HEIGHT - 180, width: 57, height: 87 },
+    ],
+  ];
+  
+  return positions5Tight[levelMod].map((pos, i) => ({
+    ...pos,
+    spriteKey: shuffledSprites[i % shuffledSprites.length],
+  }));
 };
 
 export default function ShootoutSimulator() {
@@ -195,27 +371,18 @@ export default function ShootoutSimulator() {
   };
 
   const initializeGangMembers = () => {
-    // Create 5 gang members at fixed positions
-    const members: GangMember[] = [];
-    const positions = [
-      { x: 30, y: GAME_HEIGHT - 180 },
-      { x: 90, y: GAME_HEIGHT - 200 },
-      { x: GAME_WIDTH / 2 - GANG_MEMBER_WIDTH / 2, y: GAME_HEIGHT - 220 },
-      { x: GAME_WIDTH - 140, y: GAME_HEIGHT - 200 },
-      { x: GAME_WIDTH - 80, y: GAME_HEIGHT - 180 },
-    ];
-    const colors = [COLORS.gangMember1, COLORS.gangMember2, COLORS.gangMember3, COLORS.gangMember4, COLORS.gangMember1];
+    const positionConfig = getPositionConfig(difficulty, levelConfig.characterCount);
     
-    positions.forEach((pos, i) => {
-      members.push({
-        id: i,
-        x: pos.x,
-        y: pos.y,
-        color: colors[i],
-        isHit: false,
-        hitAnim: new Animated.Value(0),
-      });
-    });
+    const members: GangMember[] = positionConfig.map((config, i) => ({
+      id: i,
+      x: config.x,
+      y: config.y,
+      spriteKey: config.spriteKey,
+      isHit: false,
+      hitAnim: new Animated.Value(0),
+      width: config.width,
+      height: config.height,
+    }));
     
     setGangMembers(members);
   };
@@ -269,7 +436,6 @@ export default function ShootoutSimulator() {
       
       // Random direction change based on erratic-ness
       if (frameCountRef.current % Math.floor(levelConfig.crosshairErratic) === 0) {
-        // Add random angle change
         const angleChange = (Math.random() - 0.5) * Math.PI;
         const currentAngle = Math.atan2(dy, dx);
         const newAngle = currentAngle + angleChange;
@@ -316,16 +482,12 @@ export default function ShootoutSimulator() {
     let hitMember: GangMember | null = null;
     
     for (const member of gangMembers) {
-      const memberCenterX = member.x + GANG_MEMBER_WIDTH / 2;
-      const memberCenterY = member.y + GANG_MEMBER_HEIGHT / 2;
-      
-      // Check if crosshair center is within member bounds (with some tolerance)
       const hitTolerance = 15;
       if (
         crosshairCenter.x > member.x - hitTolerance &&
-        crosshairCenter.x < member.x + GANG_MEMBER_WIDTH + hitTolerance &&
+        crosshairCenter.x < member.x + member.width + hitTolerance &&
         crosshairCenter.y > member.y - hitTolerance &&
-        crosshairCenter.y < member.y + GANG_MEMBER_HEIGHT + hitTolerance
+        crosshairCenter.y < member.y + member.height + hitTolerance
       ) {
         hitMember = member;
         break;
@@ -333,7 +495,6 @@ export default function ShootoutSimulator() {
     }
     
     if (hitMember) {
-      // Hit!
       setHits(prev => prev + 1);
       
       // Play hit animation
@@ -351,7 +512,6 @@ export default function ShootoutSimulator() {
       ]).start();
     }
     
-    // Check if out of shots
     if (newShotsRemaining <= 0) {
       endGame();
     }
@@ -363,12 +523,10 @@ export default function ShootoutSimulator() {
     setIsGameOver(true);
     cleanup();
     
-    // Calculate final rewards
     const rewards = calculateRewards(hits, difficulty);
     setGameRewards(rewards);
     setShowResultsModal(true);
     
-    // Animate rewards
     if (hits > 0) {
       Animated.sequence([
         Animated.timing(rewardAnimValues.cash, {
@@ -389,11 +547,9 @@ export default function ShootoutSimulator() {
       ]).start();
     }
     
-    // Submit to backend
     submitResults(hits);
   }, [isGameOver, hits, difficulty]);
 
-  // Watch for game over conditions
   useEffect(() => {
     if (gameStarted && !isGameOver) {
       if (shotsRemaining <= 0 || timeRemaining <= 0) {
@@ -436,10 +592,7 @@ export default function ShootoutSimulator() {
   // Render street background
   const renderBackground = () => (
     <View style={styles.background}>
-      {/* Sky */}
       <View style={styles.sky} />
-      
-      {/* Buildings */}
       <View style={styles.buildingsContainer}>
         <View style={[styles.building, { left: 0, width: 60, height: 150 }]}>
           <View style={styles.window} />
@@ -459,15 +612,13 @@ export default function ShootoutSimulator() {
           <View style={[styles.window, { marginTop: 15 }]} />
         </View>
       </View>
-      
-      {/* Street */}
       <View style={styles.street}>
         <View style={styles.streetLine} />
       </View>
     </View>
   );
 
-  // Render gang members
+  // Render gang members with custom sprites
   const renderGangMembers = () => {
     return gangMembers.map(member => {
       const hitScale = member.hitAnim.interpolate({
@@ -478,10 +629,12 @@ export default function ShootoutSimulator() {
         inputRange: [0, 1],
         outputRange: ['0deg', '-15deg'],
       });
-      const hitColor = member.hitAnim.interpolate({
+      const hitOpacity = member.hitAnim.interpolate({
         inputRange: [0, 0.5, 1],
-        outputRange: [member.color, COLORS.hitFlash, member.color],
+        outputRange: [1, 0.5, 1],
       });
+      
+      const spriteUrl = getSpriteUrl(member.spriteKey);
       
       return (
         <Animated.View
@@ -491,31 +644,21 @@ export default function ShootoutSimulator() {
             {
               left: member.x,
               top: member.y,
+              width: member.width,
+              height: member.height,
               transform: [
                 { scale: hitScale },
                 { rotate: hitRotate },
               ],
+              opacity: hitOpacity,
             },
           ]}
         >
-          {/* Body */}
-          <Animated.View style={[styles.gangMemberBody, { backgroundColor: hitColor as any }]}>
-            {/* Head */}
-            <View style={styles.gangMemberHead}>
-              <View style={styles.gangMemberEye} />
-              <View style={[styles.gangMemberEye, { right: 8 }]} />
-            </View>
-            {/* Torso */}
-            <View style={styles.gangMemberTorso} />
-            {/* Arms */}
-            <View style={[styles.gangMemberArm, { left: -8 }]} />
-            <View style={[styles.gangMemberArm, { right: -8 }]} />
-            {/* Legs */}
-            <View style={styles.gangMemberLegs}>
-              <View style={styles.gangMemberLeg} />
-              <View style={styles.gangMemberLeg} />
-            </View>
-          </Animated.View>
+          <Image
+            source={{ uri: spriteUrl }}
+            style={styles.gangMemberSprite}
+            resizeMode="contain"
+          />
         </Animated.View>
       );
     });
@@ -559,7 +702,7 @@ export default function ShootoutSimulator() {
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>{shootoutName}</Text>
-          <Text style={styles.headerSubtitle}>Level {difficulty} {'⭐'.repeat(Math.min(5, Math.ceil(difficulty / 4)))}</Text>
+          <Text style={styles.headerSubtitle}>Level {difficulty} {'⭐'.repeat(Math.min(5, Math.ceil(difficulty / 4)))} • {levelConfig.characterCount} targets</Text>
         </View>
       </View>
 
@@ -610,7 +753,7 @@ export default function ShootoutSimulator() {
             </View>
             
             <View style={styles.statsHint}>
-              <Text style={styles.statsHintText}>🔫 {TOTAL_SHOTS} shots • ⏱️ {Math.floor(levelConfig.timeLimit)}s</Text>
+              <Text style={styles.statsHintText}>🔫 {TOTAL_SHOTS} shots • ⏱️ {Math.floor(levelConfig.timeLimit)}s • 🧍 {levelConfig.characterCount} targets</Text>
             </View>
             
             <TouchableOpacity style={styles.startButton} onPress={startGame} activeOpacity={0.8}>
@@ -626,7 +769,6 @@ export default function ShootoutSimulator() {
               {renderGangMembers()}
               {renderCrosshair()}
               
-              {/* Muzzle flash on shoot */}
               {isGameOver && (
                 <View style={styles.gameOverOverlay}>
                   <Text style={styles.gameOverEmoji}>
@@ -989,60 +1131,11 @@ const styles = StyleSheet.create({
   },
   gangMember: {
     position: 'absolute',
-    width: GANG_MEMBER_WIDTH,
-    height: GANG_MEMBER_HEIGHT,
     zIndex: 5,
   },
-  gangMemberBody: {
-    flex: 1,
-    alignItems: 'center',
-    borderRadius: 4,
-  },
-  gangMemberHead: {
-    width: 24,
-    height: 24,
-    backgroundColor: '#f5d5a3',
-    borderRadius: 12,
-    marginTop: 4,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  gangMemberEye: {
-    position: 'absolute',
-    width: 4,
-    height: 4,
-    backgroundColor: '#000',
-    borderRadius: 2,
-    top: 8,
-    left: 8,
-  },
-  gangMemberTorso: {
-    width: 30,
-    height: 25,
-    backgroundColor: 'inherit',
-    marginTop: 2,
-    borderRadius: 4,
-  },
-  gangMemberArm: {
-    position: 'absolute',
-    top: 32,
-    width: 10,
-    height: 20,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 4,
-  },
-  gangMemberLegs: {
-    flexDirection: 'row',
-    gap: 4,
-    marginTop: 2,
-  },
-  gangMemberLeg: {
-    width: 12,
-    height: 20,
-    backgroundColor: '#2c3e50',
-    borderRadius: 4,
+  gangMemberSprite: {
+    width: '100%',
+    height: '100%',
   },
   crosshair: {
     position: 'absolute',

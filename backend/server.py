@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -5522,6 +5523,47 @@ async def claim_step_goal(player_id: str, goal_steps: int):
     )
     
     return {"message": reward_msg, "goal": goal_steps, "reward_type": goal["reward_type"]}
+
+
+# Background removal endpoint for shootout character sprites
+@api_router.get("/sprites/remove-bg")
+async def remove_background_from_sprite(url: str):
+    """Remove background from a sprite image and return as PNG with transparency"""
+    import hashlib
+    import requests
+    from PIL import Image
+    from io import BytesIO
+    
+    try:
+        # Create a hash of the URL to use as filename
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        cache_dir = STATIC_DIR / "sprites"
+        cache_dir.mkdir(exist_ok=True)
+        cache_path = cache_dir / f"{url_hash}.png"
+        
+        # Check if already cached
+        if cache_path.exists():
+            return FileResponse(cache_path, media_type="image/png")
+        
+        # Download the image
+        response = requests.get(url, timeout=30)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to download image")
+        
+        # Process with rembg
+        from rembg import remove
+        
+        input_image = Image.open(BytesIO(response.content))
+        output_image = remove(input_image)
+        
+        # Save to cache
+        output_image.save(cache_path, "PNG")
+        
+        return FileResponse(cache_path, media_type="image/png")
+    except Exception as e:
+        logging.error(f"Error removing background: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process image: {str(e)}")
+
 
 # Include the router in the main app
 app.include_router(api_router)
