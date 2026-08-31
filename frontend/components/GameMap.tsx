@@ -446,6 +446,26 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 '<div style="position:absolute;top:-8px;right:-4px;background:#f39c12;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">🚚' + grabLevel + '</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(230,126,34,0.95);color:#fff;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + grabName + '</div>' +
                 '</div>';
+            } else if (m.type === 'shootout') {
+              var shootoutName = m.name || 'Shootout';
+              var shootoutLevel = m.level || 1;
+              var shootoutCooldownSecs = m.cooldownSeconds || 0;
+              var shootoutCooldownHTML = '';
+              if (shootoutCooldownSecs > 0) {
+                var sMins = Math.floor(shootoutCooldownSecs / 60);
+                var sSecs = shootoutCooldownSecs % 60;
+                var sTimeStr = sMins + ':' + (sSecs < 10 ? '0' : '') + sSecs;
+                shootoutCooldownHTML = '<div style="position:absolute;top:0;left:0;right:0;bottom:20px;background:rgba(0,0,0,0.7);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;">' +
+                  '<div style="font-size:10px;color:#ff6b6b;">⏱</div>' +
+                  '<div style="font-size:11px;color:#fff;font-weight:bold;">' + sTimeStr + '</div>' +
+                  '</div>';
+              }
+              markerHTML = '<div style="width:56px;height:72px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                '<div style="width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#c0392b,#a93226);display:flex;align-items:center;justify-content:center;border:3px solid ' + (shootoutCooldownSecs > 0 ? '#666' : '#fff') + ';box-shadow:0 4px 14px rgba(192,57,43,0.7);font-size:26px;cursor:pointer;' + (shootoutCooldownSecs > 0 ? 'filter:grayscale(50%);' : '') + '">🔫</div>' +
+                shootoutCooldownHTML +
+                '<div style="position:absolute;top:-8px;right:-4px;background:#e74c3c;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">🎯' + shootoutLevel + '</div>' +
+                '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(192,57,43,0.95);color:#fff;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + shootoutName + '</div>' +
+                '</div>';
             } else if (enemyImg) {
               var isBoss = m.isBoss || false;
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:' + (isBoss ? '#FFD700' : '#ff6b35') + ';color:' + (isBoss ? '#000' : '#fff') + ';padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
