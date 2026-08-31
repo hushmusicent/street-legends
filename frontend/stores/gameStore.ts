@@ -29,6 +29,9 @@ interface GameState {
   // Audio
   isMuted: boolean;
   
+  // Mini-game levels (selected in options)
+  runawayLevel: number; // 1-20, selected level for Runaway Simulator
+  
   // Data refresh triggers
   missionRefreshTrigger: number;
   
@@ -47,12 +50,15 @@ interface GameState {
   setPlayerGuild: (guild: Guild | null) => void;
   setProfilePic: (pic: string | null) => void;
   setMuted: (muted: boolean) => void;
+  setRunawayLevel: (level: number) => void;
   triggerMissionRefresh: () => void;
   clearPlayer: () => void;
   
   // Persistence
   loadStoredPlayerId: () => Promise<string | null>;
   savePlayerId: (id: string) => Promise<void>;
+  loadRunawayLevel: () => Promise<number>;
+  saveRunawayLevel: (level: number) => Promise<void>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -69,6 +75,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   playerGuild: null,
   profilePic: null,
   isMuted: false,
+  runawayLevel: 1, // Default to level 1
   missionRefreshTrigger: 0,
   
   // Actions
@@ -90,6 +97,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setPlayerGuild: (guild) => set({ playerGuild: guild }),
   setProfilePic: (pic) => set({ profilePic: pic }),
   setMuted: (muted) => set({ isMuted: muted }),
+  setRunawayLevel: (level) => set({ runawayLevel: Math.min(20, Math.max(1, level)) }),
   triggerMissionRefresh: () => set((state) => ({ missionRefreshTrigger: state.missionRefreshTrigger + 1 })),
   
   clearPlayer: () => set({
@@ -124,6 +132,29 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ playerId: id });
     } catch (error) {
       console.error('Error saving player ID:', error);
+    }
+  },
+  
+  loadRunawayLevel: async () => {
+    try {
+      const level = await AsyncStorage.getItem('runawayLevel');
+      const parsedLevel = level ? parseInt(level, 10) : 1;
+      const validLevel = Math.min(20, Math.max(1, parsedLevel || 1));
+      set({ runawayLevel: validLevel });
+      return validLevel;
+    } catch (error) {
+      console.error('Error loading runaway level:', error);
+      return 1;
+    }
+  },
+  
+  saveRunawayLevel: async (level) => {
+    try {
+      const validLevel = Math.min(20, Math.max(1, level));
+      await AsyncStorage.setItem('runawayLevel', validLevel.toString());
+      set({ runawayLevel: validLevel });
+    } catch (error) {
+      console.error('Error saving runaway level:', error);
     }
   },
 }));

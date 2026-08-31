@@ -466,13 +466,17 @@ export default function MapScreen() {
       const gameData = await startRunaway(selectedRunaway.id, playerId);
       setSelectedRunaway(null);
       
+      // Get the selected runaway level from the store
+      const { runawayLevel } = useGameStore.getState();
+      
       // Navigate to the runaway simulator game screen
+      // Use the selected level from options panel instead of map marker difficulty
       router.push({
         pathname: '/runaway-simulator',
         params: {
           runawayId: selectedRunaway.id,
           runawayName: selectedRunaway.name,
-          difficulty: selectedRunaway.difficulty.toString(),
+          difficulty: runawayLevel.toString(), // Use selected level from options
           gameId: gameData.game_id,
         },
       });
@@ -1264,29 +1268,16 @@ export default function MapScreen() {
                   </View>
                 </View>
                 
-                <View style={styles.terrStats}>
+                <View style={[styles.terrStats, { backgroundColor: 'rgba(0,184,148,0.1)', borderRadius: 12, padding: 12, marginBottom: 12 }]}>
                   <View style={styles.terrStatRow}>
-                    <Text style={styles.terrStatLabel}>Difficulty:</Text>
-                    <Text style={styles.terrStatValue}>
-                      {'⭐'.repeat(Math.min(5, Math.ceil(selectedRunaway.difficulty / 4)))} (Level {selectedRunaway.difficulty})
+                    <Text style={styles.terrStatLabel}>Selected Level:</Text>
+                    <Text style={[styles.terrStatValue, { color: '#00b894' }]}>
+                      Level {useGameStore.getState().runawayLevel} {'⭐'.repeat(Math.min(5, Math.ceil(useGameStore.getState().runawayLevel / 4)))}
                     </Text>
                   </View>
-                  <View style={styles.terrStatRow}>
-                    <Text style={styles.terrStatLabel}>Hideout:</Text>
-                    <Text style={styles.terrStatValue}>{selectedRunaway.hideout_distance}m to safety</Text>
-                  </View>
-                  <View style={styles.terrStatRow}>
-                    <Text style={styles.terrStatLabel}>Reward:</Text>
-                    <Text style={[styles.terrStatValue, { color: '#f39c12' }]}>
-                      ${selectedRunaway.min_reward} - ${selectedRunaway.max_reward}
-                    </Text>
-                  </View>
-                  <View style={styles.terrStatRow}>
-                    <Text style={styles.terrStatLabel}>Bonus:</Text>
-                    <Text style={[styles.terrStatValue, { color: '#2196f3' }]}>
-                      +{selectedRunaway.xp_reward} XP / +{selectedRunaway.rep_reward} Rep
-                    </Text>
-                  </View>
+                  <Text style={{ color: '#888', fontSize: 10, marginTop: 4 }}>
+                    (Change level in Options → Mini Games → Runaway Simulator)
+                  </Text>
                 </View>
                 
                 <Text style={styles.terrDesc}>

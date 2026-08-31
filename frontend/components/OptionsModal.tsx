@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Share,
   Clipboard,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +18,7 @@ import { router } from 'expo-router';
 import * as NavigationBar from 'expo-navigation-bar';
 import { useGameStore } from '../stores/gameStore';
 import { deletePlayerAccount } from '../services/api';
+import { getLevelConfig, getRunawayRewards } from '../hooks/useRunawayGame';
 
 interface OptionsModalProps {
   visible: boolean;
@@ -27,9 +29,17 @@ interface OptionsModalProps {
 }
 
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
-  const { clearPlayer, playerId } = useGameStore();
+  const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel } = useGameStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMiniGames, setShowMiniGames] = useState(false);
+  const [showRunawayLevels, setShowRunawayLevels] = useState(false);
+
+  // Load runaway level from storage when modal opens
+  useEffect(() => {
+    if (visible) {
+      loadRunawayLevel();
+    }
+  }, [visible]);
 
   const shareMessage = '🎮 Check out Street Legends - A GTA-style GPS RPG game! Fight enemies, capture territories, and build your criminal empire in real life locations! Download now: https://street-empire-test.preview.emergentagent.com';
 
@@ -295,6 +305,110 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#e74c3c" />
               </TouchableOpacity>
+
+              {/* Runaway Simulator Mini-game with Level Selection */}
+              <View style={styles.runawayContainer}>
+                <TouchableOpacity 
+                  style={styles.miniGameItem} 
+                  onPress={() => setShowRunawayLevels(!showRunawayLevels)} 
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 22 }}>🚔</Text>
+                  <View style={styles.miniGameInfo}>
+                    <Text style={styles.miniGameTitle}>Runaway Simulator</Text>
+                    <Text style={styles.miniGameDesc}>Side-scroller • Level {runawayLevel}</Text>
+                  </View>
+                  <Ionicons 
+                    name={showRunawayLevels ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#00b894" 
+                  />
+                </TouchableOpacity>
+
+                {/* Level Selection Panel */}
+                {showRunawayLevels && (
+                  <View style={styles.levelSelectionPanel}>
+                    <Text style={styles.levelSelectionTitle}>SELECT LEVEL</Text>
+                    <Text style={styles.levelSelectionHint}>Higher levels = longer distance, more rewards</Text>
+                    
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.levelScrollContent}
+                    >
+                      {Array.from({ length: 20 }, (_, i) => i + 1).map((level) => {
+                        const config = getLevelConfig(level);
+                        const rewards = getRunawayRewards(level);
+                        const isSelected = runawayLevel === level;
+                        
+                        return (
+                          <TouchableOpacity
+                            key={level}
+                            style={[
+                              styles.levelCard,
+                              isSelected && styles.levelCardSelected,
+                            ]}
+                            onPress={() => {
+                              setRunawayLevel(level);
+                              saveRunawayLevel(level);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.levelNumber, isSelected && styles.levelNumberSelected]}>
+                              {level}
+                            </Text>
+                            <Text style={styles.levelDistance}>{config.hideoutDistance}m</Text>
+                            <Text style={styles.levelReward}>${rewards.cash}</Text>
+                            {isSelected && (
+                              <View style={styles.selectedBadge}>
+                                <Ionicons name="checkmark" size={10} color="#fff" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Current Level Stats */}
+                    <View style={styles.currentLevelStats}>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Distance</Text>
+                        <Text style={styles.statValue}>{getLevelConfig(runawayLevel).hideoutDistance}m</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Reward</Text>
+                        <Text style={[styles.statValue, { color: '#f39c12' }]}>${getRunawayRewards(runawayLevel).cash}</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>XP</Text>
+                        <Text style={[styles.statValue, { color: '#3498db' }]}>+{getRunawayRewards(runawayLevel).xp}</Text>
+                      </View>
+                    </View>
+
+                    {/* Play Button */}
+                    <TouchableOpacity
+                      style={styles.playRunawayButton}
+                      onPress={() => {
+                        onClose();
+                        setShowMiniGames(false);
+                        setShowRunawayLevels(false);
+                        setTimeout(() => router.push({
+                          pathname: '/runaway-simulator',
+                          params: {
+                            standalone: 'true',
+                            runawayName: `Level ${runawayLevel} Run`,
+                            difficulty: runawayLevel.toString(),
+                          },
+                        }), 300);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="play" size={18} color="#fff" />
+                      <Text style={styles.playRunawayText}>PLAY LEVEL {runawayLevel}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
           )}
 
@@ -507,6 +621,118 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     marginTop: 2,
+  },
+  // Runaway Level Selection Styles
+  runawayContainer: {
+    backgroundColor: 'rgba(0, 184, 148, 0.08)',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  levelSelectionPanel: {
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 184, 148, 0.2)',
+  },
+  levelSelectionTitle: {
+    color: '#00b894',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  levelSelectionHint: {
+    color: '#666',
+    fontSize: 9,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  levelScrollContent: {
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  levelCard: {
+    width: 54,
+    height: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  levelCardSelected: {
+    backgroundColor: 'rgba(0, 184, 148, 0.2)',
+    borderColor: '#00b894',
+  },
+  levelNumber: {
+    color: '#888',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  levelNumberSelected: {
+    color: '#00b894',
+  },
+  levelDistance: {
+    color: '#666',
+    fontSize: 8,
+    marginTop: 2,
+  },
+  levelReward: {
+    color: '#f39c12',
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  selectedBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#00b894',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentLevelStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statLabel: {
+    color: '#666',
+    fontSize: 9,
+    marginBottom: 2,
+  },
+  statValue: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  playRunawayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00b894',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  playRunawayText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   deleteRow: {
     flexDirection: 'row',

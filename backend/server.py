@@ -3776,13 +3776,19 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
     )
     
     if won:
-        # Calculate rewards based on difficulty
+        # Calculate rewards based on difficulty (1-20)
+        # NEW: Distance-based difficulty with exponential rewards
         difficulty = game["difficulty"]
         
-        # Base reward scaled by difficulty
-        cash_reward = 80 + difficulty * 25
-        xp_reward = 40 + difficulty * 15
-        rep_reward = 3 + difficulty // 3
+        # Base rewards + scaling with level (matches frontend calculation)
+        base_cash = 60
+        base_xp = 30
+        base_rep = 2
+        level_multiplier = 1 + (difficulty - 1) * 0.2  # 1.0 at L1, 4.8 at L20
+        
+        cash_reward = int(base_cash * level_multiplier + difficulty * 15)
+        xp_reward = int(base_xp * level_multiplier + difficulty * 10)
+        rep_reward = int(base_rep + difficulty / 2)
         
         await db.players.update_one(
             {"id": game["player_id"]},

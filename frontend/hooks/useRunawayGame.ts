@@ -24,37 +24,48 @@ export interface RunawayObstacle {
 }
 
 // Level configuration - 20 difficulty levels
+// NEW: Difficulty is based on DISTANCE, not speed
+// Speed ramps up as player approaches hideout
 export interface LevelConfig {
   level: number;
-  scrollSpeed: number;
-  obstacleInterval: number; // ms between obstacles
-  hideoutDistance: number; // pixels to win
+  baseScrollSpeed: number; // Starting speed
+  maxScrollSpeed: number; // Speed near hideout
+  minObstacleGap: number; // Minimum pixels between obstacles
+  hideoutDistance: number; // pixels to win - THIS IS THE KEY DIFFICULTY FACTOR
   lowObstacleChance: number; // 0-1 chance of low vs high
-  comboChance: number; // chance of double obstacles
   obstacleTypes: string[]; // visual variety
 }
 
 // Generate level config based on difficulty (1-20)
+// NEW SYSTEM: Level determines DISTANCE, not speed
 export const getLevelConfig = (difficulty: number): LevelConfig => {
   const level = Math.min(20, Math.max(1, difficulty));
   
-  // Base values
-  const baseSpeed = 3.5;
-  const baseInterval = 1800;
-  const baseDistance = 2500;
+  // Base distance for level 1, increases significantly with each level
+  // Level 1: 1500m (short run)
+  // Level 20: 8000m (marathon run)
+  const baseDistance = 1500;
+  const distancePerLevel = 350; // Each level adds 350 pixels
+  const hideoutDistance = baseDistance + (level - 1) * distancePerLevel;
   
-  // Scaling factors - every 10 levels introduces bigger changes
-  const speedBoost = level <= 10 ? level * 0.25 : 2.5 + (level - 10) * 0.35;
-  const intervalReduction = level <= 10 ? level * 80 : 800 + (level - 10) * 60;
-  const distanceBoost = level * 200;
+  // Speed is the SAME across all levels - it ramps up during the run
+  const baseScrollSpeed = 3.0; // Comfortable starting speed
+  const maxScrollSpeed = 6.5; // Fast but fair at the end
+  
+  // Obstacle spacing - GENEROUS gaps, especially at lower levels
+  // Level 1: 280px minimum gap (very comfortable)
+  // Level 20: 160px minimum gap (still readable and fair)
+  const minGapBase = 280;
+  const minGapReduction = (level - 1) * 6; // Reduce gap by 6px per level
+  const minObstacleGap = Math.max(160, minGapBase - minGapReduction);
   
   return {
     level,
-    scrollSpeed: baseSpeed + speedBoost,
-    obstacleInterval: Math.max(700, baseInterval - intervalReduction),
-    hideoutDistance: baseDistance + distanceBoost,
-    lowObstacleChance: level <= 10 ? 0.5 : 0.45, // Slightly more high obstacles at higher levels
-    comboChance: level <= 5 ? 0 : Math.min(0.3, (level - 5) * 0.04), // Combos start at level 6
+    baseScrollSpeed,
+    maxScrollSpeed,
+    minObstacleGap,
+    hideoutDistance,
+    lowObstacleChance: 0.5, // 50/50 low vs high
     obstacleTypes: getObstacleTypesForLevel(level),
   };
 };
@@ -69,6 +80,23 @@ const getObstacleTypesForLevel = (level: number): string[] => {
   return types;
 };
 
+// Calculate rewards based on level (higher level = more rewards)
+export const getRunawayRewards = (level: number): { cash: number; xp: number; reputation: number } => {
+  // Base rewards + scaling with level
+  const baseCash = 60;
+  const baseXP = 30;
+  const baseRep = 2;
+  
+  // Exponential-ish scaling so higher levels feel very rewarding
+  const levelMultiplier = 1 + (level - 1) * 0.2; // 1.0 at L1, 4.8 at L20
+  
+  return {
+    cash: Math.floor(baseCash * levelMultiplier + level * 15),
+    xp: Math.floor(baseXP * levelMultiplier + level * 10),
+    reputation: Math.floor(baseRep + level / 2),
+  };
+};
+
 export interface GameState {
   playerState: PlayerState;
   playerY: number;
@@ -77,6 +105,7 @@ export interface GameState {
   isGameOver: boolean;
   won: boolean;
   scrollOffset: number;
+  currentSpeed: number; // Track current speed for display
 }
 
 export interface UseRunawayGameResult {
@@ -100,11 +129,12 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
     isGameOver: false,
     won: false,
     scrollOffset: 0,
+    currentSpeed: levelConfig.baseScrollSpeed,
   });
   
   const gameLoopRef = useRef<number | null>(null);
   const obstacleIdRef = useRef(0);
-  const lastObstacleTimeRef = useRef(0);
+  const lastObstacleXRef = useRef(-1000); // Track X position of last obstacle (not time)
   const jumpVelocityRef = useRef(0);
   const isJumpingRef = useRef(false);
   const isDuckingRef = useRef(false);
@@ -115,13 +145,26 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
   const GRAVITY = 0.8;
   const DUCK_HEIGHT_REDUCTION = 28;
   
+  // Calculate current scroll speed based on progress
+  // Speed ramps up as player approaches hideout
+  const calculateCurrentSpeed = useCallback((distance: number): number => {
+    const progress = distance / levelConfig.hideoutDistance; // 0 to 1
+    
+    // Use smooth easing curve - slow start, accelerates toward end
+    // Quadratic easing: starts slow, ends fast
+    const speedProgress = progress * progress; // Quadratic curve
+    
+    const speedRange = levelConfig.maxScrollSpeed - levelConfig.baseScrollSpeed;
+    return levelConfig.baseScrollSpeed + speedRange * speedProgress;
+  }, [levelConfig]);
+  
   const startGame = useCallback(() => {
     gameStartedRef.current = true;
     isJumpingRef.current = false;
     isDuckingRef.current = false;
     jumpVelocityRef.current = 0;
     obstacleIdRef.current = 0;
-    lastObstacleTimeRef.current = Date.now();
+    lastObstacleXRef.current = -1000; // Reset to allow immediate first obstacle
     
     setGameState({
       playerState: 'running',
@@ -131,10 +174,11 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
       isGameOver: false,
       won: false,
       scrollOffset: 0,
+      currentSpeed: levelConfig.baseScrollSpeed,
     });
     
     runGameLoop();
-  }, []);
+  }, [levelConfig]);
   
   const jump = useCallback(() => {
     if (!gameStartedRef.current || isJumpingRef.current || isDuckingRef.current) return;
@@ -168,13 +212,24 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
     }));
   }, []);
   
-  const spawnObstacle = useCallback((): RunawayObstacle | null => {
-    const now = Date.now();
-    if (now - lastObstacleTimeRef.current < levelConfig.obstacleInterval) {
+  // Spawn obstacle based on DISTANCE from last obstacle, not time
+  const trySpawnObstacle = useCallback((currentScrollOffset: number): RunawayObstacle | null => {
+    // Calculate distance since last obstacle
+    const distanceSinceLastObstacle = currentScrollOffset - lastObstacleXRef.current;
+    
+    // Only spawn if we've traveled far enough
+    if (distanceSinceLastObstacle < levelConfig.minObstacleGap) {
       return null;
     }
     
-    lastObstacleTimeRef.current = now;
+    // Add some randomness to spacing (±20% of min gap)
+    const randomExtra = levelConfig.minObstacleGap * 0.2 * Math.random();
+    if (distanceSinceLastObstacle < levelConfig.minObstacleGap + randomExtra) {
+      return null;
+    }
+    
+    // Update last obstacle position
+    lastObstacleXRef.current = currentScrollOffset;
     
     // Determine obstacle type
     const isLow = Math.random() < levelConfig.lowObstacleChance;
@@ -194,9 +249,9 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
     const playerTop = playerState === 'ducking' ? playerY + DUCK_HEIGHT_REDUCTION : playerY;
     const playerBottom = playerY + PLAYER_HEIGHT;
     
-    // Obstacle hitbox
-    const obsLeft = obstacle.x + 5; // Forgiveness
-    const obsRight = obstacle.x + OBSTACLE_WIDTH - 5;
+    // Obstacle hitbox - generous forgiveness
+    const obsLeft = obstacle.x + 8; // More forgiveness
+    const obsRight = obstacle.x + OBSTACLE_WIDTH - 8;
     
     // Check horizontal overlap first
     if (playerRight < obsLeft || playerLeft > obsRight) {
@@ -207,17 +262,16 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
       // Low obstacle - player must jump over
       // Obstacle is on ground level
       const obsTop = GROUND_Y;
-      const obsBottom = GROUND_Y + OBSTACLE_HEIGHT;
       
       // If player is on ground or below obstacle top, collision
-      if (playerBottom > obsTop + 10) { // +10 for slight forgiveness when landing
+      if (playerBottom > obsTop + 12) { // Extra forgiveness when landing
         return true;
       }
     } else {
       // High obstacle - player must duck under
       // Obstacle is floating at head height
       const obsTop = GROUND_Y - 30;
-      const obsBottom = obsTop + OBSTACLE_HEIGHT - 10;
+      const obsBottom = obsTop + OBSTACLE_HEIGHT - 12;
       
       // If player is standing (not ducking), head collides
       if (playerState !== 'ducking' && playerTop < obsBottom) {
@@ -233,9 +287,12 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
       setGameState(prev => {
         if (prev.isGameOver || !gameStartedRef.current) return prev;
         
+        // Calculate current speed based on progress
+        const currentSpeed = calculateCurrentSpeed(prev.distance);
+        
         // Update distance
-        const newDistance = prev.distance + levelConfig.scrollSpeed;
-        const newScrollOffset = prev.scrollOffset + levelConfig.scrollSpeed;
+        const newDistance = prev.distance + currentSpeed;
+        const newScrollOffset = prev.scrollOffset + currentSpeed;
         
         // Check win condition
         if (newDistance >= levelConfig.hideoutDistance) {
@@ -244,6 +301,7 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
             ...prev,
             distance: newDistance,
             scrollOffset: newScrollOffset,
+            currentSpeed,
             isGameOver: true,
             won: true,
           };
@@ -266,27 +324,16 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
           }
         }
         
-        // Move obstacles
+        // Move obstacles at current speed
         let newObstacles = prev.obstacles.map(obs => ({
           ...obs,
-          x: obs.x - levelConfig.scrollSpeed,
+          x: obs.x - currentSpeed,
         })).filter(obs => obs.x > -OBSTACLE_WIDTH);
         
-        // Spawn new obstacle
-        const newObstacle = spawnObstacle();
+        // Try to spawn new obstacle
+        const newObstacle = trySpawnObstacle(newScrollOffset);
         if (newObstacle) {
           newObstacles.push(newObstacle);
-          
-          // Combo chance - spawn second obstacle
-          if (Math.random() < levelConfig.comboChance) {
-            const comboType = newObstacle.type === 'low' ? 'high' : 'low';
-            newObstacles.push({
-              id: obstacleIdRef.current++,
-              x: GAME_WIDTH + 50 + 100, // Slightly behind first
-              type: comboType,
-              passed: false,
-            });
-          }
         }
         
         // Check collisions
@@ -300,6 +347,7 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
               obstacles: newObstacles,
               distance: newDistance,
               scrollOffset: newScrollOffset,
+              currentSpeed,
               isGameOver: true,
               won: false,
             };
@@ -318,6 +366,7 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
           obstacles: newObstacles,
           distance: newDistance,
           scrollOffset: newScrollOffset,
+          currentSpeed,
         };
       });
       
@@ -327,7 +376,7 @@ export const useRunawayGame = (difficulty: number): UseRunawayGameResult => {
     };
     
     gameLoopRef.current = requestAnimationFrame(loop);
-  }, [levelConfig, spawnObstacle, checkCollision]);
+  }, [levelConfig, calculateCurrentSpeed, trySpawnObstacle, checkCollision]);
   
   // Cleanup on unmount
   useEffect(() => {

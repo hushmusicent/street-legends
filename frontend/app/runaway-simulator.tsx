@@ -24,6 +24,7 @@ import {
   PLAYER_HEIGHT,
   OBSTACLE_WIDTH,
   OBSTACLE_HEIGHT,
+  getRunawayRewards,
 } from '../hooks/useRunawayGame';
 
 const COLORS = {
@@ -57,7 +58,7 @@ const OBSTACLE_VISUALS = {
   ],
 };
 
-// Reward calculation
+// Reward calculation - use the hook's function
 interface GameRewards {
   cash: number;
   xp: number;
@@ -69,16 +70,8 @@ const calculateRewards = (difficulty: number, won: boolean): GameRewards => {
     return { cash: 0, xp: 0, reputation: 0 };
   }
   
-  // Scale rewards by difficulty (1-20)
-  const baseCash = 80 + difficulty * 25;
-  const baseXP = 40 + difficulty * 15;
-  const baseRep = 3 + Math.floor(difficulty / 3);
-  
-  return {
-    cash: baseCash,
-    xp: baseXP,
-    reputation: baseRep,
-  };
+  // Use centralized reward calculation from hook
+  return getRunawayRewards(difficulty);
 };
 
 export default function RunawaySimulator() {
