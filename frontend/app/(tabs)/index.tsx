@@ -1258,69 +1258,94 @@ export default function MapScreen() {
             {/* Runaway Modal Content */}
             {selectedRunaway && (
               <>
-                <View style={styles.terrHeader}>
-                  <View style={styles.terrEmoji}>
-                    <Text style={{ fontSize: 36 }}>🚔</Text>
+                {/* Header */}
+                <View style={styles.runawayHeader}>
+                  <View style={styles.runawayIconContainer}>
+                    <Text style={styles.runawayIcon}>🚔</Text>
                   </View>
-                  <View style={styles.terrInfo}>
-                    <Text style={[styles.terrName, { color: '#00b894' }]}>{selectedRunaway.name}</Text>
-                    <Text style={styles.terrType}>Runaway Simulator</Text>
+                  <View style={styles.runawayHeaderText}>
+                    <Text style={styles.runawayTitle}>{selectedRunaway.name}</Text>
+                    <Text style={styles.runawaySubtitle}>Runaway Simulator</Text>
                   </View>
                 </View>
                 
-                <View style={[styles.terrStats, { backgroundColor: 'rgba(0,184,148,0.1)', borderRadius: 12, padding: 12, marginBottom: 12 }]}>
-                  <View style={styles.terrStatRow}>
-                    <Text style={styles.terrStatLabel}>Selected Level:</Text>
-                    <Text style={[styles.terrStatValue, { color: '#00b894' }]}>
+                {/* Selected Level Card */}
+                <View style={styles.runawayLevelCard}>
+                  <View style={styles.runawayLevelRow}>
+                    <Text style={styles.runawayLevelLabel}>Selected Level:</Text>
+                    <Text style={styles.runawayLevelValue}>
                       Level {useGameStore.getState().runawayLevel} {'⭐'.repeat(Math.min(5, Math.ceil(useGameStore.getState().runawayLevel / 4)))}
                     </Text>
                   </View>
-                  <Text style={{ color: '#888', fontSize: 10, marginTop: 4 }}>
-                    (Change level in Options → Mini Games → Runaway Simulator)
+                  <Text style={styles.runawayLevelHint}>
+                    Change level in Options → Mini Games → Runaway
                   </Text>
                 </View>
                 
-                <Text style={styles.terrDesc}>
-                  🏃 Run through the streets and avoid obstacles!{'\n'}
-                  Jump over low obstacles and duck under high ones.{'\n'}
-                  Reach the hideout to escape the cops!
-                </Text>
+                {/* Instructions Card - Clearly Visible */}
+                <View style={styles.runawayInstructionsCard}>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>🏃</Text>
+                    <Text style={styles.runawayInstructionText}>Run through the streets and avoid obstacles!</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>⬆️</Text>
+                    <Text style={styles.runawayInstructionText}>Jump over low obstacles (trash cans, barriers)</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>⬇️</Text>
+                    <Text style={styles.runawayInstructionText}>Duck under high obstacles (signs, awnings)</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>🏠</Text>
+                    <Text style={styles.runawayInstructionText}>Reach the hideout to escape and win rewards!</Text>
+                  </View>
+                </View>
                 
+                {/* Cooldown Warning */}
                 {localCooldowns[`runaway_${selectedRunaway.id}`] > 0 && (
                   <View style={styles.cooldownWarning}>
-                    <Ionicons name="time" size={16} color="#f39c12" />
-                    <Text style={styles.cooldownText}>
+                    <Ionicons name="time" size={18} color="#f39c12" />
+                    <Text style={styles.cooldownWarningText}>
                       Cooldown: {Math.floor(localCooldowns[`runaway_${selectedRunaway.id}`] / 60)}m {localCooldowns[`runaway_${selectedRunaway.id}`] % 60}s
                     </Text>
                   </View>
                 )}
                 
-                <View style={styles.terrActions}>
+                {/* Action Buttons */}
+                <View style={styles.runawayButtonContainer}>
+                  {/* Cancel Button - Styled Secondary */}
                   <TouchableOpacity 
-                    style={styles.terrBtnSecondary} 
+                    style={styles.runawayCancelButton} 
                     onPress={() => setSelectedRunaway(null)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.terrBtnSecondaryText}>CANCEL</Text>
+                    <Ionicons name="close-circle-outline" size={20} color="#888" />
+                    <Text style={styles.runawayCancelText}>CANCEL</Text>
                   </TouchableOpacity>
+                  
+                  {/* Start Button - Polished Game Button */}
                   <TouchableOpacity 
                     style={[
-                      styles.terrBtnPrimary, 
-                      { backgroundColor: localCooldowns[`runaway_${selectedRunaway.id}`] > 0 ? '#555' : '#00b894' }
+                      styles.runawayStartButton, 
+                      localCooldowns[`runaway_${selectedRunaway.id}`] > 0 && styles.runawayStartButtonDisabled
                     ]}
                     onPress={handleStartRunaway}
                     disabled={startingRunaway || localCooldowns[`runaway_${selectedRunaway.id}`] > 0}
+                    activeOpacity={0.8}
                   >
                     {startingRunaway ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : localCooldowns[`runaway_${selectedRunaway.id}`] > 0 ? (
                       <>
-                        <Ionicons name="time" size={18} color="#aaa" />
-                        <Text style={[styles.terrBtnText, { color: '#aaa' }]}>ON COOLDOWN</Text>
+                        <Ionicons name="time" size={22} color="#888" />
+                        <Text style={styles.runawayStartTextDisabled}>ON COOLDOWN</Text>
                       </>
                     ) : (
                       <>
-                        <Ionicons name="walk" size={18} color="#fff" />
-                        <Text style={styles.terrBtnText}>START RUNNING</Text>
+                        <Ionicons name="flash" size={22} color="#fff" />
+                        <Text style={styles.runawayStartText}>START RUNNING</Text>
+                        <Ionicons name="arrow-forward" size={20} color="#fff" />
                       </>
                     )}
                   </TouchableOpacity>
@@ -1382,7 +1407,7 @@ const styles = StyleSheet.create({
 
   // Territory Modal
   terrOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', zIndex: 9999 },
-  terrModal: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '75%' },
+  terrModal: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 32, maxHeight: '80%' },
   terrHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 4, paddingLeft: 12, marginBottom: 16 },
   terrHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   terrIcon: { fontSize: 28 },
@@ -1439,5 +1464,156 @@ const styles = StyleSheet.create({
     color: '#f39c12', 
     fontSize: 14, 
     fontWeight: '700' 
+  },
+  
+  // ========== RUNAWAY SIMULATOR MODAL STYLES ==========
+  runawayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,184,148,0.3)',
+  },
+  runawayIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,184,148,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#00b894',
+  },
+  runawayIcon: {
+    fontSize: 30,
+  },
+  runawayHeaderText: {
+    marginLeft: 14,
+    flex: 1,
+  },
+  runawayTitle: {
+    color: '#00b894',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  runawaySubtitle: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  runawayLevelCard: {
+    backgroundColor: 'rgba(0,184,148,0.12)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,184,148,0.25)',
+  },
+  runawayLevelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  runawayLevelLabel: {
+    color: '#aaa',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  runawayLevelValue: {
+    color: '#00b894',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  runawayLevelHint: {
+    color: '#666',
+    fontSize: 10,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  runawayInstructionsCard: {
+    backgroundColor: '#252525',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  runawayInstructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  runawayInstructionIcon: {
+    fontSize: 20,
+    width: 32,
+    textAlign: 'center',
+  },
+  runawayInstructionText: {
+    color: '#e0e0e0',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+    marginLeft: 8,
+    lineHeight: 20,
+  },
+  runawayButtonContainer: {
+    gap: 12,
+    paddingTop: 4,
+  },
+  runawayCancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  runawayCancelText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  runawayStartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 18,
+    borderRadius: 16,
+    backgroundColor: '#00b894',
+    borderWidth: 3,
+    borderColor: '#00d4aa',
+    shadowColor: '#00b894',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  runawayStartButtonDisabled: {
+    backgroundColor: '#3a3a3a',
+    borderColor: '#555',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  runawayStartText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  runawayStartTextDisabled: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
 });

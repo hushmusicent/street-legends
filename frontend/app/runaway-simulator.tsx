@@ -413,11 +413,24 @@ export default function RunawaySimulator() {
           <View style={styles.startScreen}>
             <Text style={styles.startEmoji}>🏃💨</Text>
             <Text style={styles.startTitle}>RUNAWAY</Text>
-            <Text style={styles.startInstructions}>
-              Tap ⬆️ to JUMP over low obstacles{"\n"}
-              Hold ⬇️ to DUCK under high obstacles{"\n"}
-              Reach the hideout to escape!
-            </Text>
+            
+            {/* Instructions Card */}
+            <View style={styles.instructionsCard}>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionIcon}>⬆️</Text>
+                <Text style={styles.instructionText}>Tap to JUMP over low obstacles</Text>
+              </View>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionIcon}>⬇️</Text>
+                <Text style={styles.instructionText}>Hold to DUCK under high obstacles</Text>
+              </View>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionIcon}>🏠</Text>
+                <Text style={styles.instructionText}>Reach the hideout to escape!</Text>
+              </View>
+            </View>
+            
+            {/* Obstacle Legend */}
             <View style={styles.obstacleHint}>
               <View style={styles.hintRow}>
                 <Text style={styles.hintIcon}>🗑️</Text>
@@ -428,8 +441,12 @@ export default function RunawaySimulator() {
                 <Text style={styles.hintText}>High → DUCK</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.startButton} onPress={handleStartGame}>
+            
+            {/* Polished Start Button */}
+            <TouchableOpacity style={styles.startButton} onPress={handleStartGame} activeOpacity={0.8}>
+              <Ionicons name="flash" size={24} color="#fff" />
               <Text style={styles.startButtonText}>START RUNNING</Text>
+              <Ionicons name="arrow-forward" size={22} color="#fff" />
             </TouchableOpacity>
           </View>
         ) : (
@@ -740,11 +757,40 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 16,
   },
+  instructionsCard: {
+    backgroundColor: '#252525',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+    width: '100%',
+    maxWidth: 320,
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  instructionIcon: {
+    fontSize: 20,
+    width: 32,
+    textAlign: 'center',
+  },
+  instructionText: {
+    color: '#e0e0e0',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+    marginLeft: 8,
+  },
   obstacleHint: {
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(0,184,148,0.3)',
   },
   hintRow: {
     flexDirection: 'row',
@@ -761,15 +807,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
     backgroundColor: COLORS.progress,
-    paddingHorizontal: 40,
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 18,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: '#00d4aa',
+    shadowColor: '#00b894',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   startButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   gameArea: {
     backgroundColor: COLORS.sky,
