@@ -29,6 +29,7 @@ import {
   robBank,
   startCarChase,
   startRunaway,
+  startPackageGrab,
 } from '../../services/api';
 import { Monster, Mission, NearbyPlayer } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
@@ -61,11 +62,13 @@ export default function MapScreen() {
   const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
   const [selectedCarChase, setSelectedCarChase] = useState<any | null>(null);
   const [selectedRunaway, setSelectedRunaway] = useState<any | null>(null);
+  const [selectedPackageGrab, setSelectedPackageGrab] = useState<any | null>(null);
   const [territoryBattleLog, setTerritoryBattleLog] = useState<string[]>([]);
   const [territoryFighting, setTerritoryFighting] = useState(false);
   const [robbingBank, setRobbingBank] = useState(false);
   const [startingCarChase, setStartingCarChase] = useState(false);
   const [startingRunaway, setStartingRunaway] = useState(false);
+  const [startingPackageGrab, setStartingPackageGrab] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
   
@@ -150,6 +153,7 @@ export default function MapScreen() {
   const nearbyCastles = useMemo(() => entitiesData?.castles || [], [entitiesData?.castles]);
   const nearbyCarChases = useMemo(() => entitiesData?.carChases || [], [entitiesData?.carChases]);
   const nearbyRunaways = useMemo(() => entitiesData?.runaways || [], [entitiesData?.runaways]);
+  const nearbyPackageGrabs = useMemo(() => entitiesData?.packageGrabs || [], [entitiesData?.packageGrabs]);
 
   // Update global store when entities change
   useEffect(() => {
@@ -488,6 +492,35 @@ export default function MapScreen() {
     }
   }, [playerId, selectedRunaway, startingRunaway]);
 
+  const handleStartPackageGrab = useCallback(async () => {
+    if (!playerId || !selectedPackageGrab || startingPackageGrab) return;
+    setStartingPackageGrab(true);
+    
+    try {
+      const gameData = await startPackageGrab(selectedPackageGrab.id, playerId);
+      setSelectedPackageGrab(null);
+      
+      // Get the selected package grab level from the store
+      const { packageGrabLevel } = useGameStore.getState();
+      
+      // Navigate to the package grab game screen
+      router.push({
+        pathname: '/package-grab',
+        params: {
+          grabId: selectedPackageGrab.id,
+          grabName: selectedPackageGrab.name,
+          difficulty: packageGrabLevel.toString(),
+          gameId: gameData.game_id,
+        },
+      });
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || 'Failed to start package grab';
+      Alert.alert('Cannot Start Delivery', errorMsg);
+    } finally {
+      setStartingPackageGrab(false);
+    }
+  }, [playerId, selectedPackageGrab, startingPackageGrab]);
+
   // Memoize markers to prevent re-renders
   const mapMarkers = useMemo(() => [
     ...nearbyMonsters.map((m) => ({
@@ -578,7 +611,20 @@ export default function MapScreen() {
         cooldownSeconds: remainingSecs,
       };
     }),
-  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, localCooldowns]);
+    ...nearbyPackageGrabs.map((g) => {
+      const cooldownKey = `packagegrab_${g.id}`;
+      const remainingSecs = localCooldowns[cooldownKey] || 0;
+      return {
+        id: g.id,
+        coordinate: { latitude: g.latitude, longitude: g.longitude },
+        type: 'packageGrab' as const,
+        name: g.name,
+        level: useGameStore.getState().packageGrabLevel,
+        icon: '📦',
+        cooldownSeconds: remainingSecs,
+      };
+    }),
+  ], [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, localCooldowns]);
 
   const handleMarkerPress = useCallback((marker: any) => {
     if (marker.type === 'monster') {
@@ -611,8 +657,11 @@ export default function MapScreen() {
     } else if (marker.type === 'runaway') {
       const runaway = nearbyRunaways.find((r) => r.id === marker.id);
       if (runaway) setSelectedRunaway(runaway);
+    } else if (marker.type === 'packageGrab') {
+      const grab = nearbyPackageGrabs.find((g) => g.id === marker.id);
+      if (grab) setSelectedPackageGrab(grab);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs]);
 
   if (loading) {
     return (
@@ -1067,16 +1116,16 @@ export default function MapScreen() {
         </Pressable>
       </Modal>
 
-      {/* Castle Cannon / Car Chase / Runaway Mini-game Modal */}
+      {/* Castle Cannon / Car Chase / Runaway / Package Grab Mini-game Modal */}
       <Modal
-        visible={!!selectedCastle || !!selectedCarChase || !!selectedRunaway}
+        visible={!!selectedCastle || !!selectedCarChase || !!selectedRunaway || !!selectedPackageGrab}
         transparent
         animationType="fade"
-        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); }}
+        onRequestClose={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); }}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); }}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); }}>
           <Pressable style={styles.terrModal} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); }}>
+            <TouchableOpacity style={styles.terrClose} onPress={() => { setSelectedCastle(null); setSelectedCarChase(null); setSelectedRunaway(null); setSelectedPackageGrab(null); }}>
               <Ionicons name="close" size={22} color="#666" />
             </TouchableOpacity>
 
@@ -1345,6 +1394,103 @@ export default function MapScreen() {
                       <>
                         <Ionicons name="flash" size={22} color="#fff" />
                         <Text style={styles.runawayStartText}>START RUNNING</Text>
+                        <Ionicons name="arrow-forward" size={20} color="#fff" />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+            
+            {/* Package Grab Modal Content */}
+            {selectedPackageGrab && (
+              <>
+                {/* Header */}
+                <View style={styles.runawayHeader}>
+                  <View style={[styles.runawayIconContainer, { backgroundColor: 'rgba(230,126,34,0.2)', borderColor: '#e67e22' }]}>
+                    <Text style={styles.runawayIcon}>📦</Text>
+                  </View>
+                  <View style={styles.runawayHeaderText}>
+                    <Text style={[styles.runawayTitle, { color: '#e67e22' }]}>{selectedPackageGrab.name}</Text>
+                    <Text style={styles.runawaySubtitle}>Package Grab</Text>
+                  </View>
+                </View>
+                
+                {/* Selected Level Card */}
+                <View style={[styles.runawayLevelCard, { backgroundColor: 'rgba(230,126,34,0.12)', borderColor: 'rgba(230,126,34,0.25)' }]}>
+                  <View style={styles.runawayLevelRow}>
+                    <Text style={styles.runawayLevelLabel}>Selected Level:</Text>
+                    <Text style={[styles.runawayLevelValue, { color: '#e67e22' }]}>
+                      Level {useGameStore.getState().packageGrabLevel} {'⭐'.repeat(Math.min(5, Math.ceil(useGameStore.getState().packageGrabLevel / 4)))}
+                    </Text>
+                  </View>
+                  <Text style={styles.runawayLevelHint}>
+                    Change level in Options → Mini Games → Package Grab
+                  </Text>
+                </View>
+                
+                {/* Instructions Card */}
+                <View style={styles.runawayInstructionsCard}>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>⬅️➡️</Text>
+                    <Text style={styles.runawayInstructionText}>Move left/right to collect boxes</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>📦</Text>
+                    <Text style={styles.runawayInstructionText}>Collect boxes for bonus rewards</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>🚧</Text>
+                    <Text style={styles.runawayInstructionText}>Avoid obstacles or you'll crash!</Text>
+                  </View>
+                  <View style={styles.runawayInstructionRow}>
+                    <Text style={styles.runawayInstructionIcon}>🏁</Text>
+                    <Text style={styles.runawayInstructionText}>Reach the finish to complete delivery</Text>
+                  </View>
+                </View>
+                
+                {/* Cooldown Warning */}
+                {localCooldowns[`packagegrab_${selectedPackageGrab.id}`] > 0 && (
+                  <View style={styles.cooldownWarning}>
+                    <Ionicons name="time" size={18} color="#f39c12" />
+                    <Text style={styles.cooldownWarningText}>
+                      Cooldown: {Math.floor(localCooldowns[`packagegrab_${selectedPackageGrab.id}`] / 60)}m {localCooldowns[`packagegrab_${selectedPackageGrab.id}`] % 60}s
+                    </Text>
+                  </View>
+                )}
+                
+                {/* Action Buttons */}
+                <View style={styles.runawayButtonContainer}>
+                  <TouchableOpacity 
+                    style={styles.runawayCancelButton} 
+                    onPress={() => setSelectedPackageGrab(null)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close-circle-outline" size={20} color="#888" />
+                    <Text style={styles.runawayCancelText}>CANCEL</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.runawayStartButton, 
+                      { backgroundColor: '#e67e22', borderColor: '#f39c12' },
+                      localCooldowns[`packagegrab_${selectedPackageGrab.id}`] > 0 && styles.runawayStartButtonDisabled
+                    ]}
+                    onPress={handleStartPackageGrab}
+                    disabled={startingPackageGrab || localCooldowns[`packagegrab_${selectedPackageGrab.id}`] > 0}
+                    activeOpacity={0.8}
+                  >
+                    {startingPackageGrab ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : localCooldowns[`packagegrab_${selectedPackageGrab.id}`] > 0 ? (
+                      <>
+                        <Ionicons name="time" size={22} color="#888" />
+                        <Text style={styles.runawayStartTextDisabled}>ON COOLDOWN</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="car" size={22} color="#fff" />
+                        <Text style={styles.runawayStartText}>START DELIVERY</Text>
                         <Ionicons name="arrow-forward" size={20} color="#fff" />
                       </>
                     )}

@@ -29,15 +29,17 @@ interface OptionsModalProps {
 }
 
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
-  const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel } = useGameStore();
+  const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel, packageGrabLevel, setPackageGrabLevel, savePackageGrabLevel, loadPackageGrabLevel } = useGameStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMiniGames, setShowMiniGames] = useState(false);
   const [showRunawayLevels, setShowRunawayLevels] = useState(false);
+  const [showPackageGrabLevels, setShowPackageGrabLevels] = useState(false);
 
-  // Load runaway level from storage when modal opens
+  // Load mini-game levels from storage when modal opens
   useEffect(() => {
     if (visible) {
       loadRunawayLevel();
+      loadPackageGrabLevel();
     }
   }, [visible]);
 
@@ -405,6 +407,111 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                     >
                       <Ionicons name="play" size={18} color="#fff" />
                       <Text style={styles.playRunawayText}>PLAY LEVEL {runawayLevel}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+              
+              {/* Package Grab Mini-game with Level Selection */}
+              <View style={[styles.runawayContainer, { backgroundColor: 'rgba(230, 126, 34, 0.08)' }]}>
+                <TouchableOpacity 
+                  style={styles.miniGameItem} 
+                  onPress={() => setShowPackageGrabLevels(!showPackageGrabLevels)} 
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 22 }}>📦</Text>
+                  <View style={styles.miniGameInfo}>
+                    <Text style={styles.miniGameTitle}>Package Grab</Text>
+                    <Text style={styles.miniGameDesc}>Delivery run • Level {packageGrabLevel}</Text>
+                  </View>
+                  <Ionicons 
+                    name={showPackageGrabLevels ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#e67e22" 
+                  />
+                </TouchableOpacity>
+
+                {/* Level Selection Panel */}
+                {showPackageGrabLevels && (
+                  <View style={[styles.levelSelectionPanel, { borderTopColor: 'rgba(230, 126, 34, 0.2)' }]}>
+                    <Text style={[styles.levelSelectionTitle, { color: '#e67e22' }]}>SELECT LEVEL</Text>
+                    <Text style={styles.levelSelectionHint}>Higher levels = longer route, more rewards</Text>
+                    
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.levelScrollContent}
+                    >
+                      {Array.from({ length: 20 }, (_, i) => i + 1).map((level) => {
+                        const isSelected = packageGrabLevel === level;
+                        // Calculate distance and reward for package grab
+                        const distance = 2000 + (level - 1) * 370;
+                        const baseReward = 20 + level * 10;
+                        
+                        return (
+                          <TouchableOpacity
+                            key={level}
+                            style={[
+                              styles.levelCard,
+                              isSelected && [styles.levelCardSelected, { backgroundColor: 'rgba(230, 126, 34, 0.2)', borderColor: '#e67e22' }],
+                            ]}
+                            onPress={() => {
+                              setPackageGrabLevel(level);
+                              savePackageGrabLevel(level);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.levelNumber, isSelected && { color: '#e67e22' }]}>
+                              {level}
+                            </Text>
+                            <Text style={styles.levelDistance}>{distance}m</Text>
+                            <Text style={styles.levelReward}>${baseReward}+</Text>
+                            {isSelected && (
+                              <View style={[styles.selectedBadge, { backgroundColor: '#e67e22' }]}>
+                                <Ionicons name="checkmark" size={10} color="#fff" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Current Level Stats */}
+                    <View style={styles.currentLevelStats}>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Distance</Text>
+                        <Text style={styles.statValue}>{2000 + (packageGrabLevel - 1) * 370}m</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Base Reward</Text>
+                        <Text style={[styles.statValue, { color: '#f39c12' }]}>${20 + packageGrabLevel * 10}+</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Bonus</Text>
+                        <Text style={[styles.statValue, { color: '#e67e22' }]}>📦 +$</Text>
+                      </View>
+                    </View>
+
+                    {/* Play Button */}
+                    <TouchableOpacity
+                      style={[styles.playRunawayButton, { backgroundColor: '#e67e22' }]}
+                      onPress={() => {
+                        onClose();
+                        setShowMiniGames(false);
+                        setShowPackageGrabLevels(false);
+                        setTimeout(() => router.push({
+                          pathname: '/package-grab',
+                          params: {
+                            standalone: 'true',
+                            grabName: `Level ${packageGrabLevel} Delivery`,
+                            difficulty: packageGrabLevel.toString(),
+                          },
+                        }), 300);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="car" size={18} color="#fff" />
+                      <Text style={styles.playRunawayText}>PLAY LEVEL {packageGrabLevel}</Text>
                     </TouchableOpacity>
                   </View>
                 )}

@@ -31,6 +31,7 @@ interface GameState {
   
   // Mini-game levels (selected in options)
   runawayLevel: number; // 1-20, selected level for Runaway Simulator
+  packageGrabLevel: number; // 1-20, selected level for Package Grab
   
   // Data refresh triggers
   missionRefreshTrigger: number;
@@ -51,6 +52,7 @@ interface GameState {
   setProfilePic: (pic: string | null) => void;
   setMuted: (muted: boolean) => void;
   setRunawayLevel: (level: number) => void;
+  setPackageGrabLevel: (level: number) => void;
   triggerMissionRefresh: () => void;
   clearPlayer: () => void;
   
@@ -59,6 +61,8 @@ interface GameState {
   savePlayerId: (id: string) => Promise<void>;
   loadRunawayLevel: () => Promise<number>;
   saveRunawayLevel: (level: number) => Promise<void>;
+  loadPackageGrabLevel: () => Promise<number>;
+  savePackageGrabLevel: (level: number) => Promise<void>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -76,6 +80,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   profilePic: null,
   isMuted: false,
   runawayLevel: 1, // Default to level 1
+  packageGrabLevel: 1, // Default to level 1
   missionRefreshTrigger: 0,
   
   // Actions
@@ -98,6 +103,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setProfilePic: (pic) => set({ profilePic: pic }),
   setMuted: (muted) => set({ isMuted: muted }),
   setRunawayLevel: (level) => set({ runawayLevel: Math.min(20, Math.max(1, level)) }),
+  setPackageGrabLevel: (level) => set({ packageGrabLevel: Math.min(20, Math.max(1, level)) }),
   triggerMissionRefresh: () => set((state) => ({ missionRefreshTrigger: state.missionRefreshTrigger + 1 })),
   
   clearPlayer: () => set({
@@ -155,6 +161,29 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ runawayLevel: validLevel });
     } catch (error) {
       console.error('Error saving runaway level:', error);
+    }
+  },
+  
+  loadPackageGrabLevel: async () => {
+    try {
+      const level = await AsyncStorage.getItem('packageGrabLevel');
+      const parsedLevel = level ? parseInt(level, 10) : 1;
+      const validLevel = Math.min(20, Math.max(1, parsedLevel || 1));
+      set({ packageGrabLevel: validLevel });
+      return validLevel;
+    } catch (error) {
+      console.error('Error loading package grab level:', error);
+      return 1;
+    }
+  },
+  
+  savePackageGrabLevel: async (level) => {
+    try {
+      const validLevel = Math.min(20, Math.max(1, level));
+      await AsyncStorage.setItem('packageGrabLevel', validLevel.toString());
+      set({ packageGrabLevel: validLevel });
+    } catch (error) {
+      console.error('Error saving package grab level:', error);
     }
   },
 }));

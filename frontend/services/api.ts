@@ -417,4 +417,20 @@ export const completeRunaway = async (gameId: string, won: boolean, distanceTrav
   return response.data;
 };
 
+// Package Grab APIs
+export const spawnPackageGrabs = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/packagegrabs/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
+export const startPackageGrab = async (grabId: string, playerId: string) => {
+  const response = await api.post(`/packagegrabs/${grabId}/start?player_id=${playerId}`);
+  return response.data;
+};
+
+export const completePackageGrab = async (gameId: string, won: boolean, boxesCollected: number, distanceTraveled: number) => {
+  const response = await api.post(`/packagegrabs/game/${gameId}/complete?won=${won}&boxes_collected=${boxesCollected}&distance_traveled=${distanceTraveled}`);
+  return response.data;
+};
+
 export default api;

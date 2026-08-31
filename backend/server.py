@@ -3171,7 +3171,7 @@ async def spawn_castles(latitude: float, longitude: float, player_level: int = 1
 
 @api_router.get("/minigames/cooldowns/{player_id}")
 async def get_minigame_cooldowns(player_id: str):
-    """Get all active cooldowns for mini-games (castles, car chases, and runaways)"""
+    """Get all active cooldowns for mini-games (castles, car chases, runaways, and package grabs)"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -3225,6 +3225,23 @@ async def get_minigame_cooldowns(player_id: str):
                 cooldowns[f"runaway_{runaway_id}"] = {
                     "type": "runaway",
                     "marker_id": runaway_id,
+                    "remaining_seconds": remaining,
+                    "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
+                }
+        except (ValueError, TypeError):
+            pass
+    
+    # Get package grab cooldowns
+    packagegrab_cooldowns = player.get("packagegrab_cooldowns", {})
+    for grab_id, last_attempt in packagegrab_cooldowns.items():
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (now - last_dt).total_seconds()
+            if secs_since < cooldown_duration:
+                remaining = int(cooldown_duration - secs_since)
+                cooldowns[f"packagegrab_{grab_id}"] = {
+                    "type": "packagegrab",
+                    "marker_id": grab_id,
                     "remaining_seconds": remaining,
                     "expires_at": (last_dt + timedelta(seconds=cooldown_duration)).isoformat(),
                 }
@@ -3816,6 +3833,187 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
             "won": False,
             "message": f"🚔 BUSTED! The cops caught you on {game['runaway_name']}!",
             "runaway_name": game["runaway_name"],
+            "distance_traveled": distance_traveled,
+            "rewards": None,
+        }
+
+
+# ============== PACKAGE GRAB MINI-GAME ==============
+
+PACKAGE_GRAB_NAMES = [
+    "Downtown Delivery", "Express Route", "Cargo Run", "Harbor Haul",
+    "Industrial Pickup", "Warehouse Dash", "Freight Frenzy", "Dock Delivery",
+    "Market Run", "District Drop", "City Cargo", "Night Shift",
+]
+
+@api_router.get("/packagegrabs/spawn")
+async def spawn_package_grabs(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn package grab markers near the player"""
+    # Create deterministic ID based on grid location
+    grid_lat = round(latitude * 100) / 100
+    grid_lng = round(longitude * 100) / 100
+    area_seed = hash(f"packagegrab_{grid_lat}_{grid_lng}")
+    random.seed(area_seed)
+    
+    grab_id = f"packagegrab_{abs(area_seed) % 100000}"
+    
+    # Check if package grab already exists
+    existing = await db.packagegrabs.find({
+        "latitude": {"$gte": grid_lat - 0.01, "$lte": grid_lat + 0.01},
+        "longitude": {"$gte": grid_lng - 0.01, "$lte": grid_lng + 0.01}
+    }).to_list(length=10)
+    
+    if existing:
+        return [serialize_doc(r) for r in existing]
+    
+    # Generate a new package grab location
+    grab = {
+        "id": grab_id,
+        "name": PACKAGE_GRAB_NAMES[abs(area_seed) % len(PACKAGE_GRAB_NAMES)],
+        "latitude": grid_lat + (random.random() - 0.5) * 0.006,
+        "longitude": grid_lng + (random.random() - 0.5) * 0.006,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.packagegrabs.insert_one(grab)
+    grab.pop("_id", None)
+    return [grab]
+
+
+@api_router.post("/packagegrabs/{grab_id}/start")
+async def start_package_grab(grab_id: str, player_id: str):
+    """Start a package grab game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    grab = await db.packagegrabs.find_one({"id": grab_id})
+    if not grab:
+        raise HTTPException(status_code=404, detail="Package grab location not found")
+    
+    # Check cooldown (15 minutes per player per grab)
+    last_attempt = player.get("packagegrab_cooldowns", {}).get(grab_id)
+    if last_attempt:
+        try:
+            last_dt = datetime.fromisoformat(last_attempt)
+            secs_since = (datetime.utcnow() - last_dt).total_seconds()
+            if secs_since < 900:  # 15 minutes
+                remaining = int(900 - secs_since)
+                mins = remaining // 60
+                secs = remaining % 60
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cooldown active. Wait {mins}:{secs:02d} before trying again."
+                )
+        except ValueError:
+            pass
+    
+    # Create game session
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "grab_id": grab_id,
+        "grab_name": grab["name"],
+        "status": "active",
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.packagegrab_games.insert_one(game)
+    
+    return {
+        "game_id": game_id,
+        "grab_name": grab["name"],
+    }
+
+
+@api_router.post("/packagegrabs/game/{game_id}/complete")
+async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, distance_traveled: int):
+    """Complete a package grab game and award rewards if won"""
+    game = await db.packagegrab_games.find_one({"id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    
+    if game["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already completed")
+    
+    player = await db.players.find_one({"id": game["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    grab_id = game["grab_id"]
+    
+    # Update game status
+    await db.packagegrab_games.update_one(
+        {"id": game_id},
+        {"$set": {
+            "status": "completed",
+            "won": won,
+            "boxes_collected": boxes_collected,
+            "distance_traveled": distance_traveled,
+            "completed_at": datetime.utcnow().isoformat(),
+        }}
+    )
+    
+    # Set cooldown (15 minutes win or lose)
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {f"packagegrab_cooldowns.{grab_id}": datetime.utcnow().isoformat()}}
+    )
+    
+    if won:
+        # Calculate rewards based on boxes collected
+        # Get level from player's stored preference or use default
+        level = player.get("packagegrab_level", 1)
+        
+        # Base reward for finishing
+        base_finish_reward = 20
+        
+        # Box bonus - each box is worth more at higher levels
+        per_box_value = 8 + level * 2
+        box_bonus = boxes_collected * per_box_value
+        
+        # Level multiplier
+        level_multiplier = 1 + (level - 1) * 0.12
+        level_bonus = int((base_finish_reward + box_bonus) * (level_multiplier - 1))
+        
+        cash_reward = base_finish_reward + box_bonus + level_bonus
+        
+        # XP based on boxes collected
+        base_xp = 15 + boxes_collected * 3
+        xp_reward = int(base_xp * level_multiplier)
+        
+        # Reputation
+        rep_reward = max(1, boxes_collected // 5 + level // 4)
+        
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$inc": {"cash": cash_reward, "xp": xp_reward, "reputation": rep_reward}}
+        )
+        
+        updated_player = await db.players.find_one({"id": game["player_id"]})
+        
+        return {
+            "success": True,
+            "won": True,
+            "message": f"📦🚚 DELIVERY COMPLETE! {boxes_collected} boxes delivered on {game['grab_name']}!",
+            "grab_name": game["grab_name"],
+            "boxes_collected": boxes_collected,
+            "distance_traveled": distance_traveled,
+            "rewards": {
+                "cash": cash_reward,
+                "xp": xp_reward,
+                "reputation": rep_reward,
+            },
+            "cash": updated_player.get("cash", 0),
+        }
+    else:
+        return {
+            "success": True,
+            "won": False,
+            "message": f"💥 CRASHED! Lost {boxes_collected} boxes on {game['grab_name']}!",
+            "grab_name": game["grab_name"],
+            "boxes_collected": 0,
             "distance_traveled": distance_traveled,
             "rewards": None,
         }
