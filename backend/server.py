@@ -3394,7 +3394,7 @@ async def start_random_castle_game(player_id: str, castle_id: str = None):
 
 
 @api_router.post("/castles/game/{game_id}/complete")
-async def complete_castle_game(game_id: str, members_eliminated: int, won: bool):
+async def complete_castle_game(game_id: str, members_eliminated: int, won: bool, standalone: bool = False):
     """Complete a castle mini-game and award rewards if won"""
     game = await db.castle_games.find_one({"id": game_id})
     if not game:
@@ -3420,11 +3420,12 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool)
         }}
     )
     
-    # Set cooldown regardless of win/lose
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {f"castle_cooldowns.{castle_id}": datetime.utcnow().isoformat()}}
-    )
+    # Set cooldown regardless of win/lose (only for map-based games, not standalone)
+    if not standalone:
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$set": {f"castle_cooldowns.{castle_id}": datetime.utcnow().isoformat()}}
+        )
     
     if won:
         # Calculate rewards based on difficulty and members eliminated
@@ -3437,6 +3438,12 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool)
         
         xp_reward = game["xp_reward"]
         rep_reward = game["rep_reward"]
+        
+        # Apply 50% reduction for standalone/options panel games
+        if standalone:
+            cash_reward = cash_reward // 2
+            xp_reward = xp_reward // 2
+            rep_reward = max(1, rep_reward // 2)
         
         # Update player
         await db.players.update_one(
@@ -3467,6 +3474,7 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool)
                 "reputation": rep_reward,
             },
             "cash": updated_player.get("cash", 0),
+            "standalone": standalone,
         }
     else:
         return {
@@ -3595,7 +3603,7 @@ async def start_car_chase(chase_id: str, player_id: str):
 
 
 @api_router.post("/car-chases/game/{game_id}/complete")
-async def complete_car_chase(game_id: str, won: bool, distance_traveled: int):
+async def complete_car_chase(game_id: str, won: bool, distance_traveled: int, standalone: bool = False):
     """Complete a car chase and award rewards if won"""
     game = await db.car_chase_games.find_one({"id": game_id})
     if not game:
@@ -3621,11 +3629,12 @@ async def complete_car_chase(game_id: str, won: bool, distance_traveled: int):
         }}
     )
     
-    # Set cooldown
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {f"carchase_cooldowns.{chase_id}": datetime.utcnow().isoformat()}}
-    )
+    # Set cooldown (only for map-based games, not standalone)
+    if not standalone:
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$set": {f"carchase_cooldowns.{chase_id}": datetime.utcnow().isoformat()}}
+        )
     
     if won:
         # Calculate rewards based on difficulty and distance
@@ -3639,6 +3648,12 @@ async def complete_car_chase(game_id: str, won: bool, distance_traveled: int):
         
         xp_reward = int(game["xp_reward"] * distance_bonus)
         rep_reward = int(game["rep_reward"] * distance_bonus)
+        
+        # Apply 50% reduction for standalone/options panel games
+        if standalone:
+            cash_reward = cash_reward // 2
+            xp_reward = xp_reward // 2
+            rep_reward = max(1, rep_reward // 2)
         
         await db.players.update_one(
             {"id": game["player_id"]},
@@ -3659,6 +3674,7 @@ async def complete_car_chase(game_id: str, won: bool, distance_traveled: int):
                 "reputation": rep_reward,
             },
             "cash": updated_player.get("cash", 0),
+            "standalone": standalone,
         }
     else:
         return {
@@ -3778,7 +3794,7 @@ async def start_runaway(runaway_id: str, player_id: str):
 
 
 @api_router.post("/runaways/game/{game_id}/complete")
-async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
+async def complete_runaway(game_id: str, won: bool, distance_traveled: int, standalone: bool = False):
     """Complete a runaway game and award rewards if won"""
     game = await db.runaway_games.find_one({"id": game_id})
     if not game:
@@ -3804,11 +3820,12 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
         }}
     )
     
-    # Set cooldown (15 minutes win or lose)
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {f"runaway_cooldowns.{runaway_id}": datetime.utcnow().isoformat()}}
-    )
+    # Set cooldown (15 minutes win or lose) - only for map-based games, not standalone
+    if not standalone:
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$set": {f"runaway_cooldowns.{runaway_id}": datetime.utcnow().isoformat()}}
+        )
     
     if won:
         # Calculate rewards based on difficulty (1-20)
@@ -3824,6 +3841,12 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
         cash_reward = int(base_cash * level_multiplier + difficulty * 15)
         xp_reward = int(base_xp * level_multiplier + difficulty * 10)
         rep_reward = int(base_rep + difficulty / 2)
+        
+        # Apply 50% reduction for standalone/options panel games
+        if standalone:
+            cash_reward = cash_reward // 2
+            xp_reward = xp_reward // 2
+            rep_reward = max(1, rep_reward // 2)
         
         await db.players.update_one(
             {"id": game["player_id"]},
@@ -3844,6 +3867,7 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int):
                 "reputation": rep_reward,
             },
             "cash": updated_player.get("cash", 0),
+            "standalone": standalone,
         }
     else:
         return {
@@ -3946,7 +3970,7 @@ async def start_package_grab(grab_id: str, player_id: str):
 
 
 @api_router.post("/packagegrabs/game/{game_id}/complete")
-async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, distance_traveled: int):
+async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, distance_traveled: int, standalone: bool = False):
     """Complete a package grab game and award rewards if won"""
     game = await db.packagegrab_games.find_one({"id": game_id})
     if not game:
@@ -3973,11 +3997,12 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
         }}
     )
     
-    # Set cooldown (15 minutes win or lose)
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {f"packagegrab_cooldowns.{grab_id}": datetime.utcnow().isoformat()}}
-    )
+    # Set cooldown (15 minutes win or lose) - only for map-based games, not standalone
+    if not standalone:
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$set": {f"packagegrab_cooldowns.{grab_id}": datetime.utcnow().isoformat()}}
+        )
     
     if won:
         # Calculate rewards based on boxes collected
@@ -4004,6 +4029,12 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
         # Reputation
         rep_reward = max(1, boxes_collected // 5 + level // 4)
         
+        # Apply 50% reduction for standalone/options panel games
+        if standalone:
+            cash_reward = cash_reward // 2
+            xp_reward = xp_reward // 2
+            rep_reward = max(1, rep_reward // 2)
+        
         await db.players.update_one(
             {"id": game["player_id"]},
             {"$inc": {"cash": cash_reward, "xp": xp_reward, "reputation": rep_reward}}
@@ -4024,6 +4055,7 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
                 "reputation": rep_reward,
             },
             "cash": updated_player.get("cash", 0),
+            "standalone": standalone,
         }
     else:
         return {
@@ -4127,7 +4159,7 @@ async def start_shootout(shootout_id: str, player_id: str):
 
 
 @api_router.post("/shootouts/game/{game_id}/complete")
-async def complete_shootout(game_id: str, hits: int):
+async def complete_shootout(game_id: str, hits: int, standalone: bool = False):
     """Complete a shootout game and award rewards based on hits"""
     game = await db.shootout_games.find_one({"id": game_id})
     if not game:
@@ -4152,11 +4184,12 @@ async def complete_shootout(game_id: str, hits: int):
         }}
     )
     
-    # Set cooldown (15 minutes win or lose)
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {f"shootout_cooldowns.{shootout_id}": datetime.utcnow().isoformat()}}
-    )
+    # Set cooldown (15 minutes win or lose) - only for map-based games, not standalone
+    if not standalone:
+        await db.players.update_one(
+            {"id": game["player_id"]},
+            {"$set": {f"shootout_cooldowns.{shootout_id}": datetime.utcnow().isoformat()}}
+        )
     
     if hits > 0:
         # Calculate rewards based on hits and level
@@ -4169,6 +4202,12 @@ async def complete_shootout(game_id: str, hits: int):
         cash_reward = hits * hit_reward
         xp_reward = hits * xp_per_hit
         rep_reward = max(1, hits // 3 + level // 5)
+        
+        # Apply 50% reduction for standalone/options panel games
+        if standalone:
+            cash_reward = cash_reward // 2
+            xp_reward = xp_reward // 2
+            rep_reward = max(1, rep_reward // 2)
         
         await db.players.update_one(
             {"id": game["player_id"]},
@@ -4188,6 +4227,7 @@ async def complete_shootout(game_id: str, hits: int):
                 "reputation": rep_reward,
             },
             "cash": updated_player.get("cash", 0),
+            "standalone": standalone,
         }
     else:
         return {

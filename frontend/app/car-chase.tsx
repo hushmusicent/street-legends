@@ -396,19 +396,17 @@ export default function CarChaseGame() {
     
     if (!gameId) return;
     
-    if (isStandalone) {
-      // Standalone mode - rewards are visual only
-      return;
-    }
-    
     try {
-      const result = await completeCarChase(gameId, gameState.won, Math.floor(gameState.distance));
+      const result = await completeCarChase(gameId, gameState.won, Math.floor(gameState.distance), isStandalone);
       
       if (result.won) {
+        const rewardMessage = isStandalone 
+          ? `+$${result.rewards?.cash || 0} | +${result.rewards?.xp || 0} XP (Practice Mode: 50% rewards)`
+          : `+$${result.rewards?.cash || rewards.totalCash} | +${result.rewards?.xp || rewards.totalXP} XP`;
         showGameToast({
           type: 'success',
           title: 'REWARDS COLLECTED!',
-          message: `+$${result.rewards?.cash || rewards.totalCash} | +${result.rewards?.xp || rewards.totalXP} XP`,
+          message: rewardMessage,
           duration: 2000,
         });
         
@@ -416,9 +414,12 @@ export default function CarChaseGame() {
         if (refreshPlayer) refreshPlayer();
       }
       
-      // Refresh cooldowns so the map shows the timer
-      if (playerId) {
+      // Refresh cooldowns so the map shows the timer (only for non-standalone)
+      if (playerId && !isStandalone) {
         invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
+      } else if (playerId) {
+        // Still invalidate player for standalone to update their totals
         invalidatePlayer(playerId);
       }
     } catch (error) {

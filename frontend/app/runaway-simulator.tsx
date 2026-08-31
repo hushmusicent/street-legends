@@ -176,28 +176,34 @@ export default function RunawaySimulator() {
       ]).start();
     }
     
-    if (!gameId || isStandalone) return;
+    if (!gameId) return;
     
     try {
       const result = await completeRunaway(
         gameId,
         gameState.won,
-        Math.floor(gameState.distance)
+        Math.floor(gameState.distance),
+        isStandalone
       );
       
       if (result.won) {
+        const rewardMessage = isStandalone
+          ? `+$${result.rewards?.cash || 0} | +${result.rewards?.xp || 0} XP (Practice Mode: 50% rewards)`
+          : `+$${result.rewards?.cash || rewards.cash} | +${result.rewards?.xp || rewards.xp} XP`;
         showGameToast({
           type: 'success',
           title: 'ESCAPED!',
-          message: `+$${result.rewards?.cash || rewards.cash} | +${result.rewards?.xp || rewards.xp} XP`,
+          message: rewardMessage,
           duration: 2000,
         });
         
         if (refreshPlayer) refreshPlayer();
       }
       
-      if (playerId) {
+      if (playerId && !isStandalone) {
         invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
+      } else if (playerId) {
         invalidatePlayer(playerId);
       }
     } catch (error) {

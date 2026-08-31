@@ -559,24 +559,29 @@ export default function ShootoutSimulator() {
   }, [shotsRemaining, timeRemaining, gameStarted, isGameOver, endGame]);
 
   const submitResults = async (finalHits: number) => {
-    if (!gameId || isStandalone) return;
+    if (!gameId) return;
     
     try {
-      const result = await completeShootout(gameId, finalHits);
+      const result = await completeShootout(gameId, finalHits, isStandalone);
       
       if (result.hits > 0) {
+        const rewardMessage = isStandalone
+          ? `${result.hits} hits! +$${result.rewards?.cash || 0} (Practice Mode: 50% rewards)`
+          : `${result.hits} hits! +$${result.rewards?.cash || 0}`;
         showGameToast({
           type: 'success',
           title: 'SHOOTOUT COMPLETE!',
-          message: `${result.hits} hits! +$${result.rewards?.cash || 0}`,
+          message: rewardMessage,
           duration: 2000,
         });
         
         if (refreshPlayer) refreshPlayer();
       }
       
-      if (playerId) {
+      if (playerId && !isStandalone) {
         invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
+      } else if (playerId) {
         invalidatePlayer(playerId);
       }
     } catch (error) {

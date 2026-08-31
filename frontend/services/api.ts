@@ -340,8 +340,8 @@ export const startRandomCastleGame = async (playerId: string, castleId?: string)
   return response.data;
 };
 
-export const completeCastleGame = async (gameId: string, membersEliminated: number, won: boolean) => {
-  const response = await api.post(`/castles/game/${gameId}/complete?members_eliminated=${membersEliminated}&won=${won}`);
+export const completeCastleGame = async (gameId: string, membersEliminated: number, won: boolean, standalone: boolean = false) => {
+  const response = await api.post(`/castles/game/${gameId}/complete?members_eliminated=${membersEliminated}&won=${won}&standalone=${standalone}`);
   return response.data;
 };
 
@@ -390,8 +390,8 @@ export const startCarChase = async (chaseId: string, playerId: string) => {
   return response.data;
 };
 
-export const completeCarChase = async (gameId: string, won: boolean, distanceTraveled: number) => {
-  const response = await api.post(`/car-chases/game/${gameId}/complete?won=${won}&distance_traveled=${distanceTraveled}`);
+export const completeCarChase = async (gameId: string, won: boolean, distanceTraveled: number, standalone: boolean = false) => {
+  const response = await api.post(`/car-chases/game/${gameId}/complete?won=${won}&distance_traveled=${distanceTraveled}&standalone=${standalone}`);
   return response.data;
 };
 
@@ -412,8 +412,8 @@ export const startRunaway = async (runawayId: string, playerId: string) => {
   return response.data;
 };
 
-export const completeRunaway = async (gameId: string, won: boolean, distanceTraveled: number) => {
-  const response = await api.post(`/runaways/game/${gameId}/complete?won=${won}&distance_traveled=${distanceTraveled}`);
+export const completeRunaway = async (gameId: string, won: boolean, distanceTraveled: number, standalone: boolean = false) => {
+  const response = await api.post(`/runaways/game/${gameId}/complete?won=${won}&distance_traveled=${distanceTraveled}&standalone=${standalone}`);
   return response.data;
 };
 
@@ -428,8 +428,8 @@ export const startPackageGrab = async (grabId: string, playerId: string) => {
   return response.data;
 };
 
-export const completePackageGrab = async (gameId: string, won: boolean, boxesCollected: number, distanceTraveled: number) => {
-  const response = await api.post(`/packagegrabs/game/${gameId}/complete?won=${won}&boxes_collected=${boxesCollected}&distance_traveled=${distanceTraveled}`);
+export const completePackageGrab = async (gameId: string, won: boolean, boxesCollected: number, distanceTraveled: number, standalone: boolean = false) => {
+  const response = await api.post(`/packagegrabs/game/${gameId}/complete?won=${won}&boxes_collected=${boxesCollected}&distance_traveled=${distanceTraveled}&standalone=${standalone}`);
   return response.data;
 };
 
@@ -444,8 +444,8 @@ export const startShootout = async (shootoutId: string, playerId: string) => {
   return response.data;
 };
 
-export const completeShootout = async (gameId: string, hits: number) => {
-  const response = await api.post(`/shootouts/game/${gameId}/complete?hits=${hits}`);
+export const completeShootout = async (gameId: string, hits: number, standalone: boolean = false) => {
+  const response = await api.post(`/shootouts/game/${gameId}/complete?hits=${hits}&standalone=${standalone}`);
   return response.data;
 };
 

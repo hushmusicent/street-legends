@@ -134,9 +134,10 @@ const LEVELS = [
 
 export default function CastleLevelsScreen() {
   // Get route params - if randomLevel is true, skip level selection and pick a random level
-  const params = useLocalSearchParams<{ randomLevel?: string; castleId?: string }>();
+  const params = useLocalSearchParams<{ randomLevel?: string; castleId?: string; standalone?: string }>();
   const isRandomMode = params.randomLevel === 'true';
   const mapCastleId = params.castleId;
+  const isStandalone = params.standalone === 'true';
   
   // Get player ID from store
   const { playerId, refreshPlayer } = useGameStore();
@@ -144,7 +145,7 @@ export default function CastleLevelsScreen() {
   
   const [currentLevel, setCurrentLevel] = useState(1);
   const [unlockedLevel, setUnlockedLevel] = useState(1);
-  const [showLevelSelect, setShowLevelSelect] = useState(!isRandomMode); // Skip level select in random mode
+  const [showLevelSelect, setShowLevelSelect] = useState(!isRandomMode && !isStandalone); // Skip level select in random/standalone mode
   const [showResults, setShowResults] = useState(false);
   const [won, setWon] = useState(false);
   const isFromMap = isRandomMode; // Track if launched from map (read-only)
@@ -473,23 +474,28 @@ export default function CastleLevelsScreen() {
     setIsSubmittingResult(true);
     
     try {
-      const result = await completeCastleGame(gameSessionId, eliminatedCount, didWin);
+      const result = await completeCastleGame(gameSessionId, eliminatedCount, didWin, isStandalone);
       
       if (didWin && result.rewards) {
         setGameRewards(result.rewards);
+        const rewardMessage = isStandalone
+          ? `+$${result.rewards.cash} | +${result.rewards.xp} XP (Practice Mode: 50% rewards)`
+          : `+$${result.rewards.cash} | +${result.rewards.xp} XP | +${result.rewards.reputation} Rep`;
         showGameToast({
           type: 'success',
           title: '🏰 VICTORY!',
-          message: `+$${result.rewards.cash} | +${result.rewards.xp} XP | +${result.rewards.reputation} Rep`,
+          message: rewardMessage,
           duration: 3000,
         });
         // Refresh player stats
         if (refreshPlayer) refreshPlayer();
       }
       
-      // Refresh cooldowns so the map shows the timer
-      if (playerId) {
+      // Refresh cooldowns so the map shows the timer (only for non-standalone)
+      if (playerId && !isStandalone) {
         invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
+      } else if (playerId) {
         invalidatePlayer(playerId);
       }
       

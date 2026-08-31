@@ -272,14 +272,17 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                 onPress={() => {
                   onClose();
                   setShowMiniGames(false);
-                  setTimeout(() => router.push('/castle-levels'), 300);
+                  setTimeout(() => router.push({
+                    pathname: '/castle-levels',
+                    params: { standalone: 'true' }
+                  }), 300);
                 }} 
                 activeOpacity={0.7}
               >
                 <Text style={{ fontSize: 22 }}>🏰</Text>
                 <View style={styles.miniGameInfo}>
                   <Text style={styles.miniGameTitle}>Castle Assault</Text>
-                  <Text style={styles.miniGameDesc}>Cannon physics puzzle game</Text>
+                  <Text style={styles.miniGameDesc}>Cannon physics puzzle game • 50% rewards</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#CD853F" />
               </TouchableOpacity>
@@ -305,7 +308,7 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                 <Text style={{ fontSize: 22 }}>🚗</Text>
                 <View style={styles.miniGameInfo}>
                   <Text style={styles.miniGameTitle}>Car Chase</Text>
-                  <Text style={styles.miniGameDesc}>Dodge traffic & escape cops</Text>
+                  <Text style={styles.miniGameDesc}>Dodge traffic & escape cops • 50% rewards</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#e74c3c" />
               </TouchableOpacity>
@@ -320,7 +323,7 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                   <Text style={{ fontSize: 22 }}>🚔</Text>
                   <View style={styles.miniGameInfo}>
                     <Text style={styles.miniGameTitle}>Runaway Simulator</Text>
-                    <Text style={styles.miniGameDesc}>Side-scroller • Level {runawayLevel}</Text>
+                    <Text style={styles.miniGameDesc}>Side-scroller • Level {runawayLevel} • 50% rewards</Text>
                   </View>
                   <Ionicons 
                     name={showRunawayLevels ? "chevron-up" : "chevron-down"} 
@@ -424,7 +427,7 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                   <Text style={{ fontSize: 22 }}>📦</Text>
                   <View style={styles.miniGameInfo}>
                     <Text style={styles.miniGameTitle}>Package Grab</Text>
-                    <Text style={styles.miniGameDesc}>Delivery run • Level {packageGrabLevel}</Text>
+                    <Text style={styles.miniGameDesc}>Delivery run • Level {packageGrabLevel} • 50% rewards</Text>
                   </View>
                   <Ionicons 
                     name={showPackageGrabLevels ? "chevron-up" : "chevron-down"} 
@@ -529,7 +532,7 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                   <Text style={{ fontSize: 22 }}>🔫</Text>
                   <View style={styles.miniGameInfo}>
                     <Text style={styles.miniGameTitle}>Shootout Simulator</Text>
-                    <Text style={styles.miniGameDesc}>Target shooting • Level {shootoutLevel}</Text>
+                    <Text style={styles.miniGameDesc}>Target shooting • Level {shootoutLevel} • 50% rewards</Text>
                   </View>
                   <Ionicons 
                     name={showShootoutLevels ? "chevron-up" : "chevron-down"} 

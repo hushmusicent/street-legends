@@ -426,29 +426,35 @@ export default function PackageGrabGame() {
       ]).start();
     }
     
-    if (!gameId || isStandalone) return;
+    if (!gameId) return;
     
     try {
       const result = await completePackageGrab(
         gameId,
         gameState.won,
         gameState.boxesCollected,
-        Math.floor(gameState.distance)
+        Math.floor(gameState.distance),
+        isStandalone
       );
       
       if (result.won) {
+        const rewardMessage = isStandalone
+          ? `+$${result.rewards?.cash || 0} | +${result.rewards?.xp || 0} XP (Practice Mode: 50% rewards)`
+          : `+$${result.rewards?.cash || rewards.totalCash} | +${result.rewards?.xp || rewards.totalXP} XP`;
         showGameToast({
           type: 'success',
           title: 'DELIVERY COMPLETE!',
-          message: `+$${result.rewards?.cash || rewards.totalCash} | +${result.rewards?.xp || rewards.totalXP} XP`,
+          message: rewardMessage,
           duration: 2000,
         });
         
         if (refreshPlayer) refreshPlayer();
       }
       
-      if (playerId) {
+      if (playerId && !isStandalone) {
         invalidateCooldowns(playerId);
+        invalidatePlayer(playerId);
+      } else if (playerId) {
         invalidatePlayer(playerId);
       }
     } catch (error) {
