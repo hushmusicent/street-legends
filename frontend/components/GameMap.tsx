@@ -152,13 +152,21 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
     var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔', packageGrab: '📦', shootout: '🔫' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
-    // Track mini-game markers that have been shown (for staggered appearance)
-    var shownMiniGameMarkers = {};
+    // Mini-game marker settings - only show ONE random mini-game at a time
     var miniGameTypes = ['castle', 'carChase', 'runaway', 'packageGrab', 'shootout'];
-    var pendingMiniGameTimers = {};
+    var currentSelectedMiniGameId = null;  // ID of the currently visible mini-game marker
+    var lastMiniGameSelection = 0;  // Timestamp of last selection
+    var miniGameSelectionCooldown = 30000;  // 30 seconds before allowing new selection
     
     function isMiniGameMarker(type) {
       return miniGameTypes.indexOf(type) !== -1;
+    }
+    
+    // Select one random mini-game marker from the available ones
+    function selectRandomMiniGame(miniGameMarkers) {
+      if (miniGameMarkers.length === 0) return null;
+      var randomIndex = Math.floor(Math.random() * miniGameMarkers.length);
+      return miniGameMarkers[randomIndex];
     }
     
     function getEnemyImage(name) {
@@ -535,52 +543,66 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
           createMarker(m);
         });
         
-        // Process mini-game markers with staggered delays
-        var staggerIndex = 0;
+        // Process mini-game markers - only show ONE random mini-game at a time
+        var now = Date.now();
+        var needsNewSelection = false;
+        
+        // Check if we need to select a new mini-game
+        // 1. No current selection
+        // 2. Current selection is no longer in the available markers
+        // 3. Cooldown has passed (allows new random selection when moving to new area)
+        if (!currentSelectedMiniGameId) {
+          needsNewSelection = true;
+        } else {
+          // Check if current selection is still available
+          var currentStillAvailable = miniGameMarkers.some(function(m) {
+            return m.id === currentSelectedMiniGameId;
+          });
+          if (!currentStillAvailable) {
+            needsNewSelection = true;
+          }
+        }
+        
+        // Select a new random mini-game if needed
+        if (needsNewSelection && miniGameMarkers.length > 0) {
+          var selected = selectRandomMiniGame(miniGameMarkers);
+          if (selected) {
+            currentSelectedMiniGameId = selected.id;
+            lastMiniGameSelection = now;
+          }
+        }
+        
+        // Only process the selected mini-game marker
         miniGameMarkers.forEach(function(m) {
-          newIds[m.id] = true;
-          
-          // If marker already exists, just update position
-          if (entityMarkers[m.id]) {
-            entityMarkers[m.id].setLatLng([m.lat, m.lng]);
-            return;
+          // Only show the selected mini-game, hide all others
+          if (m.id === currentSelectedMiniGameId) {
+            newIds[m.id] = true;
+            
+            // If marker already exists, just update position
+            if (entityMarkers[m.id]) {
+              entityMarkers[m.id].setLatLng([m.lat, m.lng]);
+            } else {
+              // Create the selected marker with a small delay for effect
+              setTimeout(function() {
+                createMarker(m);
+              }, 300 + Math.random() * 500);
+            }
           }
-          
-          // If already shown or pending, skip
-          if (shownMiniGameMarkers[m.id] || pendingMiniGameTimers[m.id]) {
-            return;
-          }
-          
-          // Schedule this marker to appear with a random staggered delay
-          // Base delay: 500-1500ms + additional stagger of 300-800ms per marker
-          var baseDelay = 500 + Math.random() * 1000;
-          var staggerDelay = staggerIndex * (300 + Math.random() * 500);
-          var totalDelay = baseDelay + staggerDelay;
-          
-          pendingMiniGameTimers[m.id] = setTimeout((function(markerData) {
-            return function() {
-              delete pendingMiniGameTimers[markerData.id];
-              shownMiniGameMarkers[markerData.id] = true;
-              createMarker(markerData);
-            };
-          })(m), totalDelay);
-          
-          staggerIndex++;
+          // Other mini-game markers are not added to newIds, so they'll be removed
         });
 
-        // Remove markers no longer present
+        // Remove markers no longer present (including non-selected mini-games)
         Object.keys(entityMarkers).forEach(function(id) {
           if (!newIds[id]) {
             map.removeLayer(entityMarkers[id]);
             delete entityMarkers[id];
-            delete shownMiniGameMarkers[id];
-            // Cancel any pending timers for removed markers
-            if (pendingMiniGameTimers[id]) {
-              clearTimeout(pendingMiniGameTimers[id]);
-              delete pendingMiniGameTimers[id];
-            }
           }
         });
+        
+        // Clear the selection if the marker was removed
+        if (currentSelectedMiniGameId && !newIds[currentSelectedMiniGameId]) {
+          currentSelectedMiniGameId = null;
+        }
       } catch(e) {
         console.error('updateMarkers error:', e);
       }
