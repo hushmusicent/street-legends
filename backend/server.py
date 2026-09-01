@@ -2553,6 +2553,97 @@ async def list_guilds(limit: int = 20):
     guilds = await db.guilds.find().sort("level", -1).limit(limit).to_list(limit)
     return [serialize_doc(g) for g in guilds]
 
+
+# ============== GUILD CHAT ENDPOINTS ==============
+
+@api_router.get("/guilds/{guild_id}/chat")
+async def get_guild_chat(guild_id: str, player_id: str, limit: int = 50):
+    """Get guild chat messages - only for guild members"""
+    # Verify player is in the guild
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    # Get recent messages
+    messages = await db.guild_chat.find({"guild_id": guild_id}).sort("timestamp", -1).limit(limit).to_list(limit)
+    
+    # Return in chronological order (oldest first)
+    messages.reverse()
+    
+    return [serialize_doc(m) for m in messages]
+
+
+@api_router.post("/guilds/{guild_id}/chat")
+async def send_guild_message(guild_id: str, player_id: str, message: str):
+    """Send a message to guild chat - only for guild members"""
+    # Verify player is in the guild
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    # Validate message
+    if not message or len(message.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    if len(message) > 500:
+        raise HTTPException(status_code=400, detail="Message too long (max 500 characters)")
+    
+    # Create message
+    chat_message = {
+        "id": str(uuid.uuid4()),
+        "guild_id": guild_id,
+        "player_id": player_id,
+        "player_name": player.get("name", "Unknown"),
+        "player_level": player.get("level", 1),
+        "message": message.strip(),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    
+    await db.guild_chat.insert_one(chat_message)
+    
+    # Clean up old messages (keep only last 200 per guild)
+    message_count = await db.guild_chat.count_documents({"guild_id": guild_id})
+    if message_count > 200:
+        oldest_messages = await db.guild_chat.find({"guild_id": guild_id}).sort("timestamp", 1).limit(message_count - 200).to_list(message_count - 200)
+        if oldest_messages:
+            oldest_ids = [m["id"] for m in oldest_messages]
+            await db.guild_chat.delete_many({"id": {"$in": oldest_ids}})
+    
+    return serialize_doc(chat_message)
+
+
+@api_router.delete("/guilds/{guild_id}/chat/{message_id}")
+async def delete_guild_message(guild_id: str, message_id: str, player_id: str):
+    """Delete a guild chat message - only by message sender or guild leader"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    message = await db.guild_chat.find_one({"id": message_id, "guild_id": guild_id})
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Check if player is message sender or guild leader
+    guild = await db.guilds.find_one({"id": guild_id})
+    is_leader = guild and guild.get("leader_id") == player_id
+    is_sender = message.get("player_id") == player_id
+    
+    if not is_leader and not is_sender:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+    
+    await db.guild_chat.delete_one({"id": message_id})
+    return {"message": "Message deleted"}
+
+
 # ============== SHOP ENDPOINTS ==============
 
 @api_router.get("/shops/spawn")

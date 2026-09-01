@@ -127,6 +127,32 @@ export const listGuilds = async (limit: number = 20): Promise<Guild[]> => {
   return response.data;
 };
 
+// Guild Chat APIs
+export interface GuildChatMessage {
+  id: string;
+  guild_id: string;
+  player_id: string;
+  player_name: string;
+  player_level: number;
+  message: string;
+  timestamp: string;
+}
+
+export const getGuildChat = async (guildId: string, playerId: string, limit: number = 50): Promise<GuildChatMessage[]> => {
+  const response = await api.get(`/guilds/${guildId}/chat?player_id=${playerId}&limit=${limit}`);
+  return response.data;
+};
+
+export const sendGuildMessage = async (guildId: string, playerId: string, message: string): Promise<GuildChatMessage> => {
+  const response = await api.post(`/guilds/${guildId}/chat?player_id=${playerId}&message=${encodeURIComponent(message)}`);
+  return response.data;
+};
+
+export const deleteGuildMessage = async (guildId: string, messageId: string, playerId: string): Promise<{ message: string }> => {
+  const response = await api.delete(`/guilds/${guildId}/chat/${messageId}?player_id=${playerId}`);
+  return response.data;
+};
+
 // Skills APIs
 export const getAllSkills = async (): Promise<Record<string, Skill>> => {
   const response = await api.get('/skills');

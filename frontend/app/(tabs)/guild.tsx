@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +23,9 @@ import {
   leaveGuild,
   listGuilds,
   getPlayer,
+  getGuildChat,
+  sendGuildMessage,
+  GuildChatMessage,
 } from '../../services/api';
 import { Guild } from '../../types/game';
 
@@ -33,10 +38,64 @@ export default function GuildScreen() {
   const [newGuildTag, setNewGuildTag] = useState('');
   const [newGuildDesc, setNewGuildDesc] = useState('');
   const [creating, setCreating] = useState(false);
+  
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<GuildChatMessage[]>([]);
+  const [chatMessage, setChatMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [loadingChat, setLoadingChat] = useState(false);
+  const chatScrollRef = useRef<ScrollView>(null);
+  const chatPollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadData();
+    return () => {
+      // Clean up chat polling on unmount
+      if (chatPollRef.current) {
+        clearInterval(chatPollRef.current);
+      }
+    };
   }, []);
+
+  // Start chat polling when player has a guild
+  useEffect(() => {
+    if (playerGuild && playerId) {
+      loadChatMessages();
+      // Poll for new messages every 5 seconds
+      chatPollRef.current = setInterval(() => {
+        loadChatMessages(true);
+      }, 5000);
+    } else {
+      setChatMessages([]);
+      if (chatPollRef.current) {
+        clearInterval(chatPollRef.current);
+      }
+    }
+    
+    return () => {
+      if (chatPollRef.current) {
+        clearInterval(chatPollRef.current);
+      }
+    };
+  }, [playerGuild?.id, playerId]);
+
+  const loadChatMessages = async (silent: boolean = false) => {
+    if (!playerGuild?.id || !playerId) return;
+    
+    if (!silent) setLoadingChat(true);
+    try {
+      const messages = await getGuildChat(playerGuild.id, playerId);
+      setChatMessages(messages);
+      // Scroll to bottom on new messages
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Failed to load chat:', error);
+    } finally {
+      setLoadingChat(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -58,6 +117,9 @@ export default function GuildScreen() {
     if (playerId) {
       const playerData = await getPlayer(playerId);
       setPlayer(playerData);
+    }
+    if (playerGuild) {
+      await loadChatMessages();
     }
     setRefreshing(false);
   };
@@ -109,6 +171,7 @@ export default function GuildScreen() {
             try {
               await leaveGuild(player.guild_id!, playerId);
               setPlayerGuild(null);
+              setChatMessages([]);
               await handleRefresh();
               Alert.alert('Success', 'Left guild successfully!');
             } catch (error: any) {
@@ -120,6 +183,40 @@ export default function GuildScreen() {
     );
   };
 
+  const handleSendMessage = async () => {
+    if (!chatMessage.trim() || !playerGuild?.id || !playerId || sendingMessage) return;
+    
+    const messageText = chatMessage.trim();
+    setChatMessage('');
+    setSendingMessage(true);
+    
+    try {
+      const newMessage = await sendGuildMessage(playerGuild.id, playerId, messageText);
+      setChatMessages(prev => [...prev, newMessage]);
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to send message');
+      setChatMessage(messageText); // Restore message on error
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const formatMessageTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return date.toLocaleDateString();
+  };
+
   // Calculate guild's total reputation from all members
   const guildTotalRep = playerGuild?.member_details?.reduce(
     (sum, member) => sum + (member.reputation || 0), 0
@@ -129,178 +226,272 @@ export default function GuildScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#e74c3c" />
-        }
+      <KeyboardAvoidingView 
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.title}>GUILD</Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#e74c3c" />
+          }
+        >
+          <Text style={styles.title}>GUILD</Text>
 
-        {/* Player's Guild */}
-        {playerGuild ? (
-          <View style={styles.myGuildSection}>
-            <View style={styles.guildHeader}>
-              <View style={styles.guildIcon}>
-                <Ionicons name="shield" size={40} color="#e74c3c" />
-              </View>
-              <View style={styles.guildInfo}>
-                <Text style={styles.guildName}>{playerGuild.name}</Text>
-                <Text style={styles.guildTag}>[{playerGuild.tag}]</Text>
-              </View>
-              <View style={styles.guildLevel}>
-                <Text style={styles.guildLevelLabel}>LV</Text>
-                <Text style={styles.guildLevelValue}>{playerGuild.level}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.guildDescription}>{playerGuild.description}</Text>
-
-            {/* Prominent Reputation Display */}
-            <View style={styles.reputationCard}>
-              <View style={styles.reputationHeader}>
-                <Ionicons name="star" size={28} color="#f39c12" />
-                <Text style={styles.reputationTitle}>GUILD REPUTATION</Text>
-              </View>
-              <Text style={styles.reputationScore}>{guildTotalRep.toLocaleString()}</Text>
-              <Text style={styles.reputationSubtext}>Combined rep from all members</Text>
-            </View>
-
-            <View style={styles.guildStats}>
-              <View style={styles.guildStat}>
-                <Ionicons name="people" size={20} color="#3498db" />
-                <Text style={styles.guildStatValue}>{playerGuild.members?.length || 0}</Text>
-                <Text style={styles.guildStatLabel}>Members</Text>
-              </View>
-              <View style={styles.guildStat}>
-                <Ionicons name="trophy" size={20} color="#f39c12" />
-                <Text style={styles.guildStatValue}>{playerGuild.total_wins}</Text>
-                <Text style={styles.guildStatLabel}>Wins</Text>
-              </View>
-              <View style={styles.guildStat}>
-                <Ionicons name="flash" size={20} color="#9b59b6" />
-                <Text style={styles.guildStatValue}>{playerGuild.level}</Text>
-                <Text style={styles.guildStatLabel}>Level</Text>
-              </View>
-            </View>
-
-            {/* Members List */}
-            <Text style={styles.sectionTitle}>MEMBERS</Text>
-            {playerGuild.member_details?.map((member) => (
-              <View key={member.id} style={styles.memberRow}>
-                <View style={styles.memberAvatar}>
-                  <Ionicons name="person" size={16} color="#fff" />
+          {/* Player's Guild */}
+          {playerGuild ? (
+            <>
+              <View style={styles.myGuildSection}>
+                <View style={styles.guildHeader}>
+                  <View style={styles.guildIcon}>
+                    <Ionicons name="shield" size={40} color="#e74c3c" />
+                  </View>
+                  <View style={styles.guildInfo}>
+                    <Text style={styles.guildName}>{playerGuild.name}</Text>
+                    <Text style={styles.guildTag}>[{playerGuild.tag}]</Text>
+                  </View>
+                  <View style={styles.guildLevel}>
+                    <Text style={styles.guildLevelLabel}>LV</Text>
+                    <Text style={styles.guildLevelValue}>{playerGuild.level}</Text>
+                  </View>
                 </View>
-                <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>
-                    {member.name}
-                    {member.id === playerGuild.leader_id && (
-                      <Text style={styles.leaderBadge}> LEADER</Text>
-                    )}
-                  </Text>
-                  <Text style={styles.memberClass}>
-                    Lv.{member.level} {member.character_class.replace('_', ' ')}
-                  </Text>
-                </View>
-                <View style={styles.memberRep}>
-                  <Ionicons name="star" size={12} color="#f39c12" />
-                  <Text style={styles.memberRepText}>{member.reputation || 0}</Text>
-                </View>
-              </View>
-            ))}
 
-            {player?.id !== playerGuild.leader_id && (
-              <TouchableOpacity style={styles.leaveButton} onPress={handleLeaveGuild}>
-                <Ionicons name="exit" size={20} color="#e74c3c" />
-                <Text style={styles.leaveButtonText}>Leave Guild</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          <View style={styles.noGuildSection}>
-            <Ionicons name="people-outline" size={64} color="#333" />
-            <Text style={styles.noGuildText}>You are not in a guild</Text>
-            <Text style={styles.noGuildSubtext}>Join or create a guild to team up!</Text>
-            <GameButton
-              title="CREATE GUILD"
-              onPress={() => setShowCreateModal(true)}
-              icon="add"
-              variant="primary"
-              style={styles.createButton}
-            />
-          </View>
-        )}
+                <Text style={styles.guildDescription}>{playerGuild.description}</Text>
 
-        {/* Other Guilds Section - Separate Scrollable Window */}
-        <View style={styles.otherGuildsSection}>
-          <View style={styles.otherGuildsHeader}>
-            <Ionicons name="globe-outline" size={20} color="#888" />
-            <Text style={styles.otherGuildsTitle}>
-              {playerGuild ? 'OTHER GUILDS' : 'AVAILABLE GUILDS'}
-            </Text>
-            <Text style={styles.otherGuildsCount}>{otherGuilds.length}</Text>
-          </View>
-          
-          <View style={styles.otherGuildsContainer}>
-            <ScrollView 
-              style={styles.otherGuildsScroll}
-              nestedScrollEnabled={true}
-              showsVerticalScrollIndicator={true}
-            >
-              {otherGuilds.length === 0 ? (
-                <View style={styles.emptyGuildsContainer}>
-                  <Ionicons name="search-outline" size={32} color="#444" />
-                  <Text style={styles.emptyText}>
-                    {playerGuild 
-                      ? 'No other guilds exist yet.' 
-                      : 'No guilds available. Be the first to create one!'}
-                  </Text>
+                {/* Prominent Reputation Display */}
+                <View style={styles.reputationCard}>
+                  <View style={styles.reputationHeader}>
+                    <Ionicons name="star" size={28} color="#f39c12" />
+                    <Text style={styles.reputationTitle}>GUILD REPUTATION</Text>
+                  </View>
+                  <Text style={styles.reputationScore}>{guildTotalRep.toLocaleString()}</Text>
+                  <Text style={styles.reputationSubtext}>Combined rep from all members</Text>
                 </View>
-              ) : (
-                otherGuilds.map((guild) => (
-                  <View key={guild.id} style={styles.guildCard}>
-                    <View style={styles.guildCardHeader}>
-                      <View style={styles.guildCardLeft}>
-                        <View style={styles.guildCardIcon}>
-                          <Ionicons name="shield-half" size={18} color="#e74c3c" />
-                        </View>
-                        <View>
-                          <Text style={styles.guildCardName}>{guild.name}</Text>
-                          <Text style={styles.guildCardTag}>[{guild.tag}]</Text>
-                        </View>
-                      </View>
-                      <View style={styles.guildCardLevel}>
-                        <Text style={styles.guildCardLevelText}>Lv.{guild.level}</Text>
-                      </View>
+
+                <View style={styles.guildStats}>
+                  <View style={styles.guildStat}>
+                    <Ionicons name="people" size={20} color="#3498db" />
+                    <Text style={styles.guildStatValue}>{playerGuild.members?.length || 0}</Text>
+                    <Text style={styles.guildStatLabel}>Members</Text>
+                  </View>
+                  <View style={styles.guildStat}>
+                    <Ionicons name="trophy" size={20} color="#f39c12" />
+                    <Text style={styles.guildStatValue}>{playerGuild.total_wins}</Text>
+                    <Text style={styles.guildStatLabel}>Wins</Text>
+                  </View>
+                  <View style={styles.guildStat}>
+                    <Ionicons name="flash" size={20} color="#9b59b6" />
+                    <Text style={styles.guildStatValue}>{playerGuild.level}</Text>
+                    <Text style={styles.guildStatLabel}>Level</Text>
+                  </View>
+                </View>
+
+                {/* Members List */}
+                <Text style={styles.sectionTitle}>MEMBERS</Text>
+                {playerGuild.member_details?.map((member) => (
+                  <View key={member.id} style={styles.memberRow}>
+                    <View style={styles.memberAvatar}>
+                      <Ionicons name="person" size={16} color="#fff" />
                     </View>
-                    <Text style={styles.guildCardDesc} numberOfLines={2}>{guild.description}</Text>
-                    <View style={styles.guildCardFooter}>
-                      <View style={styles.guildCardStats}>
-                        <View style={styles.guildCardStatItem}>
-                          <Ionicons name="people" size={14} color="#888" />
-                          <Text style={styles.guildCardStatText}>{guild.members?.length || 0}</Text>
-                        </View>
-                        <View style={styles.guildCardStatItem}>
-                          <Ionicons name="star" size={14} color="#f39c12" />
-                          <Text style={styles.guildCardStatText}>{guild.total_reputation || 0}</Text>
-                        </View>
-                      </View>
-                      {!playerGuild && (
-                        <TouchableOpacity
-                          style={styles.joinButton}
-                          onPress={() => handleJoinGuild(guild.id)}
-                        >
-                          <Text style={styles.joinButtonText}>JOIN</Text>
-                        </TouchableOpacity>
-                      )}
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>
+                        {member.name}
+                        {member.id === playerGuild.leader_id && (
+                          <Text style={styles.leaderBadge}> LEADER</Text>
+                        )}
+                      </Text>
+                      <Text style={styles.memberClass}>
+                        Lv.{member.level} {member.character_class.replace('_', ' ')}
+                      </Text>
+                    </View>
+                    <View style={styles.memberRep}>
+                      <Ionicons name="star" size={12} color="#f39c12" />
+                      <Text style={styles.memberRepText}>{member.reputation || 0}</Text>
                     </View>
                   </View>
-                ))
-              )}
-            </ScrollView>
+                ))}
+
+                {player?.id !== playerGuild.leader_id && (
+                  <TouchableOpacity style={styles.leaveButton} onPress={handleLeaveGuild}>
+                    <Ionicons name="exit" size={20} color="#e74c3c" />
+                    <Text style={styles.leaveButtonText}>Leave Guild</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Guild Chat Section */}
+              <View style={styles.chatSection}>
+                <View style={styles.chatHeader}>
+                  <Ionicons name="chatbubbles" size={20} color="#3498db" />
+                  <Text style={styles.chatTitle}>GUILD CHAT</Text>
+                  <View style={styles.chatOnlineBadge}>
+                    <View style={styles.onlineDot} />
+                    <Text style={styles.chatOnlineText}>Live</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.chatContainer}>
+                  <ScrollView 
+                    ref={chatScrollRef}
+                    style={styles.chatScroll}
+                    contentContainerStyle={styles.chatScrollContent}
+                    nestedScrollEnabled={true}
+                    showsVerticalScrollIndicator={true}
+                  >
+                    {loadingChat && chatMessages.length === 0 ? (
+                      <View style={styles.chatLoading}>
+                        <Text style={styles.chatLoadingText}>Loading chat...</Text>
+                      </View>
+                    ) : chatMessages.length === 0 ? (
+                      <View style={styles.chatEmpty}>
+                        <Ionicons name="chatbubble-outline" size={32} color="#333" />
+                        <Text style={styles.chatEmptyText}>No messages yet</Text>
+                        <Text style={styles.chatEmptySubtext}>Be the first to say something!</Text>
+                      </View>
+                    ) : (
+                      chatMessages.map((msg) => {
+                        const isOwnMessage = msg.player_id === playerId;
+                        return (
+                          <View 
+                            key={msg.id} 
+                            style={[
+                              styles.chatMessage,
+                              isOwnMessage && styles.chatMessageOwn
+                            ]}
+                          >
+                            <View style={styles.chatMessageHeader}>
+                              <Text style={[
+                                styles.chatMessageName,
+                                isOwnMessage && styles.chatMessageNameOwn
+                              ]}>
+                                {msg.player_name}
+                              </Text>
+                              <Text style={styles.chatMessageLevel}>Lv.{msg.player_level}</Text>
+                              <Text style={styles.chatMessageTime}>{formatMessageTime(msg.timestamp)}</Text>
+                            </View>
+                            <Text style={styles.chatMessageText}>{msg.message}</Text>
+                          </View>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+                </View>
+                
+                {/* Chat Input */}
+                <View style={styles.chatInputContainer}>
+                  <TextInput
+                    style={styles.chatInput}
+                    placeholder="Type a message..."
+                    placeholderTextColor="#555"
+                    value={chatMessage}
+                    onChangeText={setChatMessage}
+                    maxLength={500}
+                    multiline
+                    editable={!sendingMessage}
+                  />
+                  <TouchableOpacity 
+                    style={[
+                      styles.chatSendButton,
+                      (!chatMessage.trim() || sendingMessage) && styles.chatSendButtonDisabled
+                    ]}
+                    onPress={handleSendMessage}
+                    disabled={!chatMessage.trim() || sendingMessage}
+                  >
+                    <Ionicons 
+                      name={sendingMessage ? "hourglass" : "send"} 
+                      size={20} 
+                      color={!chatMessage.trim() || sendingMessage ? "#555" : "#fff"} 
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          ) : (
+            <View style={styles.noGuildSection}>
+              <Ionicons name="people-outline" size={64} color="#333" />
+              <Text style={styles.noGuildText}>You are not in a guild</Text>
+              <Text style={styles.noGuildSubtext}>Join or create a guild to team up!</Text>
+              <GameButton
+                title="CREATE GUILD"
+                onPress={() => setShowCreateModal(true)}
+                icon="add"
+                variant="primary"
+                style={styles.createButton}
+              />
+            </View>
+          )}
+
+          {/* Other Guilds Section - Separate Scrollable Window */}
+          <View style={styles.otherGuildsSection}>
+            <View style={styles.otherGuildsHeader}>
+              <Ionicons name="globe-outline" size={20} color="#888" />
+              <Text style={styles.otherGuildsTitle}>
+                {playerGuild ? 'OTHER GUILDS' : 'AVAILABLE GUILDS'}
+              </Text>
+              <Text style={styles.otherGuildsCount}>{otherGuilds.length}</Text>
+            </View>
+            
+            <View style={styles.otherGuildsContainer}>
+              <ScrollView 
+                style={styles.otherGuildsScroll}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                {otherGuilds.length === 0 ? (
+                  <View style={styles.emptyGuildsContainer}>
+                    <Ionicons name="search-outline" size={32} color="#444" />
+                    <Text style={styles.emptyText}>
+                      {playerGuild 
+                        ? 'No other guilds exist yet.' 
+                        : 'No guilds available. Be the first to create one!'}
+                    </Text>
+                  </View>
+                ) : (
+                  otherGuilds.map((guild) => (
+                    <View key={guild.id} style={styles.guildCard}>
+                      <View style={styles.guildCardHeader}>
+                        <View style={styles.guildCardLeft}>
+                          <View style={styles.guildCardIcon}>
+                            <Ionicons name="shield-half" size={18} color="#e74c3c" />
+                          </View>
+                          <View>
+                            <Text style={styles.guildCardName}>{guild.name}</Text>
+                            <Text style={styles.guildCardTag}>[{guild.tag}]</Text>
+                          </View>
+                        </View>
+                        <View style={styles.guildCardLevel}>
+                          <Text style={styles.guildCardLevelText}>Lv.{guild.level}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.guildCardDesc} numberOfLines={2}>{guild.description}</Text>
+                      <View style={styles.guildCardFooter}>
+                        <View style={styles.guildCardStats}>
+                          <View style={styles.guildCardStatItem}>
+                            <Ionicons name="people" size={14} color="#888" />
+                            <Text style={styles.guildCardStatText}>{guild.members?.length || 0}</Text>
+                          </View>
+                          <View style={styles.guildCardStatItem}>
+                            <Ionicons name="star" size={14} color="#f39c12" />
+                            <Text style={styles.guildCardStatText}>{guild.total_reputation || 0}</Text>
+                          </View>
+                        </View>
+                        {!playerGuild && (
+                          <TouchableOpacity
+                            style={styles.joinButton}
+                            onPress={() => handleJoinGuild(guild.id)}
+                          >
+                            <Text style={styles.joinButtonText}>JOIN</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Create Guild Modal */}
       <Modal visible={showCreateModal} animationType="slide" transparent>
@@ -365,6 +556,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0a',
   },
+  keyboardView: {
+    flex: 1,
+  },
   scrollContent: {
     padding: 20,
     paddingBottom: 40,
@@ -381,6 +575,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#e74c3c',
+    marginBottom: 16,
   },
   guildHeader: {
     flexDirection: 'row',
@@ -556,6 +751,159 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
+  // Chat Section Styles
+  chatSection: {
+    backgroundColor: 'rgba(52, 152, 219, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 152, 219, 0.3)',
+    marginBottom: 16,
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(52, 152, 219, 0.2)',
+  },
+  chatTitle: {
+    color: '#3498db',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginLeft: 8,
+    flex: 1,
+  },
+  chatOnlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(46, 204, 113, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2ecc71',
+    marginRight: 4,
+  },
+  chatOnlineText: {
+    color: '#2ecc71',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  chatContainer: {
+    height: 250,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  chatScroll: {
+    flex: 1,
+  },
+  chatScrollContent: {
+    padding: 12,
+    flexGrow: 1,
+  },
+  chatLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 200,
+  },
+  chatLoadingText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  chatEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 200,
+  },
+  chatEmptyText: {
+    color: '#666',
+    fontSize: 14,
+    marginTop: 8,
+  },
+  chatEmptySubtext: {
+    color: '#444',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  chatMessage: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#444',
+  },
+  chatMessageOwn: {
+    backgroundColor: 'rgba(52, 152, 219, 0.15)',
+    borderLeftColor: '#3498db',
+  },
+  chatMessageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  chatMessageName: {
+    color: '#aaa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chatMessageNameOwn: {
+    color: '#3498db',
+  },
+  chatMessageLevel: {
+    color: '#666',
+    fontSize: 10,
+    marginLeft: 6,
+  },
+  chatMessageTime: {
+    color: '#555',
+    fontSize: 10,
+    marginLeft: 'auto',
+  },
+  chatMessageText: {
+    color: '#ddd',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  chatInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  chatInput: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 12,
+    padding: 12,
+    paddingTop: 12,
+    color: '#fff',
+    fontSize: 14,
+    maxHeight: 80,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  chatSendButton: {
+    backgroundColor: '#3498db',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  chatSendButtonDisabled: {
+    backgroundColor: '#222',
+  },
   noGuildSection: {
     alignItems: 'center',
     padding: 40,
@@ -579,7 +927,6 @@ const styles = StyleSheet.create({
   },
   // Other Guilds Section Styles
   otherGuildsSection: {
-    marginTop: 24,
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
     borderRadius: 16,
     padding: 16,
@@ -611,12 +958,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   otherGuildsContainer: {
-    maxHeight: 300,
+    maxHeight: 250,
     borderRadius: 12,
     overflow: 'hidden',
   },
   otherGuildsScroll: {
-    maxHeight: 300,
+    maxHeight: 250,
   },
   emptyGuildsContainer: {
     alignItems: 'center',
