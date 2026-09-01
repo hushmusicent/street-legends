@@ -120,6 +120,13 @@ export default function GuildScreen() {
     );
   };
 
+  // Calculate guild's total reputation from all members
+  const guildTotalRep = playerGuild?.member_details?.reduce(
+    (sum, member) => sum + (member.reputation || 0), 0
+  ) || playerGuild?.total_reputation || 0;
+
+  const otherGuilds = guilds.filter(g => g.id !== playerGuild?.id);
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -149,6 +156,16 @@ export default function GuildScreen() {
 
             <Text style={styles.guildDescription}>{playerGuild.description}</Text>
 
+            {/* Prominent Reputation Display */}
+            <View style={styles.reputationCard}>
+              <View style={styles.reputationHeader}>
+                <Ionicons name="star" size={28} color="#f39c12" />
+                <Text style={styles.reputationTitle}>GUILD REPUTATION</Text>
+              </View>
+              <Text style={styles.reputationScore}>{guildTotalRep.toLocaleString()}</Text>
+              <Text style={styles.reputationSubtext}>Combined rep from all members</Text>
+            </View>
+
             <View style={styles.guildStats}>
               <View style={styles.guildStat}>
                 <Ionicons name="people" size={20} color="#3498db" />
@@ -161,9 +178,9 @@ export default function GuildScreen() {
                 <Text style={styles.guildStatLabel}>Wins</Text>
               </View>
               <View style={styles.guildStat}>
-                <Ionicons name="flag" size={20} color="#e74c3c" />
-                <Text style={styles.guildStatValue}>{playerGuild.territory_count}</Text>
-                <Text style={styles.guildStatLabel}>Territories</Text>
+                <Ionicons name="flash" size={20} color="#9b59b6" />
+                <Text style={styles.guildStatValue}>{playerGuild.level}</Text>
+                <Text style={styles.guildStatLabel}>Level</Text>
               </View>
             </View>
 
@@ -184,6 +201,10 @@ export default function GuildScreen() {
                   <Text style={styles.memberClass}>
                     Lv.{member.level} {member.character_class.replace('_', ' ')}
                   </Text>
+                </View>
+                <View style={styles.memberRep}>
+                  <Ionicons name="star" size={12} color="#f39c12" />
+                  <Text style={styles.memberRepText}>{member.reputation || 0}</Text>
                 </View>
               </View>
             ))}
@@ -210,48 +231,74 @@ export default function GuildScreen() {
           </View>
         )}
 
-        {/* Available Guilds - Show for everyone, filter out own guild */}
-        <View style={styles.availableSection}>
-          <Text style={styles.sectionTitle}>
-            {playerGuild ? 'OTHER GUILDS' : 'AVAILABLE GUILDS'}
-          </Text>
-          {guilds.filter(g => g.id !== playerGuild?.id).length === 0 ? (
-            <Text style={styles.emptyText}>
-              {playerGuild 
-                ? 'No other guilds exist yet.' 
-                : 'No guilds available. Be the first to create one!'}
+        {/* Other Guilds Section - Separate Scrollable Window */}
+        <View style={styles.otherGuildsSection}>
+          <View style={styles.otherGuildsHeader}>
+            <Ionicons name="globe-outline" size={20} color="#888" />
+            <Text style={styles.otherGuildsTitle}>
+              {playerGuild ? 'OTHER GUILDS' : 'AVAILABLE GUILDS'}
             </Text>
-          ) : (
-            guilds
-              .filter(g => g.id !== playerGuild?.id)
-              .map((guild) => (
-                <View key={guild.id} style={styles.guildCard}>
-                  <View style={styles.guildCardHeader}>
-                    <View>
-                      <Text style={styles.guildCardName}>{guild.name}</Text>
-                      <Text style={styles.guildCardTag}>[{guild.tag}]</Text>
-                    </View>
-                    <View style={styles.guildCardLevel}>
-                      <Text style={styles.guildCardLevelText}>Lv.{guild.level}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.guildCardDesc}>{guild.description}</Text>
-                  <View style={styles.guildCardFooter}>
-                    <Text style={styles.guildCardMembers}>
-                      <Ionicons name="people" size={14} color="#888" /> {guild.members?.length || 0} members
-                    </Text>
-                    {!playerGuild && (
-                      <TouchableOpacity
-                        style={styles.joinButton}
-                        onPress={() => handleJoinGuild(guild.id)}
-                      >
-                        <Text style={styles.joinButtonText}>JOIN</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+            <Text style={styles.otherGuildsCount}>{otherGuilds.length}</Text>
+          </View>
+          
+          <View style={styles.otherGuildsContainer}>
+            <ScrollView 
+              style={styles.otherGuildsScroll}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={true}
+            >
+              {otherGuilds.length === 0 ? (
+                <View style={styles.emptyGuildsContainer}>
+                  <Ionicons name="search-outline" size={32} color="#444" />
+                  <Text style={styles.emptyText}>
+                    {playerGuild 
+                      ? 'No other guilds exist yet.' 
+                      : 'No guilds available. Be the first to create one!'}
+                  </Text>
                 </View>
-              ))
-          )}
+              ) : (
+                otherGuilds.map((guild) => (
+                  <View key={guild.id} style={styles.guildCard}>
+                    <View style={styles.guildCardHeader}>
+                      <View style={styles.guildCardLeft}>
+                        <View style={styles.guildCardIcon}>
+                          <Ionicons name="shield-half" size={18} color="#e74c3c" />
+                        </View>
+                        <View>
+                          <Text style={styles.guildCardName}>{guild.name}</Text>
+                          <Text style={styles.guildCardTag}>[{guild.tag}]</Text>
+                        </View>
+                      </View>
+                      <View style={styles.guildCardLevel}>
+                        <Text style={styles.guildCardLevelText}>Lv.{guild.level}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.guildCardDesc} numberOfLines={2}>{guild.description}</Text>
+                    <View style={styles.guildCardFooter}>
+                      <View style={styles.guildCardStats}>
+                        <View style={styles.guildCardStatItem}>
+                          <Ionicons name="people" size={14} color="#888" />
+                          <Text style={styles.guildCardStatText}>{guild.members?.length || 0}</Text>
+                        </View>
+                        <View style={styles.guildCardStatItem}>
+                          <Ionicons name="star" size={14} color="#f39c12" />
+                          <Text style={styles.guildCardStatText}>{guild.total_reputation || 0}</Text>
+                        </View>
+                      </View>
+                      {!playerGuild && (
+                        <TouchableOpacity
+                          style={styles.joinButton}
+                          onPress={() => handleJoinGuild(guild.id)}
+                        >
+                          <Text style={styles.joinButtonText}>JOIN</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
         </View>
       </ScrollView>
 
@@ -320,6 +367,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 28,
@@ -384,6 +432,41 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 16,
   },
+  // Reputation Card Styles
+  reputationCard: {
+    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(243, 156, 18, 0.3)',
+    alignItems: 'center',
+  },
+  reputationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reputationTitle: {
+    color: '#f39c12',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginLeft: 8,
+  },
+  reputationScore: {
+    color: '#f39c12',
+    fontSize: 48,
+    fontWeight: '900',
+    textShadowColor: 'rgba(243, 156, 18, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
+  reputationSubtext: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 4,
+  },
   guildStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -429,6 +512,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   memberInfo: {
+    flex: 1,
     marginLeft: 12,
   },
   memberName: {
@@ -442,6 +526,20 @@ const styles = StyleSheet.create({
   memberClass: {
     color: '#666',
     fontSize: 12,
+  },
+  memberRep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(243, 156, 18, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  memberRepText: {
+    color: '#f39c12',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   leaveButton: {
     flexDirection: 'row',
@@ -479,21 +577,63 @@ const styles = StyleSheet.create({
   createButton: {
     width: '100%',
   },
-  availableSection: {
+  // Other Guilds Section Styles
+  otherGuildsSection: {
     marginTop: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  otherGuildsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  otherGuildsTitle: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 2,
+    marginLeft: 8,
+    flex: 1,
+  },
+  otherGuildsCount: {
+    color: '#666',
+    fontSize: 12,
+    backgroundColor: '#222',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  otherGuildsContainer: {
+    maxHeight: 300,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  otherGuildsScroll: {
+    maxHeight: 300,
+  },
+  emptyGuildsContainer: {
+    alignItems: 'center',
+    padding: 30,
   },
   emptyText: {
     color: '#666',
     textAlign: 'center',
-    padding: 20,
+    marginTop: 12,
   },
   guildCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#222',
+    borderColor: '#1a1a1a',
   },
   guildCardHeader: {
     flexDirection: 'row',
@@ -501,14 +641,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  guildCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  guildCardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
   guildCardName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   guildCardTag: {
     color: '#e74c3c',
-    fontSize: 12,
+    fontSize: 11,
   },
   guildCardLevel: {
     backgroundColor: '#333',
@@ -518,21 +672,31 @@ const styles = StyleSheet.create({
   },
   guildCardLevelText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   guildCardDesc: {
-    color: '#888',
-    fontSize: 13,
-    marginBottom: 12,
+    color: '#777',
+    fontSize: 12,
+    marginBottom: 10,
+    lineHeight: 16,
   },
   guildCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  guildCardMembers: {
-    color: '#666',
+  guildCardStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  guildCardStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  guildCardStatText: {
+    color: '#888',
     fontSize: 12,
   },
   joinButton: {
