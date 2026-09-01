@@ -3379,6 +3379,7 @@ async def start_random_castle_game(player_id: str, castle_id: str = None):
         "castle_name": f"Random Fortress Lv.{random_level}",
         "difficulty": random_level,
         "random_level": random_level,
+        "total_members": random_level + 2,  # Base enemies scale with level
         "status": "active",
         "min_reward": rewards["min"],
         "max_reward": rewards["max"],
@@ -3430,7 +3431,7 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool,
     if won:
         # Calculate rewards based on difficulty and members eliminated
         difficulty = game["difficulty"]
-        total_members = game["total_members"]
+        total_members = game.get("total_members", difficulty + 2)  # Safe fallback
         
         # Cash scales with difficulty
         base_cash = random.randint(game["min_reward"], game["max_reward"])
@@ -3483,7 +3484,7 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool,
             "message": f"💥 DEFEAT! The gang at {game['castle_name']} held their ground!",
             "castle_name": game["castle_name"],
             "members_eliminated": members_eliminated,
-            "total_members": game["total_members"],
+            "total_members": game.get("total_members", game["difficulty"] + 2),
             "rewards": None,
         }
 
