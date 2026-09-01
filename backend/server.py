@@ -2644,6 +2644,736 @@ async def delete_guild_message(guild_id: str, message_id: str, player_id: str):
     return {"message": "Message deleted"}
 
 
+# ============== GUILD BATTLES SYSTEM ==============
+# Constants for Guild Battles
+GUILD_BATTLE_MIN_MEMBERS = 5
+GUILD_BATTLE_COOLDOWN_HOURS = 24
+GUILD_BATTLE_CHALLENGE_EXPIRE_HOURS = 24
+GUILD_BATTLE_FORMATS = ["3v3", "5v5"]
+
+# Reward amounts per participant
+GUILD_BATTLE_REWARDS = {
+    "winner": {
+        "cash": 5000,
+        "xp": 500,
+        "reputation": 100
+    },
+    "guild_reputation": 250  # Added to winning guild
+}
+
+
+def calculate_combat_power(player: dict) -> int:
+    """Calculate a player's total combat power for guild battle selection"""
+    stats = player.get("stats", {})
+    # Combat power = attack*2 + defense + speed + (health/10) + level*10
+    power = (
+        stats.get("attack", 10) * 2 +
+        stats.get("defense", 10) +
+        stats.get("speed", 10) +
+        stats.get("max_health", 100) // 10 +
+        player.get("level", 1) * 10
+    )
+    return power
+
+
+async def get_top_guild_members(guild_id: str, count: int) -> list:
+    """Get top N members of a guild by combat power"""
+    guild = await db.guilds.find_one({"id": guild_id})
+    if not guild:
+        return []
+    
+    member_ids = guild.get("members", [])
+    members = await db.players.find({"id": {"$in": member_ids}}).to_list(100)
+    
+    # Sort by combat power (descending)
+    members_with_power = [(m, calculate_combat_power(m)) for m in members]
+    members_with_power.sort(key=lambda x: x[1], reverse=True)
+    
+    return [m[0] for m, _ in members_with_power[:count]]
+
+
+@api_router.get("/guilds/{guild_id}/battle/eligibility")
+async def check_guild_battle_eligibility(guild_id: str):
+    """Check if a guild is eligible for guild battles"""
+    guild = await db.guilds.find_one({"id": guild_id})
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    member_count = len(guild.get("members", []))
+    is_eligible = member_count >= GUILD_BATTLE_MIN_MEMBERS
+    
+    # Check cooldown
+    last_battle_time = guild.get("last_guild_battle")
+    on_cooldown = False
+    cooldown_remaining = 0
+    
+    if last_battle_time:
+        if isinstance(last_battle_time, str):
+            last_battle_time = datetime.fromisoformat(last_battle_time.replace('Z', '+00:00'))
+        cooldown_end = last_battle_time + timedelta(hours=GUILD_BATTLE_COOLDOWN_HOURS)
+        if datetime.utcnow() < cooldown_end:
+            on_cooldown = True
+            cooldown_remaining = int((cooldown_end - datetime.utcnow()).total_seconds() // 3600)
+    
+    return {
+        "guild_id": guild_id,
+        "member_count": member_count,
+        "required_members": GUILD_BATTLE_MIN_MEMBERS,
+        "is_eligible": is_eligible,
+        "on_cooldown": on_cooldown,
+        "cooldown_remaining_hours": cooldown_remaining,
+        "message": f"Need {GUILD_BATTLE_MIN_MEMBERS - member_count} more members" if not is_eligible else "Eligible for battles" if not on_cooldown else f"Cooldown: {cooldown_remaining}h remaining"
+    }
+
+
+@api_router.post("/guilds/{guild_id}/battle/challenge")
+async def create_guild_battle_challenge(
+    guild_id: str,
+    target_guild_id: str,
+    player_id: str,
+    format: str = "3v3"
+):
+    """Create a guild battle challenge - only by leader or officers"""
+    if format not in GUILD_BATTLE_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Invalid format. Choose: {GUILD_BATTLE_FORMATS}")
+    
+    # Verify challenger
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    challenger_guild = await db.guilds.find_one({"id": guild_id})
+    if not challenger_guild:
+        raise HTTPException(status_code=404, detail="Your guild not found")
+    
+    # Check if player is leader or officer
+    is_leader = challenger_guild.get("leader_id") == player_id
+    is_officer = player_id in challenger_guild.get("officers", [])
+    if not is_leader and not is_officer:
+        raise HTTPException(status_code=403, detail="Only guild leaders or officers can issue challenges")
+    
+    # Check challenger guild eligibility
+    challenger_members = len(challenger_guild.get("members", []))
+    if challenger_members < GUILD_BATTLE_MIN_MEMBERS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Your guild needs at least {GUILD_BATTLE_MIN_MEMBERS} members to battle. Current: {challenger_members}"
+        )
+    
+    # Check format requirements
+    format_size = int(format[0])  # "3v3" -> 3, "5v5" -> 5
+    if challenger_members < format_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Your guild needs at least {format_size} members for {format} format"
+        )
+    
+    # Check cooldown
+    last_battle = challenger_guild.get("last_guild_battle")
+    if last_battle:
+        if isinstance(last_battle, str):
+            last_battle = datetime.fromisoformat(last_battle.replace('Z', '+00:00'))
+        cooldown_end = last_battle + timedelta(hours=GUILD_BATTLE_COOLDOWN_HOURS)
+        if datetime.utcnow() < cooldown_end:
+            hours_left = int((cooldown_end - datetime.utcnow()).total_seconds() // 3600)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Guild is on cooldown. {hours_left} hours remaining."
+            )
+    
+    # Verify target guild
+    target_guild = await db.guilds.find_one({"id": target_guild_id})
+    if not target_guild:
+        raise HTTPException(status_code=404, detail="Target guild not found")
+    
+    if target_guild_id == guild_id:
+        raise HTTPException(status_code=400, detail="Cannot challenge your own guild")
+    
+    # Check target guild eligibility
+    target_members = len(target_guild.get("members", []))
+    if target_members < GUILD_BATTLE_MIN_MEMBERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Target guild needs at least {GUILD_BATTLE_MIN_MEMBERS} members. They have: {target_members}"
+        )
+    
+    if target_members < format_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Target guild needs at least {format_size} members for {format} format"
+        )
+    
+    # Check if there's already a pending challenge between these guilds
+    existing = await db.guild_battle_challenges.find_one({
+        "$or": [
+            {"challenger_guild_id": guild_id, "target_guild_id": target_guild_id, "status": "pending"},
+            {"challenger_guild_id": target_guild_id, "target_guild_id": guild_id, "status": "pending"}
+        ]
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="There's already a pending challenge between these guilds")
+    
+    # Create the challenge
+    challenge = {
+        "id": str(uuid.uuid4()),
+        "challenger_guild_id": guild_id,
+        "challenger_guild_name": challenger_guild.get("name"),
+        "challenger_guild_tag": challenger_guild.get("tag"),
+        "target_guild_id": target_guild_id,
+        "target_guild_name": target_guild.get("name"),
+        "target_guild_tag": target_guild.get("tag"),
+        "format": format,
+        "challenger_player_id": player_id,
+        "challenger_player_name": player.get("name"),
+        "status": "pending",
+        "created_at": datetime.utcnow(),
+        "expires_at": datetime.utcnow() + timedelta(hours=GUILD_BATTLE_CHALLENGE_EXPIRE_HOURS)
+    }
+    
+    await db.guild_battle_challenges.insert_one(challenge)
+    
+    return serialize_doc(challenge)
+
+
+@api_router.get("/guilds/{guild_id}/battle/challenges")
+async def get_guild_battle_challenges(guild_id: str, player_id: str):
+    """Get all pending challenges for a guild (incoming and outgoing)"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    # Get incoming and outgoing challenges
+    incoming = await db.guild_battle_challenges.find({
+        "target_guild_id": guild_id,
+        "status": "pending"
+    }).to_list(50)
+    
+    outgoing = await db.guild_battle_challenges.find({
+        "challenger_guild_id": guild_id,
+        "status": "pending"
+    }).to_list(50)
+    
+    # Clean up expired challenges
+    now = datetime.utcnow()
+    for challenge in incoming + outgoing:
+        expires = challenge.get("expires_at")
+        if expires:
+            if isinstance(expires, str):
+                expires = datetime.fromisoformat(expires.replace('Z', '+00:00'))
+            if now > expires:
+                await db.guild_battle_challenges.update_one(
+                    {"id": challenge["id"]},
+                    {"$set": {"status": "expired"}}
+                )
+    
+    # Re-fetch after cleanup
+    incoming = await db.guild_battle_challenges.find({
+        "target_guild_id": guild_id,
+        "status": "pending"
+    }).to_list(50)
+    
+    outgoing = await db.guild_battle_challenges.find({
+        "challenger_guild_id": guild_id,
+        "status": "pending"
+    }).to_list(50)
+    
+    return {
+        "incoming": serialize_doc(incoming),
+        "outgoing": serialize_doc(outgoing)
+    }
+
+
+@api_router.post("/guilds/{guild_id}/battle/accept/{challenge_id}")
+async def accept_guild_battle_challenge(guild_id: str, challenge_id: str, player_id: str):
+    """Accept a guild battle challenge - starts the battle"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    guild = await db.guilds.find_one({"id": guild_id})
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    # Check if player is leader or officer
+    is_leader = guild.get("leader_id") == player_id
+    is_officer = player_id in guild.get("officers", [])
+    if not is_leader and not is_officer:
+        raise HTTPException(status_code=403, detail="Only guild leaders or officers can accept challenges")
+    
+    # Get the challenge
+    challenge = await db.guild_battle_challenges.find_one({"id": challenge_id, "status": "pending"})
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found or already processed")
+    
+    if challenge.get("target_guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="This challenge is not for your guild")
+    
+    # Check if expired
+    expires = challenge.get("expires_at")
+    if expires:
+        if isinstance(expires, str):
+            expires = datetime.fromisoformat(expires.replace('Z', '+00:00'))
+        if datetime.utcnow() > expires:
+            await db.guild_battle_challenges.update_one(
+                {"id": challenge_id},
+                {"$set": {"status": "expired"}}
+            )
+            raise HTTPException(status_code=400, detail="Challenge has expired")
+    
+    # Get both guilds
+    challenger_guild = await db.guilds.find_one({"id": challenge["challenger_guild_id"]})
+    target_guild = guild
+    
+    if not challenger_guild:
+        raise HTTPException(status_code=404, detail="Challenger guild no longer exists")
+    
+    # Get format size
+    format_str = challenge.get("format", "3v3")
+    format_size = int(format_str[0])
+    
+    # Auto-select top members by combat power
+    challenger_members = await get_top_guild_members(challenge["challenger_guild_id"], format_size)
+    target_members = await get_top_guild_members(guild_id, format_size)
+    
+    if len(challenger_members) < format_size or len(target_members) < format_size:
+        raise HTTPException(status_code=400, detail="Not enough eligible members to start the battle")
+    
+    # Create matchups
+    matchups = []
+    for i in range(format_size):
+        matchup = {
+            "id": str(uuid.uuid4()),
+            "match_number": i + 1,
+            "challenger_player": {
+                "id": challenger_members[i]["id"],
+                "name": challenger_members[i]["name"],
+                "level": challenger_members[i].get("level", 1),
+                "combat_power": calculate_combat_power(challenger_members[i]),
+                "stats": challenger_members[i].get("stats", {}),
+                "current_health": challenger_members[i]["stats"].get("max_health", 100),
+                "max_health": challenger_members[i]["stats"].get("max_health", 100),
+                "current_energy": challenger_members[i]["stats"].get("max_energy", 100)
+            },
+            "target_player": {
+                "id": target_members[i]["id"],
+                "name": target_members[i]["name"],
+                "level": target_members[i].get("level", 1),
+                "combat_power": calculate_combat_power(target_members[i]),
+                "stats": target_members[i].get("stats", {}),
+                "current_health": target_members[i]["stats"].get("max_health", 100),
+                "max_health": target_members[i]["stats"].get("max_health", 100),
+                "current_energy": target_members[i]["stats"].get("max_energy", 100)
+            },
+            "status": "pending",  # pending, in_progress, challenger_won, target_won
+            "combat_log": [],
+            "turn": 1
+        }
+        matchups.append(matchup)
+    
+    # Create the battle
+    battle = {
+        "id": str(uuid.uuid4()),
+        "challenge_id": challenge_id,
+        "challenger_guild_id": challenge["challenger_guild_id"],
+        "challenger_guild_name": challenge.get("challenger_guild_name"),
+        "challenger_guild_tag": challenge.get("challenger_guild_tag"),
+        "target_guild_id": guild_id,
+        "target_guild_name": target_guild.get("name"),
+        "target_guild_tag": target_guild.get("tag"),
+        "format": format_str,
+        "matchups": matchups,
+        "challenger_wins": 0,
+        "target_wins": 0,
+        "current_matchup": 0,
+        "status": "in_progress",
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.guild_battles.insert_one(battle)
+    
+    # Update challenge status
+    await db.guild_battle_challenges.update_one(
+        {"id": challenge_id},
+        {"$set": {"status": "accepted", "battle_id": battle["id"]}}
+    )
+    
+    return serialize_doc(battle)
+
+
+@api_router.post("/guilds/{guild_id}/battle/decline/{challenge_id}")
+async def decline_guild_battle_challenge(guild_id: str, challenge_id: str, player_id: str):
+    """Decline a guild battle challenge"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    guild = await db.guilds.find_one({"id": guild_id})
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    # Check if player is leader or officer
+    is_leader = guild.get("leader_id") == player_id
+    is_officer = player_id in guild.get("officers", [])
+    if not is_leader and not is_officer:
+        raise HTTPException(status_code=403, detail="Only guild leaders or officers can decline challenges")
+    
+    # Get and update the challenge
+    challenge = await db.guild_battle_challenges.find_one({"id": challenge_id, "status": "pending"})
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found or already processed")
+    
+    if challenge.get("target_guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="This challenge is not for your guild")
+    
+    await db.guild_battle_challenges.update_one(
+        {"id": challenge_id},
+        {"$set": {"status": "declined", "declined_by": player_id, "declined_at": datetime.utcnow()}}
+    )
+    
+    return {"message": "Challenge declined"}
+
+
+@api_router.get("/guilds/{guild_id}/battle/history")
+async def get_guild_battle_history(guild_id: str, player_id: str, limit: int = 10):
+    """Get guild battle history"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    battles = await db.guild_battles.find({
+        "$or": [
+            {"challenger_guild_id": guild_id},
+            {"target_guild_id": guild_id}
+        ],
+        "status": "completed"
+    }).sort("completed_at", -1).limit(limit).to_list(limit)
+    
+    return serialize_doc(battles)
+
+
+@api_router.get("/guilds/{guild_id}/battle/active")
+async def get_active_guild_battle(guild_id: str, player_id: str):
+    """Get any active guild battle for the guild"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    battle = await db.guild_battles.find_one({
+        "$or": [
+            {"challenger_guild_id": guild_id},
+            {"target_guild_id": guild_id}
+        ],
+        "status": "in_progress"
+    })
+    
+    return serialize_doc(battle) if battle else None
+
+
+@api_router.get("/guilds/{guild_id}/battle/{battle_id}")
+async def get_guild_battle(guild_id: str, battle_id: str, player_id: str):
+    """Get the current state of a guild battle"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    battle = await db.guild_battles.find_one({"id": battle_id})
+    if not battle:
+        raise HTTPException(status_code=404, detail="Battle not found")
+    
+    # Check if player's guild is involved
+    if battle["challenger_guild_id"] != guild_id and battle["target_guild_id"] != guild_id:
+        raise HTTPException(status_code=403, detail="Your guild is not part of this battle")
+    
+    return serialize_doc(battle)
+
+
+@api_router.post("/guilds/{guild_id}/battle/{battle_id}/action")
+async def guild_battle_action(
+    guild_id: str,
+    battle_id: str,
+    player_id: str,
+    action: str = "attack",
+    skill_id: Optional[str] = None
+):
+    """Execute an action in a guild battle matchup"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    battle = await db.guild_battles.find_one({"id": battle_id})
+    if not battle:
+        raise HTTPException(status_code=404, detail="Battle not found")
+    
+    if battle["status"] != "in_progress":
+        return serialize_doc(battle)
+    
+    # Get current matchup
+    current_idx = battle.get("current_matchup", 0)
+    if current_idx >= len(battle["matchups"]):
+        return serialize_doc(battle)
+    
+    matchup = battle["matchups"][current_idx]
+    
+    # Determine which side the player is on
+    is_challenger = any(m["challenger_player"]["id"] == player_id for m in battle["matchups"])
+    is_target = any(m["target_player"]["id"] == player_id for m in battle["matchups"])
+    
+    if not is_challenger and not is_target:
+        raise HTTPException(status_code=403, detail="You are not a participant in this battle")
+    
+    # Check if it's this player's matchup
+    current_challenger_id = matchup["challenger_player"]["id"]
+    current_target_id = matchup["target_player"]["id"]
+    
+    if player_id != current_challenger_id and player_id != current_target_id:
+        raise HTTPException(status_code=400, detail="It's not your turn to fight yet")
+    
+    # Determine attacker and defender
+    if player_id == current_challenger_id:
+        attacker = matchup["challenger_player"]
+        defender = matchup["target_player"]
+        attacker_key = "challenger_player"
+        defender_key = "target_player"
+        win_key = "challenger_won"
+    else:
+        attacker = matchup["target_player"]
+        defender = matchup["challenger_player"]
+        attacker_key = "target_player"
+        defender_key = "challenger_player"
+        win_key = "target_won"
+    
+    combat_log = matchup.get("combat_log", [])
+    
+    # Execute action
+    if action == "attack":
+        attacker_stats = attacker["stats"]
+        defender_stats = defender["stats"]
+        
+        # Miss chance
+        miss_chance = max(0.05, 0.10 - (attacker_stats.get("luck", 0) * 0.005))
+        if random.random() < miss_chance:
+            combat_log.append(f"{attacker['name']}'s attack MISSED!")
+        else:
+            damage = max(1, attacker_stats.get("attack", 10) - defender_stats.get("defense", 0) // 2)
+            # Crit chance
+            crit_chance = 0.05 + (attacker_stats.get("luck", 0) * 0.01)
+            if random.random() < crit_chance:
+                damage = int(damage * 2.0)
+                combat_log.append(f"💥 CRITICAL! {attacker['name']} deals {damage} damage!")
+            else:
+                combat_log.append(f"{attacker['name']} attacks for {damage} damage!")
+            defender["current_health"] = max(0, defender.get("current_health", 100) - damage)
+    
+    elif action == "skill" and skill_id:
+        skill = SKILLS.get(skill_id)
+        if not skill:
+            raise HTTPException(status_code=400, detail="Invalid skill")
+        
+        attacker_stats = attacker["stats"]
+        defender_stats = defender["stats"]
+        
+        if skill.get("cost", 0) > attacker.get("current_energy", 0):
+            raise HTTPException(status_code=400, detail="Not enough energy")
+        
+        attacker["current_energy"] = attacker.get("current_energy", 100) - skill.get("cost", 0)
+        
+        if "damage_mult" in skill:
+            if random.random() < 0.05:
+                combat_log.append(f"{attacker['name']}'s {skill['name']} MISSED!")
+            else:
+                damage = int(attacker_stats.get("attack", 10) * skill["damage_mult"])
+                if random.random() < 0.10:
+                    damage = int(damage * 2.0)
+                    combat_log.append(f"💥 CRITICAL {skill['name']}! {attacker['name']} deals {damage} damage!")
+                else:
+                    combat_log.append(f"{attacker['name']} uses {skill['name']} for {damage} damage!")
+                defender["current_health"] = max(0, defender.get("current_health", 100) - damage)
+        elif "heal_percent" in skill:
+            heal = int(attacker.get("max_health", 100) * skill["heal_percent"])
+            attacker["current_health"] = min(attacker.get("max_health", 100), attacker.get("current_health", 100) + heal)
+            combat_log.append(f"{attacker['name']} uses {skill['name']} and heals {heal} HP!")
+    
+    elif action == "defend":
+        combat_log.append(f"{attacker['name']} takes a defensive stance!")
+        attacker["current_energy"] = min(100, attacker.get("current_energy", 100) + 10)
+    
+    # Update matchup
+    matchup[attacker_key] = attacker
+    matchup[defender_key] = defender
+    matchup["combat_log"] = combat_log
+    matchup["turn"] = matchup.get("turn", 1) + 1
+    
+    # Check if defender is defeated
+    if defender.get("current_health", 0) <= 0:
+        matchup["status"] = win_key
+        combat_log.append(f"🏆 {attacker['name']} wins the matchup!")
+        
+        # Update battle scores
+        if win_key == "challenger_won":
+            battle["challenger_wins"] = battle.get("challenger_wins", 0) + 1
+        else:
+            battle["target_wins"] = battle.get("target_wins", 0) + 1
+        
+        # Move to next matchup
+        battle["current_matchup"] = current_idx + 1
+        
+        # Check if battle is over
+        format_size = int(battle["format"][0])
+        wins_needed = (format_size // 2) + 1
+        
+        if battle["challenger_wins"] >= wins_needed or battle["target_wins"] >= wins_needed:
+            # Battle is over
+            battle["status"] = "completed"
+            
+            if battle["challenger_wins"] > battle["target_wins"]:
+                battle["winner_guild_id"] = battle["challenger_guild_id"]
+                battle["winner_guild_name"] = battle["challenger_guild_name"]
+                winning_guild_id = battle["challenger_guild_id"]
+                winning_members = [m["challenger_player"]["id"] for m in battle["matchups"]]
+            else:
+                battle["winner_guild_id"] = battle["target_guild_id"]
+                battle["winner_guild_name"] = battle["target_guild_name"]
+                winning_guild_id = battle["target_guild_id"]
+                winning_members = [m["target_player"]["id"] for m in battle["matchups"]]
+            
+            battle["completed_at"] = datetime.utcnow()
+            
+            # Calculate top performers
+            all_participants = []
+            for m in battle["matchups"]:
+                cp = m["challenger_player"]
+                tp = m["target_player"]
+                all_participants.append({
+                    "player_id": cp["id"],
+                    "name": cp["name"],
+                    "guild_id": battle["challenger_guild_id"],
+                    "combat_power": cp.get("combat_power", 0),
+                    "won": m["status"] == "challenger_won"
+                })
+                all_participants.append({
+                    "player_id": tp["id"],
+                    "name": tp["name"],
+                    "guild_id": battle["target_guild_id"],
+                    "combat_power": tp.get("combat_power", 0),
+                    "won": m["status"] == "target_won"
+                })
+            
+            # Top performers = those who won their matchups
+            battle["top_performers"] = [p for p in all_participants if p["won"]]
+            
+            # Award rewards to winners
+            rewards = GUILD_BATTLE_REWARDS["winner"]
+            for member_id in winning_members:
+                await db.players.update_one(
+                    {"id": member_id},
+                    {"$inc": {
+                        "cash": rewards["cash"],
+                        "xp": rewards["xp"],
+                        "reputation": rewards["reputation"]
+                    }}
+                )
+            
+            # Award guild reputation
+            await db.guilds.update_one(
+                {"id": winning_guild_id},
+                {"$inc": {
+                    "total_reputation": GUILD_BATTLE_REWARDS["guild_reputation"],
+                    "total_wins": 1
+                }}
+            )
+            
+            # Set cooldown on both guilds
+            await db.guilds.update_many(
+                {"id": {"$in": [battle["challenger_guild_id"], battle["target_guild_id"]]}},
+                {"$set": {"last_guild_battle": datetime.utcnow()}}
+            )
+    else:
+        # Enemy counter-attack if battle continues and it was the attacker's turn
+        if defender.get("current_health", 0) > 0 and action != "defend":
+            defender_stats = defender["stats"]
+            attacker_stats = attacker["stats"]
+            
+            if random.random() < 0.12:
+                combat_log.append(f"{defender['name']}'s counter-attack MISSED!")
+            else:
+                enemy_damage = max(1, defender_stats.get("attack", 10) - attacker_stats.get("defense", 0) // 2)
+                if random.random() < 0.08:
+                    enemy_damage = int(enemy_damage * 2.0)
+                    combat_log.append(f"💥 {defender['name']} lands a CRITICAL counter for {enemy_damage}!")
+                else:
+                    combat_log.append(f"{defender['name']} counters for {enemy_damage} damage!")
+                attacker["current_health"] = max(0, attacker.get("current_health", 100) - enemy_damage)
+            
+            # Check if attacker is now defeated
+            if attacker.get("current_health", 0) <= 0:
+                if attacker_key == "challenger_player":
+                    matchup["status"] = "target_won"
+                    battle["target_wins"] = battle.get("target_wins", 0) + 1
+                else:
+                    matchup["status"] = "challenger_won"
+                    battle["challenger_wins"] = battle.get("challenger_wins", 0) + 1
+                
+                combat_log.append(f"🏆 {defender['name']} wins the matchup!")
+                battle["current_matchup"] = current_idx + 1
+                
+                # Check if battle is over
+                format_size = int(battle["format"][0])
+                wins_needed = (format_size // 2) + 1
+                
+                if battle["challenger_wins"] >= wins_needed or battle["target_wins"] >= wins_needed:
+                    battle["status"] = "completed"
+                    
+                    if battle["challenger_wins"] > battle["target_wins"]:
+                        battle["winner_guild_id"] = battle["challenger_guild_id"]
+                        battle["winner_guild_name"] = battle["challenger_guild_name"]
+                        winning_guild_id = battle["challenger_guild_id"]
+                        winning_members = [m["challenger_player"]["id"] for m in battle["matchups"]]
+                    else:
+                        battle["winner_guild_id"] = battle["target_guild_id"]
+                        battle["winner_guild_name"] = battle["target_guild_name"]
+                        winning_guild_id = battle["target_guild_id"]
+                        winning_members = [m["target_player"]["id"] for m in battle["matchups"]]
+                    
+                    battle["completed_at"] = datetime.utcnow()
+                    
+                    # Award rewards
+                    rewards = GUILD_BATTLE_REWARDS["winner"]
+                    for member_id in winning_members:
+                        await db.players.update_one(
+                            {"id": member_id},
+                            {"$inc": {
+                                "cash": rewards["cash"],
+                                "xp": rewards["xp"],
+                                "reputation": rewards["reputation"]
+                            }}
+                        )
+                    
+                    await db.guilds.update_one(
+                        {"id": winning_guild_id},
+                        {"$inc": {
+                            "total_reputation": GUILD_BATTLE_REWARDS["guild_reputation"],
+                            "total_wins": 1
+                        }}
+                    )
+                    
+                    await db.guilds.update_many(
+                        {"id": {"$in": [battle["challenger_guild_id"], battle["target_guild_id"]]}},
+                        {"$set": {"last_guild_battle": datetime.utcnow()}}
+                    )
+    
+    # Update matchup in battle
+    battle["matchups"][current_idx] = matchup
+    matchup["combat_log"] = combat_log
+    
+    # Save battle
+    await db.guild_battles.update_one(
+        {"id": battle_id},
+        {"$set": battle}
+    )
+    
+    return serialize_doc(battle)
+
+
 # ============== SHOP ENDPOINTS ==============
 
 @api_router.get("/shops/spawn")

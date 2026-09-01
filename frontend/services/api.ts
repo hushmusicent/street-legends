@@ -153,6 +153,165 @@ export const deleteGuildMessage = async (guildId: string, messageId: string, pla
   return response.data;
 };
 
+// Guild Battle APIs
+export interface GuildBattleChallenge {
+  id: string;
+  challenger_guild_id: string;
+  challenger_guild_name: string;
+  challenger_guild_tag: string;
+  target_guild_id: string;
+  target_guild_name: string;
+  target_guild_tag: string;
+  format: string;
+  challenger_player_id: string;
+  challenger_player_name: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface GuildBattleMatchup {
+  id: string;
+  match_number: number;
+  challenger_player: {
+    id: string;
+    name: string;
+    level: number;
+    combat_power: number;
+    stats: Record<string, number>;
+    current_health: number;
+    max_health: number;
+    current_energy: number;
+  };
+  target_player: {
+    id: string;
+    name: string;
+    level: number;
+    combat_power: number;
+    stats: Record<string, number>;
+    current_health: number;
+    max_health: number;
+    current_energy: number;
+  };
+  status: string;
+  combat_log: string[];
+  turn: number;
+}
+
+export interface GuildBattle {
+  id: string;
+  challenge_id: string;
+  challenger_guild_id: string;
+  challenger_guild_name: string;
+  challenger_guild_tag: string;
+  target_guild_id: string;
+  target_guild_name: string;
+  target_guild_tag: string;
+  format: string;
+  matchups: GuildBattleMatchup[];
+  challenger_wins: number;
+  target_wins: number;
+  current_matchup: number;
+  status: string;
+  winner_guild_id?: string;
+  winner_guild_name?: string;
+  top_performers?: any[];
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface GuildBattleEligibility {
+  guild_id: string;
+  member_count: number;
+  required_members: number;
+  is_eligible: boolean;
+  on_cooldown: boolean;
+  cooldown_remaining_hours: number;
+  message: string;
+}
+
+export const checkGuildBattleEligibility = async (guildId: string): Promise<GuildBattleEligibility> => {
+  const response = await api.get(`/guilds/${guildId}/battle/eligibility`);
+  return response.data;
+};
+
+export const createGuildBattleChallenge = async (
+  guildId: string,
+  targetGuildId: string,
+  playerId: string,
+  format: string = '3v3'
+): Promise<GuildBattleChallenge> => {
+  const response = await api.post(
+    `/guilds/${guildId}/battle/challenge?target_guild_id=${targetGuildId}&player_id=${playerId}&format=${format}`
+  );
+  return response.data;
+};
+
+export const getGuildBattleChallenges = async (
+  guildId: string,
+  playerId: string
+): Promise<{ incoming: GuildBattleChallenge[]; outgoing: GuildBattleChallenge[] }> => {
+  const response = await api.get(`/guilds/${guildId}/battle/challenges?player_id=${playerId}`);
+  return response.data;
+};
+
+export const acceptGuildBattleChallenge = async (
+  guildId: string,
+  challengeId: string,
+  playerId: string
+): Promise<GuildBattle> => {
+  const response = await api.post(`/guilds/${guildId}/battle/accept/${challengeId}?player_id=${playerId}`);
+  return response.data;
+};
+
+export const declineGuildBattleChallenge = async (
+  guildId: string,
+  challengeId: string,
+  playerId: string
+): Promise<{ message: string }> => {
+  const response = await api.post(`/guilds/${guildId}/battle/decline/${challengeId}?player_id=${playerId}`);
+  return response.data;
+};
+
+export const getGuildBattle = async (
+  guildId: string,
+  battleId: string,
+  playerId: string
+): Promise<GuildBattle> => {
+  const response = await api.get(`/guilds/${guildId}/battle/${battleId}?player_id=${playerId}`);
+  return response.data;
+};
+
+export const guildBattleAction = async (
+  guildId: string,
+  battleId: string,
+  playerId: string,
+  action: string = 'attack',
+  skillId?: string
+): Promise<GuildBattle> => {
+  let url = `/guilds/${guildId}/battle/${battleId}/action?player_id=${playerId}&action=${action}`;
+  if (skillId) url += `&skill_id=${skillId}`;
+  const response = await api.post(url);
+  return response.data;
+};
+
+export const getGuildBattleHistory = async (
+  guildId: string,
+  playerId: string,
+  limit: number = 10
+): Promise<GuildBattle[]> => {
+  const response = await api.get(`/guilds/${guildId}/battle/history?player_id=${playerId}&limit=${limit}`);
+  return response.data;
+};
+
+export const getActiveGuildBattle = async (
+  guildId: string,
+  playerId: string
+): Promise<GuildBattle | null> => {
+  const response = await api.get(`/guilds/${guildId}/battle/active?player_id=${playerId}`);
+  return response.data;
+};
+
 // Skills APIs
 export const getAllSkills = async (): Promise<Record<string, Skill>> => {
   const response = await api.get('/skills');
