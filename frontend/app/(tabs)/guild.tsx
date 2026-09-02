@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useGameStore } from '../../stores/gameStore';
 import { GameButton } from '../../components/GameButton';
 import {
@@ -661,6 +662,13 @@ export default function GuildScreen() {
                     </View>
                   )}
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tab, styles.raidTab]}
+                  onPress={() => router.push('/guild-raid')}
+                >
+                  <Ionicons name="skull" size={18} color="#9b59b6" />
+                  <Text style={[styles.tabText, { color: '#9b59b6' }]}>Raids</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Tab Content */}
@@ -1093,6 +1101,11 @@ const styles = StyleSheet.create({
   },
   activeTab: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  raidTab: {
+    backgroundColor: 'rgba(155, 89, 182, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(155, 89, 182, 0.3)',
   },
   tabText: {
     color: '#666',

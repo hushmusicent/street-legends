@@ -3374,6 +3374,566 @@ async def guild_battle_action(
     return serialize_doc(battle)
 
 
+# ============== GUILD RAIDS SYSTEM ==============
+# Constants for Guild Raids
+GUILD_RAID_MAX_PLAYERS = 3
+GUILD_RAID_LEVELS = 20  # Max levels in a raid
+
+# Raid rewards scaling per level
+def get_raid_level_rewards(level: int, num_enemies_at_level: int = 1) -> dict:
+    """Calculate rewards for a specific raid level"""
+    base_cash = 200 + (level * 150)
+    base_xp = 100 + (level * 75)
+    base_rep = 20 + (level * 10)
+    return {
+        "cash": base_cash * num_enemies_at_level,
+        "xp": base_xp * num_enemies_at_level,
+        "reputation": base_rep * num_enemies_at_level
+    }
+
+
+def generate_raid_enemy(level: int) -> dict:
+    """Generate a raid enemy for a specific level"""
+    # Get enemies appropriate for this level
+    eligible = [e for e in ENEMY_TIERS if e["level_min"] <= level + 2 and e["level_max"] >= level - 2 and not e["is_boss"]]
+    if not eligible:
+        eligible = [e for e in ENEMY_TIERS if not e["is_boss"]][:5]
+    
+    template = random.choice(eligible)
+    enemy_level = max(1, min(level, template["level_max"]))
+    
+    # Scale stats for raid (slightly harder than normal)
+    stats = calculate_enemy_stats(enemy_level, False)
+    stats["health"] = int(stats["health"] * 1.2)
+    stats["max_health"] = stats["health"]
+    stats["attack"] = int(stats["attack"] * 1.1)
+    
+    return {
+        "id": str(uuid.uuid4()),
+        "name": template["name"],
+        "level": enemy_level,
+        "stats": stats,
+        "is_boss": False
+    }
+
+
+def generate_raid_boss(level: int) -> dict:
+    """Generate a raid boss for milestone levels (every 5 levels)"""
+    # Get bosses appropriate for this level
+    eligible = [e for e in ENEMY_TIERS if e["is_boss"] and e["level_min"] <= level + 5]
+    if not eligible:
+        eligible = [e for e in ENEMY_TIERS if e["is_boss"]][:3]
+    
+    template = random.choice(eligible)
+    boss_level = max(template["level_min"], min(level, template["level_max"]))
+    
+    # Scale stats for raid boss (tougher than normal)
+    stats = calculate_enemy_stats(boss_level, True)
+    stats["health"] = int(stats["health"] * 1.5)
+    stats["max_health"] = stats["health"]
+    stats["attack"] = int(stats["attack"] * 1.2)
+    
+    return {
+        "id": str(uuid.uuid4()),
+        "name": template["name"],
+        "level": boss_level,
+        "stats": stats,
+        "is_boss": True
+    }
+
+
+@api_router.post("/guilds/{guild_id}/raid/start")
+async def start_guild_raid(guild_id: str, player_id: str):
+    """Start a new guild raid - creates a lobby that other guild members can join"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    guild = await db.guilds.find_one({"id": guild_id})
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    # Check if player is already in an active raid
+    existing_raid = await db.guild_raids.find_one({
+        "participants.player_id": player_id,
+        "status": {"$in": ["waiting", "in_progress"]}
+    })
+    if existing_raid:
+        raise HTTPException(status_code=400, detail="You are already in an active raid")
+    
+    # Create the raid
+    raid = {
+        "id": str(uuid.uuid4()),
+        "guild_id": guild_id,
+        "guild_name": guild.get("name"),
+        "leader_id": player_id,
+        "participants": [{
+            "player_id": player_id,
+            "player_name": player.get("name"),
+            "player_level": player.get("level", 1),
+            "stats": player.get("stats", {}),
+            "current_health": player["stats"].get("max_health", 100),
+            "max_health": player["stats"].get("max_health", 100)
+        }],
+        "current_level": 1,
+        "current_enemy": None,
+        "enemies_defeated": 0,
+        "accumulated_rewards": {"cash": 0, "xp": 0, "reputation": 0},
+        "combat_log": [],
+        "status": "waiting",  # waiting, in_progress, completed, failed
+        "created_at": datetime.utcnow(),
+        "started_at": None,
+        "ended_at": None
+    }
+    
+    await db.guild_raids.insert_one(raid)
+    return serialize_doc(raid)
+
+
+@api_router.post("/guilds/{guild_id}/raid/{raid_id}/join")
+async def join_guild_raid(guild_id: str, raid_id: str, player_id: str):
+    """Join an existing guild raid lobby"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    raid = await db.guild_raids.find_one({"id": raid_id, "guild_id": guild_id})
+    if not raid:
+        raise HTTPException(status_code=404, detail="Raid not found")
+    
+    if raid["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Raid has already started or ended")
+    
+    if len(raid["participants"]) >= GUILD_RAID_MAX_PLAYERS:
+        raise HTTPException(status_code=400, detail=f"Raid is full (max {GUILD_RAID_MAX_PLAYERS} players)")
+    
+    # Check if already in this raid
+    if any(p["player_id"] == player_id for p in raid["participants"]):
+        raise HTTPException(status_code=400, detail="You are already in this raid")
+    
+    # Check if player is in another active raid
+    existing_raid = await db.guild_raids.find_one({
+        "participants.player_id": player_id,
+        "status": {"$in": ["waiting", "in_progress"]},
+        "id": {"$ne": raid_id}
+    })
+    if existing_raid:
+        raise HTTPException(status_code=400, detail="You are already in another active raid")
+    
+    # Add participant
+    participant = {
+        "player_id": player_id,
+        "player_name": player.get("name"),
+        "player_level": player.get("level", 1),
+        "stats": player.get("stats", {}),
+        "current_health": player["stats"].get("max_health", 100),
+        "max_health": player["stats"].get("max_health", 100)
+    }
+    
+    await db.guild_raids.update_one(
+        {"id": raid_id},
+        {"$push": {"participants": participant}}
+    )
+    
+    updated_raid = await db.guild_raids.find_one({"id": raid_id})
+    return serialize_doc(updated_raid)
+
+
+@api_router.post("/guilds/{guild_id}/raid/{raid_id}/leave")
+async def leave_guild_raid(guild_id: str, raid_id: str, player_id: str):
+    """Leave a guild raid (only during waiting phase)"""
+    raid = await db.guild_raids.find_one({"id": raid_id, "guild_id": guild_id})
+    if not raid:
+        raise HTTPException(status_code=404, detail="Raid not found")
+    
+    if raid["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Cannot leave raid after it has started")
+    
+    # Check if player is in the raid
+    if not any(p["player_id"] == player_id for p in raid["participants"]):
+        raise HTTPException(status_code=400, detail="You are not in this raid")
+    
+    # If leader leaves, cancel the raid
+    if raid["leader_id"] == player_id:
+        await db.guild_raids.update_one(
+            {"id": raid_id},
+            {"$set": {"status": "cancelled", "ended_at": datetime.utcnow()}}
+        )
+        return {"message": "Raid cancelled (leader left)"}
+    
+    # Remove participant
+    await db.guild_raids.update_one(
+        {"id": raid_id},
+        {"$pull": {"participants": {"player_id": player_id}}}
+    )
+    
+    return {"message": "Left raid successfully"}
+
+
+@api_router.post("/guilds/{guild_id}/raid/{raid_id}/begin")
+async def begin_guild_raid(guild_id: str, raid_id: str, player_id: str):
+    """Begin the raid (only leader can do this)"""
+    raid = await db.guild_raids.find_one({"id": raid_id, "guild_id": guild_id})
+    if not raid:
+        raise HTTPException(status_code=404, detail="Raid not found")
+    
+    if raid["leader_id"] != player_id:
+        raise HTTPException(status_code=403, detail="Only the raid leader can start the raid")
+    
+    if raid["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Raid has already started or ended")
+    
+    # Generate first enemy
+    first_enemy = generate_raid_enemy(1)
+    
+    await db.guild_raids.update_one(
+        {"id": raid_id},
+        {"$set": {
+            "status": "in_progress",
+            "started_at": datetime.utcnow(),
+            "current_enemy": first_enemy,
+            "combat_log": [f"🏰 RAID BEGINS! Level 1 - {first_enemy['name']} (Lv.{first_enemy['level']}) appears!"]
+        }}
+    )
+    
+    updated_raid = await db.guild_raids.find_one({"id": raid_id})
+    return serialize_doc(updated_raid)
+
+
+@api_router.get("/guilds/{guild_id}/raid/active")
+async def get_active_guild_raid(guild_id: str, player_id: str):
+    """Get any active raid for a player in this guild"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    # Find raid where player is a participant
+    raid = await db.guild_raids.find_one({
+        "guild_id": guild_id,
+        "participants.player_id": player_id,
+        "status": {"$in": ["waiting", "in_progress"]}
+    })
+    
+    return serialize_doc(raid) if raid else None
+
+
+@api_router.get("/guilds/{guild_id}/raid/available")
+async def get_available_guild_raids(guild_id: str, player_id: str):
+    """Get all available raids to join in this guild"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    # Find waiting raids that player is not already in
+    raids = await db.guild_raids.find({
+        "guild_id": guild_id,
+        "status": "waiting",
+        "participants.player_id": {"$ne": player_id}
+    }).to_list(10)
+    
+    # Filter to only show raids with space
+    available = [r for r in raids if len(r.get("participants", [])) < GUILD_RAID_MAX_PLAYERS]
+    
+    return serialize_doc(available)
+
+
+@api_router.get("/guilds/{guild_id}/raid/history")
+async def get_guild_raid_history(guild_id: str, player_id: str, limit: int = 10):
+    """Get raid history for a player in this guild"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    raids = await db.guild_raids.find({
+        "guild_id": guild_id,
+        "participants.player_id": player_id,
+        "status": {"$in": ["completed", "failed", "retreated"]}
+    }).sort("ended_at", -1).limit(limit).to_list(limit)
+    
+    return serialize_doc(raids)
+
+
+@api_router.get("/guilds/{guild_id}/raid/{raid_id}")
+async def get_guild_raid(guild_id: str, raid_id: str, player_id: str):
+    """Get current raid state"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    raid = await db.guild_raids.find_one({"id": raid_id, "guild_id": guild_id})
+    if not raid:
+        raise HTTPException(status_code=404, detail="Raid not found")
+    
+    return serialize_doc(raid)
+
+
+@api_router.post("/guilds/{guild_id}/raid/{raid_id}/fight")
+async def guild_raid_fight(guild_id: str, raid_id: str, player_id: str, action: str = "attack"):
+    """Execute a fight action in the raid"""
+    player = await db.players.find_one({"id": player_id})
+    if not player or player.get("guild_id") != guild_id:
+        raise HTTPException(status_code=403, detail="You are not a member of this guild")
+    
+    raid = await db.guild_raids.find_one({"id": raid_id, "guild_id": guild_id})
+    if not raid:
+        raise HTTPException(status_code=404, detail="Raid not found")
+    
+    if raid["status"] != "in_progress":
+        raise HTTPException(status_code=400, detail="Raid is not in progress")
+    
+    # Check if player is a participant
+    participant_idx = next((i for i, p in enumerate(raid["participants"]) if p["player_id"] == player_id), None)
+    if participant_idx is None:
+        raise HTTPException(status_code=403, detail="You are not a participant in this raid")
+    
+    current_enemy = raid.get("current_enemy")
+    if not current_enemy:
+        raise HTTPException(status_code=400, detail="No enemy to fight")
+    
+    participants = raid["participants"]
+    combat_log = raid.get("combat_log", [])
+    
+    # Calculate combined party stats
+    total_attack = sum(p["stats"].get("attack", 10) for p in participants)
+    total_defense = sum(p["stats"].get("defense", 10) for p in participants) // len(participants)
+    
+    # Execute attack based on action
+    if action == "attack":
+        # Party attacks enemy
+        damage = max(1, total_attack - current_enemy["stats"].get("defense", 0) // 2)
+        # Add some variance
+        damage = int(damage * random.uniform(0.8, 1.2))
+        
+        # Crit chance
+        if random.random() < 0.15:
+            damage = int(damage * 1.5)
+            combat_log.append(f"💥 CRITICAL! Party deals {damage} damage to {current_enemy['name']}!")
+        else:
+            combat_log.append(f"⚔️ Party attacks {current_enemy['name']} for {damage} damage!")
+        
+        current_enemy["stats"]["health"] = max(0, current_enemy["stats"]["health"] - damage)
+    
+    elif action == "defend":
+        # Heal the party slightly
+        heal_amount = 20
+        for p in participants:
+            p["current_health"] = min(p["max_health"], p["current_health"] + heal_amount)
+        combat_log.append(f"🛡️ Party defends and recovers {heal_amount} HP each!")
+    
+    # Enemy counter-attack if still alive
+    if current_enemy["stats"]["health"] > 0:
+        enemy_damage = max(1, current_enemy["stats"].get("attack", 10) - total_defense // 2)
+        enemy_damage = int(enemy_damage * random.uniform(0.8, 1.2))
+        
+        # Distribute damage among participants
+        damage_per_player = enemy_damage // len(participants)
+        for p in participants:
+            p["current_health"] = max(0, p["current_health"] - damage_per_player)
+        
+        combat_log.append(f"👊 {current_enemy['name']} counter-attacks for {damage_per_player} damage to each member!")
+        
+        # Check if all participants are down
+        all_down = all(p["current_health"] <= 0 for p in participants)
+        if all_down:
+            # Raid failed - but keep accumulated rewards
+            combat_log.append(f"💀 All party members have fallen! Raid ends at Level {raid['current_level']}.")
+            
+            # Distribute accumulated rewards
+            num_participants = len(participants)
+            rewards = raid["accumulated_rewards"]
+            share_cash = rewards["cash"] // num_participants
+            share_xp = rewards["xp"] // num_participants
+            share_rep = rewards["reputation"] // num_participants
+            
+            for p in participants:
+                await db.players.update_one(
+                    {"id": p["player_id"]},
+                    {"$inc": {
+                        "cash": share_cash,
+                        "xp": share_xp,
+                        "reputation": share_rep
+                    }}
+                )
+            
+            await db.guild_raids.update_one(
+                {"id": raid_id},
+                {"$set": {
+                    "status": "failed",
+                    "ended_at": datetime.utcnow(),
+                    "participants": participants,
+                    "current_enemy": current_enemy,
+                    "combat_log": combat_log,
+                    "final_rewards_per_player": {
+                        "cash": share_cash,
+                        "xp": share_xp,
+                        "reputation": share_rep
+                    }
+                }}
+            )
+            
+            updated_raid = await db.guild_raids.find_one({"id": raid_id})
+            return serialize_doc(updated_raid)
+    
+    # Check if enemy is defeated
+    if current_enemy["stats"]["health"] <= 0:
+        # Enemy defeated!
+        level = raid["current_level"]
+        level_rewards = get_raid_level_rewards(level)
+        
+        # Add to accumulated rewards
+        accumulated = raid["accumulated_rewards"]
+        accumulated["cash"] += level_rewards["cash"]
+        accumulated["xp"] += level_rewards["xp"]
+        accumulated["reputation"] += level_rewards["reputation"]
+        
+        enemies_defeated = raid["enemies_defeated"] + 1
+        
+        combat_log.append(f"🎉 {current_enemy['name']} defeated! +${level_rewards['cash']}, +{level_rewards['xp']} XP, +{level_rewards['reputation']} Rep")
+        
+        # Heal party slightly between levels
+        for p in participants:
+            heal = int(p["max_health"] * 0.2)
+            p["current_health"] = min(p["max_health"], p["current_health"] + heal)
+        combat_log.append(f"💚 Party recovers between battles!")
+        
+        # Check if raid is complete
+        if level >= GUILD_RAID_LEVELS:
+            # Raid complete!
+            combat_log.append(f"🏆 RAID COMPLETE! All {GUILD_RAID_LEVELS} levels cleared!")
+            
+            # Distribute rewards
+            num_participants = len(participants)
+            share_cash = accumulated["cash"] // num_participants
+            share_xp = accumulated["xp"] // num_participants
+            share_rep = accumulated["reputation"] // num_participants
+            
+            for p in participants:
+                await db.players.update_one(
+                    {"id": p["player_id"]},
+                    {"$inc": {
+                        "cash": share_cash,
+                        "xp": share_xp,
+                        "reputation": share_rep
+                    }}
+                )
+            
+            await db.guild_raids.update_one(
+                {"id": raid_id},
+                {"$set": {
+                    "status": "completed",
+                    "ended_at": datetime.utcnow(),
+                    "participants": participants,
+                    "current_enemy": None,
+                    "enemies_defeated": enemies_defeated,
+                    "accumulated_rewards": accumulated,
+                    "combat_log": combat_log,
+                    "final_rewards_per_player": {
+                        "cash": share_cash,
+                        "xp": share_xp,
+                        "reputation": share_rep
+                    }
+                }}
+            )
+            
+            updated_raid = await db.guild_raids.find_one({"id": raid_id})
+            return serialize_doc(updated_raid)
+        
+        # Move to next level
+        next_level = level + 1
+        
+        # Generate next enemy (boss every 5 levels)
+        if next_level % 5 == 0:
+            next_enemy = generate_raid_boss(next_level)
+            combat_log.append(f"⚠️ BOSS LEVEL! {next_enemy['name']} (Lv.{next_enemy['level']}) appears!")
+        else:
+            next_enemy = generate_raid_enemy(next_level)
+            combat_log.append(f"🏰 Level {next_level} - {next_enemy['name']} (Lv.{next_enemy['level']}) appears!")
+        
+        await db.guild_raids.update_one(
+            {"id": raid_id},
+            {"$set": {
+                "current_level": next_level,
+                "current_enemy": next_enemy,
+                "enemies_defeated": enemies_defeated,
+                "accumulated_rewards": accumulated,
+                "participants": participants,
+                "combat_log": combat_log
+            }}
+        )
+    else:
+        # Update raid state
+        await db.guild_raids.update_one(
+            {"id": raid_id},
+            {"$set": {
+                "current_enemy": current_enemy,
+                "participants": participants,
+                "combat_log": combat_log
+            }}
+        )
+    
+    updated_raid = await db.guild_raids.find_one({"id": raid_id})
+    return serialize_doc(updated_raid)
+
+
+@api_router.post("/guilds/{guild_id}/raid/{raid_id}/retreat")
+async def retreat_guild_raid(guild_id: str, raid_id: str, player_id: str):
+    """Retreat from the raid early - still keeps accumulated rewards"""
+    raid = await db.guild_raids.find_one({"id": raid_id, "guild_id": guild_id})
+    if not raid:
+        raise HTTPException(status_code=404, detail="Raid not found")
+    
+    if raid["leader_id"] != player_id:
+        raise HTTPException(status_code=403, detail="Only the raid leader can end the raid early")
+    
+    if raid["status"] != "in_progress":
+        raise HTTPException(status_code=400, detail="Raid is not in progress")
+    
+    participants = raid["participants"]
+    combat_log = raid.get("combat_log", [])
+    accumulated = raid["accumulated_rewards"]
+    
+    combat_log.append(f"🏳️ Party retreats from the raid at Level {raid['current_level']}.")
+    
+    # Distribute accumulated rewards
+    num_participants = len(participants)
+    share_cash = accumulated["cash"] // num_participants
+    share_xp = accumulated["xp"] // num_participants
+    share_rep = accumulated["reputation"] // num_participants
+    
+    for p in participants:
+        await db.players.update_one(
+            {"id": p["player_id"]},
+            {"$inc": {
+                "cash": share_cash,
+                "xp": share_xp,
+                "reputation": share_rep
+            }}
+        )
+    
+    await db.guild_raids.update_one(
+        {"id": raid_id},
+        {"$set": {
+            "status": "retreated",
+            "ended_at": datetime.utcnow(),
+            "combat_log": combat_log,
+            "final_rewards_per_player": {
+                "cash": share_cash,
+                "xp": share_xp,
+                "reputation": share_rep
+            }
+        }}
+    )
+    
+    updated_raid = await db.guild_raids.find_one({"id": raid_id})
+    return serialize_doc(updated_raid)
+
+
 # ============== SHOP ENDPOINTS ==============
 
 @api_router.get("/shops/spawn")

@@ -312,6 +312,114 @@ export const getActiveGuildBattle = async (
   return response.data;
 };
 
+// Guild Raid APIs
+export interface GuildRaidParticipant {
+  player_id: string;
+  player_name: string;
+  player_level: number;
+  stats: Record<string, number>;
+  current_health: number;
+  max_health: number;
+}
+
+export interface GuildRaidEnemy {
+  id: string;
+  name: string;
+  level: number;
+  stats: {
+    health: number;
+    max_health: number;
+    attack: number;
+    defense: number;
+  };
+  is_boss: boolean;
+}
+
+export interface GuildRaid {
+  id: string;
+  guild_id: string;
+  guild_name: string;
+  leader_id: string;
+  participants: GuildRaidParticipant[];
+  current_level: number;
+  current_enemy: GuildRaidEnemy | null;
+  enemies_defeated: number;
+  accumulated_rewards: {
+    cash: number;
+    xp: number;
+    reputation: number;
+  };
+  combat_log: string[];
+  status: 'waiting' | 'in_progress' | 'completed' | 'failed' | 'retreated' | 'cancelled';
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  final_rewards_per_player?: {
+    cash: number;
+    xp: number;
+    reputation: number;
+  };
+}
+
+export const startGuildRaid = async (guildId: string, playerId: string): Promise<GuildRaid> => {
+  const response = await api.post(`/guilds/${guildId}/raid/start?player_id=${playerId}`);
+  return response.data;
+};
+
+export const joinGuildRaid = async (guildId: string, raidId: string, playerId: string): Promise<GuildRaid> => {
+  const response = await api.post(`/guilds/${guildId}/raid/${raidId}/join?player_id=${playerId}`);
+  return response.data;
+};
+
+export const leaveGuildRaid = async (guildId: string, raidId: string, playerId: string): Promise<{ message: string }> => {
+  const response = await api.post(`/guilds/${guildId}/raid/${raidId}/leave?player_id=${playerId}`);
+  return response.data;
+};
+
+export const beginGuildRaid = async (guildId: string, raidId: string, playerId: string): Promise<GuildRaid> => {
+  const response = await api.post(`/guilds/${guildId}/raid/${raidId}/begin?player_id=${playerId}`);
+  return response.data;
+};
+
+export const getGuildRaid = async (guildId: string, raidId: string, playerId: string): Promise<GuildRaid> => {
+  const response = await api.get(`/guilds/${guildId}/raid/${raidId}?player_id=${playerId}`);
+  return response.data;
+};
+
+export const getActiveGuildRaid = async (guildId: string, playerId: string): Promise<GuildRaid | null> => {
+  const response = await api.get(`/guilds/${guildId}/raid/active?player_id=${playerId}`);
+  return response.data;
+};
+
+export const getAvailableGuildRaids = async (guildId: string, playerId: string): Promise<GuildRaid[]> => {
+  const response = await api.get(`/guilds/${guildId}/raid/available?player_id=${playerId}`);
+  return response.data;
+};
+
+export const guildRaidFight = async (
+  guildId: string,
+  raidId: string,
+  playerId: string,
+  action: string = 'attack'
+): Promise<GuildRaid> => {
+  const response = await api.post(`/guilds/${guildId}/raid/${raidId}/fight?player_id=${playerId}&action=${action}`);
+  return response.data;
+};
+
+export const retreatGuildRaid = async (guildId: string, raidId: string, playerId: string): Promise<GuildRaid> => {
+  const response = await api.post(`/guilds/${guildId}/raid/${raidId}/retreat?player_id=${playerId}`);
+  return response.data;
+};
+
+export const getGuildRaidHistory = async (
+  guildId: string,
+  playerId: string,
+  limit: number = 10
+): Promise<GuildRaid[]> => {
+  const response = await api.get(`/guilds/${guildId}/raid/history?player_id=${playerId}&limit=${limit}`);
+  return response.data;
+};
+
 // Skills APIs
 export const getAllSkills = async (): Promise<Record<string, Skill>> => {
   const response = await api.get('/skills');
