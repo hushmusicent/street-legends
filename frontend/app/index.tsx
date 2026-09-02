@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
-import { getPlayer } from '../services/api';
+import { getPlayer, API_URL } from '../services/api';
 import { GameButton } from '../components/GameButton';
 import { Ionicons } from '@expo/vector-icons';
 import { OptionsModal } from '../components/OptionsModal';
+
+// Sponsor logo URLs (processed through rembg to remove white backgrounds)
+const APPSOLUT_LOGO = `${API_URL}/api/sprites/remove-bg?url=${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/cab2fc2b9acc4ae2bcc31468e1b881a1_appsolut_header_4096x2304.jpg')}`;
+const HUSH_LOGO = `${API_URL}/api/sprites/remove-bg?url=${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/334c2ba3642c4dbe8d637f25db5a761c_Resized_mainlogo.jpeg')}`;
 
 export default function Index() {
   const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
@@ -53,20 +57,23 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Image 
-            source={{ uri: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/f52b6eadcf254e84b2d978f139a47593_sl_2_512.png' }}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.logoContainer}>
+            <Image 
+              source={{ uri: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/f52b6eadcf254e84b2d978f139a47593_sl_2_512.png' }}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.title}>STREET</Text>
+          <Text style={styles.subtitle}>LEGENDS</Text>
+          <Text style={styles.tagline}>GPS Crime RPG</Text>
         </View>
-        <Text style={styles.title}>STREET</Text>
-        <Text style={styles.subtitle}>LEGENDS</Text>
-        <Text style={styles.tagline}>GPS Crime RPG</Text>
-      </View>
 
-      <View style={styles.content}>
         <View style={styles.featureList}>
           <View style={styles.featureItem}>
             <Ionicons name="location" size={24} color="#e74c3c" />
@@ -80,14 +87,9 @@ export default function Index() {
             <Ionicons name="people" size={24} color="#3498db" />
             <Text style={styles.featureText}>Multiplayer PvP & Guilds</Text>
           </View>
-          <View style={styles.featureItem}>
-            <Ionicons name="sparkles" size={24} color="#9b59b6" />
-            <Text style={styles.featureText}>AI-Generated Missions</Text>
-          </View>
         </View>
-      </View>
 
-      <View style={styles.footer}>
+        <View style={styles.footer}>
         <GameButton
           title="LOGIN"
           onPress={() => handleNavigate('/login')}
@@ -113,7 +115,25 @@ export default function Index() {
           <Text style={styles.howToPlayBtnText}>HOW TO PLAY</Text>
         </TouchableOpacity>
         {error && <Text style={styles.errorText}>{error}</Text>}
+        
+        {/* Sponsor Logos */}
+        <View style={styles.sponsorSection}>
+          <Text style={styles.sponsorLabel}>Sponsored by</Text>
+          <View style={styles.sponsorLogos}>
+            <Image 
+              source={{ uri: APPSOLUT_LOGO }}
+              style={styles.sponsorLogo}
+              resizeMode="contain"
+            />
+            <Image 
+              source={{ uri: HUSH_LOGO }}
+              style={styles.sponsorLogo}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
       </View>
+      </ScrollView>
 
       <OptionsModal
         visible={showOptions}
@@ -130,6 +150,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 40,
@@ -185,12 +208,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textTransform: 'uppercase',
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-  },
   featureList: {
-    gap: 16,
+    gap: 12,
+    marginTop: 24,
+    marginBottom: 24,
   },
   featureItem: {
     flexDirection: 'row',
@@ -256,5 +277,28 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
     marginTop: 16,
     textAlign: 'center',
+  },
+  sponsorSection: {
+    marginTop: 24,
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  sponsorLabel: {
+    color: '#444',
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  sponsorLogos: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 32,
+  },
+  sponsorLogo: {
+    width: 70,
+    height: 35,
+    opacity: 0.6,
   },
 });
