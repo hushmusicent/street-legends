@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { getPlayer } from '../services/api';
@@ -55,7 +55,11 @@ export default function Index() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <Ionicons name="skull" size={80} color="#e74c3c" />
+          <Image 
+            source={{ uri: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/f52b6eadcf254e84b2d978f139a47593_sl_2_512.png' }}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
         <Text style={styles.title}>STREET</Text>
         <Text style={styles.subtitle}>LEGENDS</Text>
@@ -146,15 +150,20 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     backgroundColor: 'rgba(231, 76, 60, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
     borderWidth: 3,
     borderColor: '#e74c3c',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 110,
+    height: 110,
   },
   title: {
     fontSize: 48,
