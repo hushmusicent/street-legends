@@ -742,4 +742,72 @@ export const completeShootout = async (gameId: string, hits: number, standalone:
   return response.data;
 };
 
+// Image Upload APIs
+import { Platform } from 'react-native';
+
+export const uploadGuildIcon = async (guildId: string, playerId: string, uri: string, fileName: string): Promise<{ message: string; path: string }> => {
+  const formData = new FormData();
+  
+  if (Platform.OS === 'web') {
+    // Web: convert URI to blob
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    formData.append('file', blob, fileName);
+  } else {
+    // Native: use URI directly
+    const fileType = fileName.split('.').pop()?.toLowerCase() || 'png';
+    const mimeType = fileType === 'jpg' || fileType === 'jpeg' ? 'image/jpeg' : `image/${fileType}`;
+    formData.append('file', {
+      uri,
+      name: fileName,
+      type: mimeType,
+    } as any);
+  }
+  
+  const response = await axios.post(
+    `${API_URL}/api/upload/guild-icon/${guildId}?player_id=${playerId}`,
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    }
+  );
+  return response.data;
+};
+
+export const uploadProfilePicture = async (playerId: string, uri: string, fileName: string): Promise<{ message: string; path: string }> => {
+  const formData = new FormData();
+  
+  if (Platform.OS === 'web') {
+    // Web: convert URI to blob
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    formData.append('file', blob, fileName);
+  } else {
+    // Native: use URI directly
+    const fileType = fileName.split('.').pop()?.toLowerCase() || 'png';
+    const mimeType = fileType === 'jpg' || fileType === 'jpeg' ? 'image/jpeg' : `image/${fileType}`;
+    formData.append('file', {
+      uri,
+      name: fileName,
+      type: mimeType,
+    } as any);
+  }
+  
+  const response = await axios.post(
+    `${API_URL}/api/upload/profile-picture/${playerId}`,
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    }
+  );
+  return response.data;
+};
+
+export const getImageUrl = (path: string): string => {
+  if (!path) return '';
+  return `${API_URL}/api/images/${path}`;
+};
+
 export default api;

@@ -56,6 +56,60 @@ def serialize_doc(doc):
 # AI Configuration
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
+# ============== OBJECT STORAGE CONFIGURATION ==============
+import requests
+from starlette.concurrency import run_in_threadpool
+
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+APP_NAME = "street-legends"
+storage_key = None
+
+def init_storage():
+    """Initialize storage and get reusable storage_key"""
+    global storage_key
+    if storage_key:
+        return storage_key
+    if not EMERGENT_LLM_KEY:
+        logger.warning("EMERGENT_LLM_KEY not set, storage disabled")
+        return None
+    try:
+        resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_LLM_KEY}, timeout=30)
+        resp.raise_for_status()
+        storage_key = resp.json()["storage_key"]
+        logger.info("Object storage initialized successfully")
+        return storage_key
+    except Exception as e:
+        logger.error(f"Failed to initialize storage: {e}")
+        return None
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    """Upload object to storage"""
+    key = init_storage()
+    if not key:
+        raise Exception("Storage not initialized")
+    resp = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data,
+        timeout=120
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+def get_object(path: str) -> tuple:
+    """Download object from storage"""
+    key = init_storage()
+    if not key:
+        raise Exception("Storage not initialized")
+    resp = requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key},
+        timeout=60
+    )
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
 # Create the main app
 app = FastAPI(title="GTA GPS RPG API")
 
@@ -1029,6 +1083,7 @@ class Player(BaseModel):
     wins: int = 0
     losses: int = 0
     missions_completed: int = 0
+    profile_picture: Optional[str] = None  # Storage path for profile picture
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_active: datetime = Field(default_factory=datetime.utcnow)
 
@@ -1123,6 +1178,8 @@ class Guild(BaseModel):
     xp: int = 0
     territory_count: int = 0
     total_wins: int = 0
+    total_reputation: int = 0
+    icon_path: Optional[str] = None  # Storage path for custom guild icon
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class GuildCreate(BaseModel):
@@ -2504,10 +2561,19 @@ async def get_guild(guild_id: str):
     if not guild:
         raise HTTPException(status_code=404, detail="Guild not found")
     
-    # Get member details
+    # Get member details with profile pictures
+    # Support both profile_picture (Object Storage) and profile_pic (legacy base64)
     members = await db.players.find({"id": {"$in": guild["members"]}}).to_list(100)
     guild["member_details"] = [
-        {"id": m["id"], "name": m["name"], "level": m["level"], "character_class": m["character_class"]}
+        {
+            "id": m["id"], 
+            "name": m["name"], 
+            "level": m["level"], 
+            "character_class": m["character_class"],
+            "reputation": m.get("reputation", 0),
+            "profile_picture": m.get("profile_picture"),  # Object Storage path
+            "profile_pic": m.get("profile_pic")  # Legacy base64 data
+        }
         for m in members
     ]
     
@@ -3932,6 +3998,106 @@ async def retreat_guild_raid(guild_id: str, raid_id: str, player_id: str):
     
     updated_raid = await db.guild_raids.find_one({"id": raid_id})
     return serialize_doc(updated_raid)
+
+
+# ============== IMAGE UPLOAD ENDPOINTS ==============
+from fastapi import File, UploadFile
+from fastapi.responses import Response
+
+@api_router.post("/upload/guild-icon/{guild_id}")
+async def upload_guild_icon(guild_id: str, player_id: str, file: UploadFile = File(...)):
+    """Upload a custom guild icon - only guild leader can do this"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    guild = await db.guilds.find_one({"id": guild_id})
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    if guild.get("leader_id") != player_id:
+        raise HTTPException(status_code=403, detail="Only the guild leader can change the guild icon")
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {allowed_types}")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Size limit (2MB)
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 2MB")
+    
+    # Generate storage path
+    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+    storage_path = f"{APP_NAME}/guilds/{guild_id}/icon.{ext}"
+    
+    try:
+        # Upload to storage
+        result = await run_in_threadpool(put_object, storage_path, content, file.content_type)
+        
+        # Update guild with icon path
+        await db.guilds.update_one(
+            {"id": guild_id},
+            {"$set": {"icon_path": storage_path}}
+        )
+        
+        return {"message": "Guild icon uploaded successfully", "path": storage_path}
+    except Exception as e:
+        logger.error(f"Failed to upload guild icon: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload image")
+
+
+@api_router.post("/upload/profile-picture/{player_id}")
+async def upload_profile_picture(player_id: str, file: UploadFile = File(...)):
+    """Upload a player's profile picture"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {allowed_types}")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Size limit (2MB)
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 2MB")
+    
+    # Generate storage path
+    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+    storage_path = f"{APP_NAME}/players/{player_id}/profile.{ext}"
+    
+    try:
+        # Upload to storage
+        result = await run_in_threadpool(put_object, storage_path, content, file.content_type)
+        
+        # Update player with profile picture path
+        await db.players.update_one(
+            {"id": player_id},
+            {"$set": {"profile_picture": storage_path}}
+        )
+        
+        return {"message": "Profile picture uploaded successfully", "path": storage_path}
+    except Exception as e:
+        logger.error(f"Failed to upload profile picture: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload image")
+
+
+@api_router.get("/images/{path:path}")
+async def get_image(path: str):
+    """Retrieve an image from storage"""
+    try:
+        content, content_type = await run_in_threadpool(get_object, path)
+        return Response(content=content, media_type=content_type)
+    except Exception as e:
+        logger.error(f"Failed to get image {path}: {e}")
+        raise HTTPException(status_code=404, detail="Image not found")
 
 
 # ============== SHOP ENDPOINTS ==============
@@ -7056,6 +7222,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    try:
+        await run_in_threadpool(init_storage)
+        logger.info("Storage initialized on startup")
+    except Exception as e:
+        logger.warning(f"Storage initialization failed on startup: {e}")
 
 
 @app.on_event("shutdown")

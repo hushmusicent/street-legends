@@ -37,6 +37,7 @@ export interface Player {
   wins: number;
   losses: number;
   missions_completed: number;
+  profile_picture?: string;
   created_at: string;
   last_active: string;
 }
@@ -120,12 +121,17 @@ export interface Guild {
   xp: number;
   territory_count: number;
   total_wins: number;
+  total_reputation?: number;
+  icon_path?: string;
   created_at: string;
   member_details?: {
     id: string;
     name: string;
     level: number;
     character_class: string;
+    reputation?: number;
+    profile_picture?: string;  // Object Storage path
+    profile_pic?: string;  // Legacy base64 data
   }[];
 }
 

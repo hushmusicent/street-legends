@@ -12,10 +12,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useGameStore } from '../../stores/gameStore';
 import { GameButton } from '../../components/GameButton';
 import {
@@ -39,6 +41,8 @@ import {
   GuildBattleChallenge,
   GuildBattle,
   GuildBattleEligibility,
+  uploadGuildIcon,
+  getImageUrl,
 } from '../../services/api';
 import { Guild } from '../../types/game';
 
@@ -73,6 +77,9 @@ export default function GuildScreen() {
   const [loadingBattles, setLoadingBattles] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
   const battlePollRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Guild icon upload state
+  const [uploadingIcon, setUploadingIcon] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -341,6 +348,52 @@ export default function GuildScreen() {
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     return date.toLocaleDateString();
+  };
+
+  const handleUploadGuildIcon = async () => {
+    if (!playerGuild?.id || !playerId) return;
+    
+    // Check if user is the leader
+    if (playerGuild.leader_id !== player?.id) {
+      Alert.alert('Permission Denied', 'Only the guild leader can change the guild icon.');
+      return;
+    }
+    
+    try {
+      // Request permission
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload a guild icon.');
+        return;
+      }
+      
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      
+      if (result.canceled || !result.assets?.[0]) return;
+      
+      const asset = result.assets[0];
+      const fileName = asset.fileName || `guild_icon_${Date.now()}.jpg`;
+      
+      setUploadingIcon(true);
+      
+      await uploadGuildIcon(playerGuild.id, playerId, asset.uri, fileName);
+      
+      // Refresh guild data to get the new icon
+      await handleRefresh();
+      
+      Alert.alert('Success', 'Guild icon updated successfully!');
+    } catch (error: any) {
+      console.error('Failed to upload guild icon:', error);
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to upload guild icon');
+    } finally {
+      setUploadingIcon(false);
+    }
   };
 
   const guildTotalRep = playerGuild?.member_details?.reduce(
@@ -620,9 +673,31 @@ export default function GuildScreen() {
               {/* Guild Header */}
               <View style={styles.myGuildSection}>
                 <View style={styles.guildHeader}>
-                  <View style={styles.guildIcon}>
-                    <Ionicons name="shield" size={40} color="#e74c3c" />
-                  </View>
+                  <TouchableOpacity 
+                    style={styles.guildIconContainer}
+                    onPress={playerGuild.leader_id === player?.id ? handleUploadGuildIcon : undefined}
+                    disabled={uploadingIcon || playerGuild.leader_id !== player?.id}
+                  >
+                    {uploadingIcon ? (
+                      <View style={styles.guildIcon}>
+                        <ActivityIndicator size="small" color="#e74c3c" />
+                      </View>
+                    ) : playerGuild.icon_path ? (
+                      <Image 
+                        source={{ uri: getImageUrl(playerGuild.icon_path) }}
+                        style={styles.guildIconImage}
+                      />
+                    ) : (
+                      <View style={styles.guildIcon}>
+                        <Ionicons name="shield" size={40} color="#e74c3c" />
+                      </View>
+                    )}
+                    {playerGuild.leader_id === player?.id && (
+                      <View style={styles.guildIconEditBadge}>
+                        <Ionicons name="camera" size={12} color="#fff" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
                   <View style={styles.guildInfo}>
                     <Text style={styles.guildName}>{playerGuild.name}</Text>
                     <Text style={styles.guildTag}>[{playerGuild.tag}]</Text>
@@ -706,28 +781,43 @@ export default function GuildScreen() {
 
                   {/* Members List */}
                   <Text style={styles.sectionTitle}>MEMBERS</Text>
-                  {playerGuild.member_details?.map((member) => (
-                    <View key={member.id} style={styles.memberRow}>
-                      <View style={styles.memberAvatar}>
-                        <Ionicons name="person" size={16} color="#fff" />
+                  {playerGuild.member_details?.map((member) => {
+                    // Support both profile_picture (Object Storage path) and profile_pic (legacy base64)
+                    const hasProfilePicture = member.profile_picture || member.profile_pic;
+                    const profilePicUri = member.profile_picture 
+                      ? getImageUrl(member.profile_picture)  // Object Storage URL
+                      : member.profile_pic;  // Direct base64 data URI
+                    
+                    return (
+                      <View key={member.id} style={styles.memberRow}>
+                        {hasProfilePicture ? (
+                          <Image 
+                            source={{ uri: profilePicUri }}
+                            style={styles.memberAvatarImage}
+                          />
+                        ) : (
+                          <View style={styles.memberAvatar}>
+                            <Ionicons name="person" size={16} color="#fff" />
+                          </View>
+                        )}
+                        <View style={styles.memberInfo}>
+                          <Text style={styles.memberName}>
+                            {member.name}
+                            {member.id === playerGuild.leader_id && (
+                              <Text style={styles.leaderBadge}> LEADER</Text>
+                            )}
+                          </Text>
+                          <Text style={styles.memberClass}>
+                            Lv.{member.level} {member.character_class.replace('_', ' ')}
+                          </Text>
+                        </View>
+                        <View style={styles.memberRep}>
+                          <Ionicons name="star" size={12} color="#f39c12" />
+                          <Text style={styles.memberRepText}>{member.reputation || 0}</Text>
+                        </View>
                       </View>
-                      <View style={styles.memberInfo}>
-                        <Text style={styles.memberName}>
-                          {member.name}
-                          {member.id === playerGuild.leader_id && (
-                            <Text style={styles.leaderBadge}> LEADER</Text>
-                          )}
-                        </Text>
-                        <Text style={styles.memberClass}>
-                          Lv.{member.level} {member.character_class.replace('_', ' ')}
-                        </Text>
-                      </View>
-                      <View style={styles.memberRep}>
-                        <Ionicons name="star" size={12} color="#f39c12" />
-                        <Text style={styles.memberRepText}>{member.reputation || 0}</Text>
-                      </View>
-                    </View>
-                  ))}
+                    );
+                  })}
 
                   {player?.id !== playerGuild.leader_id && (
                     <TouchableOpacity style={styles.leaveButton} onPress={handleLeaveGuild}>
@@ -856,9 +946,16 @@ export default function GuildScreen() {
                     <View key={guild.id} style={styles.guildCard}>
                       <View style={styles.guildCardHeader}>
                         <View style={styles.guildCardLeft}>
-                          <View style={styles.guildCardIcon}>
-                            <Ionicons name="shield-half" size={18} color="#e74c3c" />
-                          </View>
+                          {guild.icon_path ? (
+                            <Image 
+                              source={{ uri: getImageUrl(guild.icon_path) }}
+                              style={styles.guildCardIconImage}
+                            />
+                          ) : (
+                            <View style={styles.guildCardIcon}>
+                              <Ionicons name="shield-half" size={18} color="#e74c3c" />
+                            </View>
+                          )}
                           <View>
                             <Text style={styles.guildCardName}>{guild.name}</Text>
                             <Text style={styles.guildCardTag}>[{guild.tag}]</Text>
@@ -1051,6 +1148,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  guildIconContainer: {
+    position: 'relative',
+  },
+  guildIconImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: '#e74c3c',
+  },
+  guildIconEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#e74c3c',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#0a0a0a',
+  },
   guildInfo: {
     flex: 1,
     marginLeft: 16,
@@ -1218,6 +1338,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  memberAvatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#333',
   },
   memberInfo: {
     flex: 1,
@@ -1869,6 +1995,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(231, 76, 60, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 10,
+  },
+  guildCardIconImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     marginRight: 10,
   },
   guildCardName: {
