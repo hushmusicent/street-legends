@@ -4761,15 +4761,15 @@ BANK_ICONS = ["🏦", "💰", "🏛️", "💵"]
 
 @api_router.get("/banks/spawn")
 async def spawn_banks(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn banks near a location — very rare, only 25% of areas have one"""
+    """Spawn banks near a location — very rare, only 10% of areas have one"""
     # Use a grid-based seed so the same area always gives the same result
     grid_lat = round(latitude * 200) / 200  # ~500m grid cells
     grid_lng = round(longitude * 200) / 200
     area_seed = hash(f"bank_{grid_lat}_{grid_lng}")
     rng = random.Random(area_seed)
     
-    # Only spawn in ~25% of areas (banks are rare)
-    if rng.random() > 0.25:
+    # Only spawn in ~10% of areas (banks are very rare - a significant opportunity)
+    if rng.random() > 0.10:
         return []
     
     # Check if banks already exist nearby in DB
@@ -4817,15 +4817,15 @@ async def rob_bank(bank_id: str, player_id: str):
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
     
-    # Check cooldown (30 minutes per player per bank)
+    # Check cooldown (60 minutes per player per bank - banks are a rare opportunity)
     cooldown_key = f"bank_cooldowns.{bank_id}"
     last_rob = player.get("bank_cooldowns", {}).get(bank_id)
     if last_rob:
         try:
             last_dt = datetime.fromisoformat(last_rob)
             mins_since = (datetime.utcnow() - last_dt).total_seconds() / 60
-            if mins_since < 30:
-                remaining = round(30 - mins_since, 1)
+            if mins_since < 60:
+                remaining = round(60 - mins_since, 1)
                 raise HTTPException(
                     status_code=400,
                     detail=f"The heat is still on from your last job here! Wait {remaining} minutes."
