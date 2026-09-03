@@ -31,8 +31,12 @@ import {
   startRunaway,
   startPackageGrab,
   startShootout,
+  getRelationshipStatus,
+  followPlayer,
+  unfollowPlayer,
+  sendFriendRequest,
 } from '../../services/api';
-import { Monster, Mission, NearbyPlayer } from '../../types/game';
+import { Monster, Mission, NearbyPlayer, RelationshipStatus } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
 import { SFX } from '../../hooks/useSoundEffects';
@@ -74,6 +78,11 @@ export default function MapScreen() {
   const [startingShootout, setStartingShootout] = useState(false);
   const globalProfilePic = useGameStore(s => s.profilePic);
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
+  
+  // Player popup social state
+  const [playerRelationship, setPlayerRelationship] = useState<RelationshipStatus | null>(null);
+  const [loadingFollow, setLoadingFollow] = useState(false);
+  const [loadingFriendRequest, setLoadingFriendRequest] = useState(false);
   
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const headingSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -383,6 +392,57 @@ export default function MapScreen() {
     }
   }, [playerId]);
 
+  // Load relationship status when player popup opens
+  const loadPlayerRelationship = useCallback(async (targetId: string) => {
+    if (!playerId) return;
+    try {
+      const status = await getRelationshipStatus(playerId, targetId);
+      setPlayerRelationship(status);
+    } catch (error) {
+      console.error('Failed to load relationship status:', error);
+      setPlayerRelationship(null);
+    }
+  }, [playerId]);
+
+  const handleFollowPlayer = useCallback(async (targetPlayer: NearbyPlayer) => {
+    if (!playerId || loadingFollow) return;
+    setLoadingFollow(true);
+    try {
+      if (playerRelationship?.is_following) {
+        await unfollowPlayer(playerId, targetPlayer.id);
+        showGameToast({ type: 'info', title: 'Unfollowed', message: `Unfollowed ${targetPlayer.name}` });
+      } else {
+        await followPlayer(playerId, targetPlayer.id);
+        showGameToast({ type: 'success', title: 'Following', message: `Now following ${targetPlayer.name}` });
+      }
+      // Refresh relationship status
+      await loadPlayerRelationship(targetPlayer.id);
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Action failed');
+    } finally {
+      setLoadingFollow(false);
+    }
+  }, [playerId, playerRelationship, loadingFollow, loadPlayerRelationship]);
+
+  const handleAddFriend = useCallback(async (targetPlayer: NearbyPlayer) => {
+    if (!playerId || loadingFriendRequest) return;
+    setLoadingFriendRequest(true);
+    try {
+      const result = await sendFriendRequest(playerId, targetPlayer.id);
+      if (result.became_friends) {
+        showGameToast({ type: 'success', title: 'Friends!', message: `You are now friends with ${targetPlayer.name}!` });
+      } else {
+        showGameToast({ type: 'info', title: 'Request Sent', message: `Friend request sent to ${targetPlayer.name}` });
+      }
+      // Refresh relationship status
+      await loadPlayerRelationship(targetPlayer.id);
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to send friend request');
+    } finally {
+      setLoadingFriendRequest(false);
+    }
+  }, [playerId, loadingFriendRequest, loadPlayerRelationship]);
+
   const handleRobBank = useCallback(async () => {
     if (!playerId || !selectedBank || robbingBank) return;
     setRobbingBank(true);
@@ -681,7 +741,11 @@ export default function MapScreen() {
       if (mission) setSelectedMarker({ type: 'mission', data: mission });
     } else if (marker.type === 'player') {
       const targetPlayer = nearbyPlayers.find((p) => p.id === marker.id);
-      if (targetPlayer) setSelectedMarker({ type: 'player', data: targetPlayer });
+      if (targetPlayer) {
+        setSelectedMarker({ type: 'player', data: targetPlayer });
+        setPlayerRelationship(null); // Reset while loading
+        loadPlayerRelationship(targetPlayer.id);
+      }
     } else if (marker.type === 'shop') {
       const shop = nearbyShops.find((s) => s.id === marker.id);
       if (shop) setSelectedMarker({ type: 'shop', data: shop });
@@ -852,8 +916,80 @@ export default function MapScreen() {
                   <Text style={styles.popupSubtitle}>Lv.{selectedMarker.data.level} • {selectedMarker.data.distance}m</Text>
                 </View>
               </View>
-              <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#4285F4'}]} onPress={() => handlePvPChallenge(selectedMarker.data)}>
-                <Text style={styles.actionButtonText}>CHALLENGE</Text>
+              
+              {/* Social Status */}
+              {playerRelationship && (
+                <View style={styles.socialStatusRow}>
+                  {playerRelationship.is_friend && (
+                    <View style={styles.friendIndicator}>
+                      <Ionicons name="people" size={12} color="#27ae60" />
+                      <Text style={styles.friendIndicatorText}>Friend</Text>
+                    </View>
+                  )}
+                  {playerRelationship.is_followed_by && !playerRelationship.is_friend && (
+                    <View style={styles.followsYouIndicator}>
+                      <Text style={styles.followsYouText}>Follows you</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              {/* Social Buttons */}
+              <View style={styles.socialButtonsRow}>
+                <TouchableOpacity 
+                  style={[
+                    styles.socialButton, 
+                    playerRelationship?.is_following && styles.socialButtonActive
+                  ]} 
+                  onPress={() => handleFollowPlayer(selectedMarker.data)}
+                  disabled={loadingFollow}
+                >
+                  {loadingFollow ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons 
+                        name={playerRelationship?.is_following ? "checkmark-circle" : "add"} 
+                        size={14} 
+                        color="#fff" 
+                      />
+                      <Text style={styles.socialButtonText}>
+                        {playerRelationship?.is_following ? 'Following' : 'Follow'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                
+                {!playerRelationship?.is_friend && (
+                  <TouchableOpacity 
+                    style={[
+                      styles.socialButton, 
+                      styles.friendRequestButton,
+                      playerRelationship?.has_sent_friend_request && styles.socialButtonPending
+                    ]} 
+                    onPress={() => handleAddFriend(selectedMarker.data)}
+                    disabled={loadingFriendRequest || playerRelationship?.has_sent_friend_request}
+                  >
+                    {loadingFriendRequest ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons 
+                          name={playerRelationship?.has_sent_friend_request ? "hourglass" : "person-add"} 
+                          size={14} 
+                          color="#fff" 
+                        />
+                        <Text style={styles.socialButtonText}>
+                          {playerRelationship?.has_sent_friend_request ? 'Pending' : 'Add Friend'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#e74c3c'}]} onPress={() => handlePvPChallenge(selectedMarker.data)}>
+                <Text style={styles.actionButtonText}>CHALLENGE TO BATTLE</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1908,5 +2044,68 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  
+  // Social buttons for player popup
+  socialStatusRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  friendIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(39, 174, 96, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  friendIndicatorText: {
+    color: '#27ae60',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  followsYouIndicator: {
+    backgroundColor: 'rgba(52, 152, 219, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  followsYouText: {
+    color: '#3498db',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3498db',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  socialButtonActive: {
+    backgroundColor: '#27ae60',
+  },
+  socialButtonPending: {
+    backgroundColor: '#7f8c8d',
+  },
+  friendRequestButton: {
+    backgroundColor: '#9b59b6',
+  },
+  socialButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -1084,6 +1084,12 @@ class Player(BaseModel):
     losses: int = 0
     missions_completed: int = 0
     profile_picture: Optional[str] = None  # Storage path for profile picture
+    # Social fields
+    followers: List[str] = Field(default_factory=list)  # List of player IDs who follow this player
+    following: List[str] = Field(default_factory=list)  # List of player IDs this player follows
+    friends: List[str] = Field(default_factory=list)  # List of mutual friend player IDs
+    friend_requests_sent: List[str] = Field(default_factory=list)  # Outgoing friend requests
+    friend_requests_received: List[str] = Field(default_factory=list)  # Incoming friend requests
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_active: datetime = Field(default_factory=datetime.utcnow)
 
@@ -1500,6 +1506,32 @@ async def create_player(player_data: PlayerCreate):
     await db.players.insert_one(player.dict())
     return player
 
+# IMPORTANT: Static routes must come BEFORE dynamic {player_id} routes
+@api_router.get("/players/search")
+async def search_players_route(name: str, limit: int = 20):
+    """Search players by name (case-insensitive partial match)"""
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
+    
+    players = await db.players.find(
+        {"name": {"$regex": name, "$options": "i"}},
+        {"id": 1, "name": 1, "level": 1, "character_class": 1, "profile_picture": 1, "profile_pic": 1, "wins": 1, "reputation": 1}
+    ).limit(limit).to_list(limit)
+    
+    return [
+        {
+            "id": p["id"],
+            "name": p["name"],
+            "level": p["level"],
+            "character_class": p["character_class"],
+            "profile_picture": p.get("profile_picture"),
+            "profile_pic": p.get("profile_pic"),
+            "wins": p.get("wins", 0),
+            "reputation": p.get("reputation", 0),
+        }
+        for p in players
+    ]
+
 @api_router.get("/players/{player_id}", response_model=Player)
 async def get_player(player_id: str):
     """Get player by ID with passive health regeneration"""
@@ -1704,6 +1736,283 @@ async def get_leaderboard(limit: int = 20):
         }
         for i, p in enumerate(players)
     ]
+
+# ============== SOCIAL / FRIENDS ENDPOINTS ==============
+
+@api_router.get("/players/{player_id}/social-stats")
+async def get_social_stats(player_id: str):
+    """Get follower/following/friends counts for a player"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    return {
+        "followers_count": len(player.get("followers", [])),
+        "following_count": len(player.get("following", [])),
+        "friends_count": len(player.get("friends", [])),
+        "pending_requests": len(player.get("friend_requests_received", [])),
+    }
+
+@api_router.get("/players/{player_id}/friends")
+async def get_friends_list(player_id: str):
+    """Get full friends list with details"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    friend_ids = player.get("friends", [])
+    if not friend_ids:
+        return []
+    
+    friends = await db.players.find(
+        {"id": {"$in": friend_ids}},
+        {"id": 1, "name": 1, "level": 1, "character_class": 1, "profile_picture": 1, "profile_pic": 1, 
+         "wins": 1, "losses": 1, "reputation": 1, "last_active": 1, "position": 1}
+    ).to_list(100)
+    
+    return [
+        {
+            "id": f["id"],
+            "name": f["name"],
+            "level": f["level"],
+            "character_class": f["character_class"],
+            "profile_picture": f.get("profile_picture"),
+            "profile_pic": f.get("profile_pic"),
+            "wins": f.get("wins", 0),
+            "losses": f.get("losses", 0),
+            "reputation": f.get("reputation", 0),
+            "last_active": f.get("last_active"),
+            "is_online": (datetime.utcnow() - f.get("last_active", datetime.min)).total_seconds() < 300 if f.get("last_active") else False,
+        }
+        for f in friends
+    ]
+
+@api_router.get("/players/{player_id}/friend-requests")
+async def get_friend_requests(player_id: str):
+    """Get pending friend requests"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    request_ids = player.get("friend_requests_received", [])
+    if not request_ids:
+        return []
+    
+    requesters = await db.players.find(
+        {"id": {"$in": request_ids}},
+        {"id": 1, "name": 1, "level": 1, "character_class": 1, "profile_picture": 1, "profile_pic": 1}
+    ).to_list(100)
+    
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "level": r["level"],
+            "character_class": r["character_class"],
+            "profile_picture": r.get("profile_picture"),
+            "profile_pic": r.get("profile_pic"),
+        }
+        for r in requesters
+    ]
+
+@api_router.get("/players/{player_id}/relationship/{target_id}")
+async def get_relationship_status(player_id: str, target_id: str):
+    """Get the relationship status between two players"""
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    is_following = target_id in player.get("following", [])
+    is_followed_by = player_id in target.get("following", [])
+    is_friend = target_id in player.get("friends", [])
+    has_sent_request = target_id in player.get("friend_requests_sent", [])
+    has_received_request = target_id in player.get("friend_requests_received", [])
+    
+    return {
+        "is_following": is_following,
+        "is_followed_by": is_followed_by,
+        "is_friend": is_friend,
+        "has_sent_friend_request": has_sent_request,
+        "has_received_friend_request": has_received_request,
+    }
+
+@api_router.post("/players/{player_id}/follow/{target_id}")
+async def follow_player(player_id: str, target_id: str):
+    """Follow another player (one-way)"""
+    if player_id == target_id:
+        raise HTTPException(status_code=400, detail="Cannot follow yourself")
+    
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if target_id in player.get("following", []):
+        raise HTTPException(status_code=400, detail="Already following this player")
+    
+    # Add to player's following list
+    await db.players.update_one(
+        {"id": player_id},
+        {"$addToSet": {"following": target_id}}
+    )
+    
+    # Add to target's followers list
+    await db.players.update_one(
+        {"id": target_id},
+        {"$addToSet": {"followers": player_id}}
+    )
+    
+    return {"message": f"Now following {target['name']}", "success": True}
+
+@api_router.delete("/players/{player_id}/unfollow/{target_id}")
+async def unfollow_player(player_id: str, target_id: str):
+    """Unfollow a player"""
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Remove from player's following list
+    await db.players.update_one(
+        {"id": player_id},
+        {"$pull": {"following": target_id}}
+    )
+    
+    # Remove from target's followers list
+    await db.players.update_one(
+        {"id": target_id},
+        {"$pull": {"followers": player_id}}
+    )
+    
+    return {"message": f"Unfollowed {target['name']}", "success": True}
+
+@api_router.post("/players/{player_id}/friend-request/{target_id}")
+async def send_friend_request(player_id: str, target_id: str):
+    """Send a friend request to another player"""
+    if player_id == target_id:
+        raise HTTPException(status_code=400, detail="Cannot send friend request to yourself")
+    
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Check if already friends
+    if target_id in player.get("friends", []):
+        raise HTTPException(status_code=400, detail="Already friends with this player")
+    
+    # Check if request already sent
+    if target_id in player.get("friend_requests_sent", []):
+        raise HTTPException(status_code=400, detail="Friend request already sent")
+    
+    # Check if target already sent us a request - auto accept
+    if target_id in player.get("friend_requests_received", []):
+        # Auto-accept: they sent us a request, we're sending one back = friends
+        await db.players.update_one(
+            {"id": player_id},
+            {
+                "$addToSet": {"friends": target_id},
+                "$pull": {"friend_requests_received": target_id}
+            }
+        )
+        await db.players.update_one(
+            {"id": target_id},
+            {
+                "$addToSet": {"friends": player_id},
+                "$pull": {"friend_requests_sent": player_id}
+            }
+        )
+        return {"message": f"You are now friends with {target['name']}!", "success": True, "became_friends": True}
+    
+    # Send the friend request
+    await db.players.update_one(
+        {"id": player_id},
+        {"$addToSet": {"friend_requests_sent": target_id}}
+    )
+    await db.players.update_one(
+        {"id": target_id},
+        {"$addToSet": {"friend_requests_received": player_id}}
+    )
+    
+    return {"message": f"Friend request sent to {target['name']}", "success": True, "became_friends": False}
+
+@api_router.post("/players/{player_id}/accept-friend/{target_id}")
+async def accept_friend_request(player_id: str, target_id: str):
+    """Accept a pending friend request"""
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Check if there's a pending request
+    if target_id not in player.get("friend_requests_received", []):
+        raise HTTPException(status_code=400, detail="No pending friend request from this player")
+    
+    # Add each other as friends and clean up requests
+    await db.players.update_one(
+        {"id": player_id},
+        {
+            "$addToSet": {"friends": target_id},
+            "$pull": {"friend_requests_received": target_id}
+        }
+    )
+    await db.players.update_one(
+        {"id": target_id},
+        {
+            "$addToSet": {"friends": player_id},
+            "$pull": {"friend_requests_sent": player_id}
+        }
+    )
+    
+    return {"message": f"You are now friends with {target['name']}!", "success": True}
+
+@api_router.post("/players/{player_id}/reject-friend/{target_id}")
+async def reject_friend_request(player_id: str, target_id: str):
+    """Reject a pending friend request"""
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Remove the request
+    await db.players.update_one(
+        {"id": player_id},
+        {"$pull": {"friend_requests_received": target_id}}
+    )
+    await db.players.update_one(
+        {"id": target_id},
+        {"$pull": {"friend_requests_sent": player_id}}
+    )
+    
+    return {"message": "Friend request rejected", "success": True}
+
+@api_router.delete("/players/{player_id}/remove-friend/{target_id}")
+async def remove_friend(player_id: str, target_id: str):
+    """Remove a friend"""
+    player = await db.players.find_one({"id": player_id})
+    target = await db.players.find_one({"id": target_id})
+    
+    if not player or not target:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Remove from both friends lists
+    await db.players.update_one(
+        {"id": player_id},
+        {"$pull": {"friends": target_id}}
+    )
+    await db.players.update_one(
+        {"id": target_id},
+        {"$pull": {"friends": player_id}}
+    )
+    
+    return {"message": f"Removed {target['name']} from friends", "success": True}
 
 # ============== MONSTER ENDPOINTS ==============
 @api_router.get("/monsters/spawn")

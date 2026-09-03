@@ -38,6 +38,12 @@ export interface Player {
   losses: number;
   missions_completed: number;
   profile_picture?: string;
+  // Social fields
+  followers?: string[];
+  following?: string[];
+  friends?: string[];
+  friend_requests_sent?: string[];
+  friend_requests_received?: string[];
   created_at: string;
   last_active: string;
 }
@@ -187,4 +193,45 @@ export interface ChatMessage {
   player_name: string;
   message: string;
   timestamp: string;
+}
+
+// Social Types
+export interface FriendInfo {
+  id: string;
+  name: string;
+  level: number;
+  character_class: string;
+  profile_picture?: string;
+  profile_pic?: string;
+  wins: number;
+  losses: number;
+  reputation: number;
+  last_active?: string;
+  is_online?: boolean;
+}
+
+export interface PlayerSearchResult {
+  id: string;
+  name: string;
+  level: number;
+  character_class: string;
+  profile_picture?: string;
+  profile_pic?: string;
+  wins: number;
+  reputation: number;
+}
+
+export interface RelationshipStatus {
+  is_following: boolean;
+  is_followed_by: boolean;
+  is_friend: boolean;
+  has_sent_friend_request: boolean;
+  has_received_friend_request: boolean;
+}
+
+export interface SocialStats {
+  followers_count: number;
+  following_count: number;
+  friends_count: number;
+  pending_requests: number;
 }

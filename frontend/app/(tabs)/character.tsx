@@ -36,10 +36,11 @@ import {
   equipSkill,
   unequipSkill,
   repairItem,
+  getSocialStats,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
-import { Skill } from '../../types/game';
+import { Skill, SocialStats } from '../../types/game';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showGameToast } from '../../components/GameToast';
 
@@ -521,15 +522,51 @@ function StatusTab({ player, classColor, territories, playerId }: { player: any;
   const totalIncome = territories.reduce((sum: number, t: any) => sum + (t.rewards?.passive_income || 0), 0);
   const [collecting, setCollecting] = useState(false);
   const [incomePreview, setIncomePreview] = useState<{ available_income: number; ready_territories: number; total_territories: number; next_collection_hours: number } | null>(null);
+  const [socialStats, setSocialStats] = useState<SocialStats | null>(null);
 
   useEffect(() => {
     if (playerId && territories.length > 0) {
       getTerritoryIncomePreview(playerId).then(setIncomePreview).catch(() => {});
     }
+    if (playerId) {
+      getSocialStats(playerId).then(setSocialStats).catch(() => {});
+    }
   }, [playerId, territories.length]);
 
   return (
     <View>
+      {/* Social Stats */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>SOCIAL</Text>
+        <View style={styles.socialStatsRow}>
+          <TouchableOpacity style={styles.socialStatItem} onPress={() => router.push('/pvp')}>
+            <Text style={styles.socialStatValue}>{socialStats?.friends_count || 0}</Text>
+            <Text style={styles.socialStatLabel}>Friends</Text>
+          </TouchableOpacity>
+          <View style={styles.socialDivider} />
+          <View style={styles.socialStatItem}>
+            <Text style={styles.socialStatValue}>{socialStats?.followers_count || 0}</Text>
+            <Text style={styles.socialStatLabel}>Followers</Text>
+          </View>
+          <View style={styles.socialDivider} />
+          <View style={styles.socialStatItem}>
+            <Text style={styles.socialStatValue}>{socialStats?.following_count || 0}</Text>
+            <Text style={styles.socialStatLabel}>Following</Text>
+          </View>
+          {socialStats && socialStats.pending_requests > 0 && (
+            <>
+              <View style={styles.socialDivider} />
+              <TouchableOpacity style={styles.socialStatItem} onPress={() => router.push('/pvp')}>
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.socialStatValuePending}>{socialStats.pending_requests}</Text>
+                </View>
+                <Text style={styles.socialStatLabelPending}>Requests</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+
       {/* Health & Energy */}
       <View style={styles.section}>
         <HealthBar current={player.stats.health} max={player.stats.max_health} label="HEALTH" color="#e74c3c" />
@@ -1746,5 +1783,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  // Social Stats
+  socialStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 16,
+    padding: 16,
+  },
+  socialStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  socialStatValue: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  socialStatLabel: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  socialDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#333',
+    marginHorizontal: 8,
+  },
+  socialStatValuePending: {
+    color: '#e74c3c',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  socialStatLabelPending: {
+    color: '#e74c3c',
+    fontSize: 11,
+    marginTop: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '600',
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(231, 76, 60, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 12,
   },
 });

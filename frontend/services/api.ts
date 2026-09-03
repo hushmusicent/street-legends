@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Player, Monster, Mission, Battle, Guild, Skill, CharacterClass, NearbyPlayer, LeaderboardEntry, ChatMessage, Position } from '../types/game';
+import { Player, Monster, Mission, Battle, Guild, Skill, CharacterClass, NearbyPlayer, LeaderboardEntry, ChatMessage, Position, FriendInfo, PlayerSearchResult, RelationshipStatus, SocialStats } from '../types/game';
 
 export const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -38,6 +38,62 @@ export const getNearbyPlayers = async (playerId: string, radius: number = 500): 
 
 export const getLeaderboard = async (limit: number = 20): Promise<LeaderboardEntry[]> => {
   const response = await api.get(`/leaderboard?limit=${limit}`);
+  return response.data;
+};
+
+// Social / Friends APIs
+export const searchPlayers = async (name: string, limit: number = 20): Promise<PlayerSearchResult[]> => {
+  const response = await api.get(`/players/search?name=${encodeURIComponent(name)}&limit=${limit}`);
+  return response.data;
+};
+
+export const getSocialStats = async (playerId: string): Promise<SocialStats> => {
+  const response = await api.get(`/players/${playerId}/social-stats`);
+  return response.data;
+};
+
+export const getFriendsList = async (playerId: string): Promise<FriendInfo[]> => {
+  const response = await api.get(`/players/${playerId}/friends`);
+  return response.data;
+};
+
+export const getFriendRequests = async (playerId: string): Promise<PlayerSearchResult[]> => {
+  const response = await api.get(`/players/${playerId}/friend-requests`);
+  return response.data;
+};
+
+export const getRelationshipStatus = async (playerId: string, targetId: string): Promise<RelationshipStatus> => {
+  const response = await api.get(`/players/${playerId}/relationship/${targetId}`);
+  return response.data;
+};
+
+export const followPlayer = async (playerId: string, targetId: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.post(`/players/${playerId}/follow/${targetId}`);
+  return response.data;
+};
+
+export const unfollowPlayer = async (playerId: string, targetId: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.delete(`/players/${playerId}/unfollow/${targetId}`);
+  return response.data;
+};
+
+export const sendFriendRequest = async (playerId: string, targetId: string): Promise<{ message: string; success: boolean; became_friends?: boolean }> => {
+  const response = await api.post(`/players/${playerId}/friend-request/${targetId}`);
+  return response.data;
+};
+
+export const acceptFriendRequest = async (playerId: string, targetId: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.post(`/players/${playerId}/accept-friend/${targetId}`);
+  return response.data;
+};
+
+export const rejectFriendRequest = async (playerId: string, targetId: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.post(`/players/${playerId}/reject-friend/${targetId}`);
+  return response.data;
+};
+
+export const removeFriend = async (playerId: string, targetId: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.delete(`/players/${playerId}/remove-friend/${targetId}`);
   return response.data;
 };
 
