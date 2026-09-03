@@ -4787,8 +4787,8 @@ async def spawn_banks(latitude: float, longitude: float, player_level: int = 1):
     lat_offset = rng.uniform(-0.003, 0.003)
     lng_offset = rng.uniform(-0.003, 0.003)
     
-    # Bank rewards scale with player level
-    base_reward = 500 + (player_level * 100)
+    # Bank rewards scale with player level (reduced by 50% for balance)
+    base_reward = int((500 + (player_level * 100)) * 0.5)
     
     bank = {
         "id": str(uuid.uuid4()),
@@ -4836,8 +4836,8 @@ async def rob_bank(bank_id: str, player_id: str):
     player_level = player.get("level", 1)
     player_cash = player.get("cash", 0)
     
-    # Calculate rewards based on player level
-    base_reward = 500 + (player_level * 100)
+    # Calculate rewards based on player level (reduced by 50% for balance)
+    base_reward = int((500 + (player_level * 100)) * 0.5)
     min_reward = int(base_reward * 0.5)
     max_reward = int(base_reward * 1.5)
     
