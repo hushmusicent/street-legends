@@ -2297,6 +2297,17 @@ async def battle_action(battle_id: str, action: BattleAction):
     elif action.action == "flee":
         if random.random() < 0.5:
             await decrement_player_buffs(battle["player_id"])
+            # Save the player's current HP and energy when fleeing (damage persists)
+            await db.players.update_one(
+                {"id": player["id"]},
+                {
+                    "$set": {
+                        "stats.health": max(1, player_health),
+                        "stats.energy": max(0, player_energy),
+                        "last_health_regen": datetime.utcnow().isoformat(),
+                    }
+                }
+            )
             await db.battles.update_one(
                 {"id": battle_id},
                 {"$set": {"status": "fled", "combat_log": combat_log + ["You fled from battle!"]}}
