@@ -279,26 +279,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sponsorSection: {
-    marginTop: 24,
+    marginTop: 28,
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingBottom: 24,
   },
   sponsorLabel: {
     color: '#444',
     fontSize: 10,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 10,
+    marginBottom: 14,
   },
   sponsorLogos: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 32,
+    gap: 48,
   },
   sponsorLogo: {
-    width: 70,
-    height: 35,
-    opacity: 0.6,
+    width: 120,
+    height: 60,
+    opacity: 0.75,
   },
 });
