@@ -8,12 +8,14 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { GameButton } from '../components/GameButton';
+import { getEnemyBattleImage } from '../assets/enemyImages';
 import {
   startGuildRaid,
   joinGuildRaid,
@@ -307,29 +309,50 @@ export default function GuildRaidScreen() {
           {/* Enemy Card */}
           {enemy && (
             <Animated.View style={[styles.enemyCard, { transform: [{ translateX: shakeAnim }] }]}>
-              <View style={styles.enemyHeader}>
-                <Text style={[styles.enemyName, enemy.is_boss && styles.bossName]}>
-                  {enemy.is_boss ? '👑 ' : ''}{enemy.name}
-                </Text>
-                <Text style={styles.enemyLevel}>Lv.{enemy.level}</Text>
-              </View>
-              <View style={styles.healthBarContainer}>
-                <View style={styles.healthBarBg}>
-                  <View 
-                    style={[
-                      styles.healthBarFill, 
-                      { width: `${(enemy.stats.health / enemy.stats.max_health) * 100}%` },
-                      enemy.is_boss && styles.bossHealthBar
-                    ]} 
-                  />
+              <View style={styles.enemyCardContent}>
+                {/* Enemy Avatar */}
+                <View style={[styles.enemyAvatar, enemy.is_boss && styles.bossAvatar]}>
+                  {getEnemyBattleImage(enemy.name) ? (
+                    <Image 
+                      source={{ uri: getEnemyBattleImage(enemy.name) as string }} 
+                      style={styles.enemyImage} 
+                    />
+                  ) : (
+                    <Ionicons 
+                      name={enemy.is_boss ? 'skull' : 'person'} 
+                      size={32} 
+                      color={enemy.is_boss ? '#f39c12' : '#e74c3c'} 
+                    />
+                  )}
                 </View>
-                <Text style={styles.healthText}>
-                  {enemy.stats.health}/{enemy.stats.max_health} HP
-                </Text>
-              </View>
-              <View style={styles.enemyStats}>
-                <Text style={styles.enemyStat}>⚔️ ATK: {enemy.stats.attack}</Text>
-                <Text style={styles.enemyStat}>🛡️ DEF: {enemy.stats.defense}</Text>
+                
+                {/* Enemy Info */}
+                <View style={styles.enemyInfo}>
+                  <View style={styles.enemyHeader}>
+                    <Text style={[styles.enemyName, enemy.is_boss && styles.bossName]}>
+                      {enemy.is_boss ? '👑 ' : ''}{enemy.name}
+                    </Text>
+                    <Text style={styles.enemyLevel}>Lv.{enemy.level}</Text>
+                  </View>
+                  <View style={styles.healthBarContainer}>
+                    <View style={styles.healthBarBg}>
+                      <View 
+                        style={[
+                          styles.healthBarFill, 
+                          { width: `${(enemy.stats.health / enemy.stats.max_health) * 100}%` },
+                          enemy.is_boss && styles.bossHealthBar
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.healthText}>
+                      {enemy.stats.health}/{enemy.stats.max_health} HP
+                    </Text>
+                  </View>
+                  <View style={styles.enemyStats}>
+                    <Text style={styles.enemyStat}>⚔️ ATK: {enemy.stats.attack}</Text>
+                    <Text style={styles.enemyStat}>🛡️ DEF: {enemy.stats.defense}</Text>
+                  </View>
+                </View>
               </View>
             </Animated.View>
           )}
@@ -996,16 +1019,45 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#e74c3c',
   },
+  enemyCardContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  enemyAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: 'rgba(231, 76, 60, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e74c3c',
+    overflow: 'hidden',
+  },
+  bossAvatar: {
+    borderColor: '#f39c12',
+    backgroundColor: 'rgba(243, 156, 18, 0.2)',
+  },
+  enemyImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  enemyInfo: {
+    flex: 1,
+  },
   enemyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   enemyName: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    flex: 1,
   },
   bossName: {
     color: '#f39c12',
@@ -1013,38 +1065,39 @@ const styles = StyleSheet.create({
   enemyLevel: {
     color: '#888',
     fontSize: 14,
+    marginLeft: 8,
   },
   healthBarContainer: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   healthBarBg: {
-    height: 12,
+    height: 10,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 6,
+    borderRadius: 5,
     overflow: 'hidden',
   },
   healthBarFill: {
     height: '100%',
     backgroundColor: '#e74c3c',
-    borderRadius: 6,
+    borderRadius: 5,
   },
   bossHealthBar: {
     backgroundColor: '#f39c12',
   },
   healthText: {
     color: '#888',
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 4,
+    fontSize: 10,
+    textAlign: 'right',
+    marginTop: 2,
   },
   enemyStats: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
+    justifyContent: 'flex-start',
+    gap: 16,
   },
   enemyStat: {
     color: '#aaa',
-    fontSize: 13,
+    fontSize: 12,
   },
   // Party Card
   partyCard: {
