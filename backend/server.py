@@ -4902,19 +4902,19 @@ CASINO_NAMES = [
     "Neon Nights Casino", "Big Stakes Casino", "The Betting Baron", "Cash King Casino",
 ]
 
-SLOT_SYMBOLS = ["banana", "eggplant", "peach", "cherry", "coconut", "hush_logo", "appsolut_logo"]
-# Symbol weights: fruit symbols are common, logos are rare (jackpot)
-SLOT_WEIGHTS = [20, 20, 20, 20, 15, 3, 2]  # Total: 100
+SLOT_SYMBOLS = ["banana", "eggplant", "peach", "coconut", "hush_logo", "appsolut_logo", "street_legends"]
+# Symbol weights: fruit symbols are common, hush_logo is rare, appsolut_logo and street_legends are jackpot (rarest)
+SLOT_WEIGHTS = [25, 25, 25, 20, 3, 1, 1]  # Total: 100
 
 # Slot payouts: {symbol: {3_match: multiplier, 2_match: multiplier}}
 SLOT_PAYOUTS = {
     "banana": {"3": 5, "2": 1.5},
     "eggplant": {"3": 5, "2": 1.5},
     "peach": {"3": 6, "2": 1.5},
-    "cherry": {"3": 8, "2": 2},
-    "coconut": {"3": 10, "2": 2},
-    "hush_logo": {"3": 50, "2": 5},      # Rare jackpot symbol
-    "appsolut_logo": {"3": 75, "2": 7},  # Rarest jackpot symbol
+    "coconut": {"3": 8, "2": 2},
+    "hush_logo": {"3": 25, "2": 5},
+    "appsolut_logo": {"3": 100, "2": 10},
+    "street_legends": {"3": 100, "2": 10},
 }
 
 @api_router.get("/casinos/spawn")
@@ -4981,7 +4981,7 @@ async def play_slots(player_id: str, bet_amount: int):
     if reels[0] == reels[1] == reels[2]:
         multiplier = SLOT_PAYOUTS[reels[0]]["3"]
         winnings = int(bet_amount * multiplier)
-        result_type = "jackpot" if reels[0] in ["hush_logo", "appsolut_logo"] else "big_win"
+        result_type = "jackpot" if reels[0] in ["hush_logo", "appsolut_logo", "street_legends"] else "big_win"
     # Check for 2 of a kind (first two or last two)
     elif reels[0] == reels[1] or reels[1] == reels[2]:
         matching_symbol = reels[0] if reels[0] == reels[1] else reels[1]

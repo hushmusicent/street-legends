@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,18 +17,52 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
-// Slot symbols using emojis for reliable display
-const SLOT_SYMBOLS: Record<string, { emoji: string; name: string }> = {
-  cherry: { emoji: '🍒', name: 'Cherry' },
-  banana: { emoji: '🍌', name: 'Banana' },
-  peach: { emoji: '🍑', name: 'Peach' },
-  eggplant: { emoji: '🍆', name: 'Eggplant' },
-  coconut: { emoji: '🥥', name: 'Coconut' },
-  seven: { emoji: '7️⃣', name: 'Lucky 7' },
-  diamond: { emoji: '💎', name: 'Diamond' },
+// Background removal endpoint
+const REMBG_URL = `${API_URL}/api/sprites/remove-bg?url=`;
+
+// Slot symbol images with background removal
+// Jackpot (rarest): AppSolut Group logo, Street Legends logo
+// Rare: Hush Music Ent logo
+// Common: Banana, Eggplant, Peach, Coconut
+const SLOT_IMAGES: Record<string, { url: string; name: string; rarity: string }> = {
+  banana: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/5a2da761865e4e32818ef3af04296bfb_banana_final.png')}`,
+    name: 'Banana',
+    rarity: 'common',
+  },
+  eggplant: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/9b5ee5acc4454e269ea52d57d4df54a1_eggplant_proper.png')}`,
+    name: 'Eggplant',
+    rarity: 'common',
+  },
+  peach: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/e9d8aa533f704231be47c56cf388b7cb_peach_final.png')}`,
+    name: 'Peach',
+    rarity: 'common',
+  },
+  coconut: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/f8704c1fe227420a8027a9ef920493cd_coconut_better_final.png')}`,
+    name: 'Coconut',
+    rarity: 'common',
+  },
+  hush_logo: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/f70cdaecfe084894947e2e9f80662a91_Resized_mainlogo.jpeg')}`,
+    name: 'Hush Music',
+    rarity: 'rare',
+  },
+  appsolut_logo: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/704a54f626164a05996c41329984e341_appsolut_atg.jpg')}`,
+    name: 'AppSolut',
+    rarity: 'jackpot',
+  },
+  street_legends: {
+    url: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/92f4c42dca2347bf8580d69135bfa1cd_sl_2_512.png')}`,
+    name: 'Street Legends',
+    rarity: 'jackpot',
+  },
 };
 
-const SYMBOL_KEYS = Object.keys(SLOT_SYMBOLS);
+const SYMBOL_KEYS = Object.keys(SLOT_IMAGES);
 
 type GameType = 'menu' | 'slots' | 'blackjack' | 'roulette';
 
@@ -47,10 +82,11 @@ export default function CasinoScreen() {
   
   // Slots state
   const [slotBet, setSlotBet] = useState(10);
-  const [slotReels, setSlotReels] = useState<string[]>(['cherry', 'banana', 'peach']);
+  const [slotReels, setSlotReels] = useState<string[]>(['banana', 'peach', 'eggplant']);
   const [slotSpinning, setSlotSpinning] = useState(false);
   const [slotResult, setSlotResult] = useState<any>(null);
   const spinIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [imagesLoaded, setImagesLoaded] = useState(false);
   
   // Blackjack state
   const [bjBet, setBjBet] = useState(50);
@@ -69,8 +105,26 @@ export default function CasinoScreen() {
     return () => {
       if (spinIntervalRef.current) {
         clearInterval(spinIntervalRef.current);
+        spinIntervalRef.current = null;
       }
     };
+  }, []);
+
+  // Preload images when component mounts
+  useEffect(() => {
+    const preloadImages = async () => {
+      try {
+        const imagePromises = Object.values(SLOT_IMAGES).map(img => 
+          Image.prefetch(img.url).catch(() => {})
+        );
+        await Promise.all(imagePromises);
+        setImagesLoaded(true);
+      } catch (e) {
+        console.log('Image preload completed with some failures');
+        setImagesLoaded(true);
+      }
+    };
+    preloadImages();
   }, []);
 
   const refreshPlayer = async () => {
@@ -84,9 +138,11 @@ export default function CasinoScreen() {
     }
   };
 
-  // Get random symbol for spinning animation
+  // Get random symbol for spinning animation - weighted towards common symbols
   const getRandomSymbol = () => {
-    return SYMBOL_KEYS[Math.floor(Math.random() * SYMBOL_KEYS.length)];
+    // During spin animation, use only common symbols for faster rendering
+    const commonSymbols = ['banana', 'eggplant', 'peach', 'coconut'];
+    return commonSymbols[Math.floor(Math.random() * commonSymbols.length)];
   };
 
   // ============== SLOTS ==============
@@ -104,10 +160,10 @@ export default function CasinoScreen() {
     setSlotSpinning(true);
     setSlotResult(null);
 
-    // Start spinning animation
+    // Start spinning animation - use shorter interval
     spinIntervalRef.current = setInterval(() => {
       setSlotReels([getRandomSymbol(), getRandomSymbol(), getRandomSymbol()]);
-    }, 80);
+    }, 100);
 
     try {
       const response = await fetch(`${API_URL}/api/casinos/slots?player_id=${playerId}&bet_amount=${slotBet}`, {
@@ -120,21 +176,18 @@ export default function CasinoScreen() {
         throw new Error(data.detail || 'Failed to play slots');
       }
 
-      // Map backend symbols to our symbols (backend may return different names)
+      // Map backend symbols to our frontend symbol keys
       const mapSymbol = (symbol: string): string => {
         const symbolMap: Record<string, string> = {
           'banana': 'banana',
           'eggplant': 'eggplant',
           'peach': 'peach',
-          'cherry': 'cherry',
           'coconut': 'coconut',
-          'hush_logo': 'seven',
-          'appsolut_logo': 'diamond',
-          '7': 'seven',
-          'seven': 'seven',
-          'diamond': 'diamond',
+          'hush_logo': 'hush_logo',
+          'appsolut_logo': 'appsolut_logo',
+          'street_legends': 'street_legends',
         };
-        return symbolMap[symbol] || 'cherry';
+        return symbolMap[symbol] || symbol;
       };
 
       // Stop spinning after delay and show result
@@ -297,15 +350,54 @@ export default function CasinoScreen() {
       <View style={styles.reelsContainer}>
         <LinearGradient colors={['#2a1a0a', '#1a0a00', '#2a1a0a']} style={styles.reelsBg}>
           <View style={styles.reels}>
-            {slotReels.map((symbol, index) => (
-              <View key={index} style={[styles.reel, slotSpinning && styles.reelSpinning]}>
-                <Text style={styles.reelEmoji}>
-                  {SLOT_SYMBOLS[symbol]?.emoji || '🍒'}
-                </Text>
-              </View>
-            ))}
+            {slotReels.map((symbol, index) => {
+              const symbolData = SLOT_IMAGES[symbol];
+              const isRare = symbolData?.rarity === 'rare';
+              const isJackpot = symbolData?.rarity === 'jackpot';
+              
+              return (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.reel, 
+                    slotSpinning && styles.reelSpinning,
+                    isJackpot && styles.reelJackpot,
+                    isRare && styles.reelRare,
+                  ]}
+                >
+                  {symbolData ? (
+                    <Image 
+                      source={{ uri: symbolData.url }}
+                      style={styles.reelImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Text style={styles.reelEmoji}>🎰</Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         </LinearGradient>
+      </View>
+
+      {/* Symbol Legend */}
+      <View style={styles.legendContainer}>
+        <Text style={styles.legendTitle}>SYMBOLS</Text>
+        <View style={styles.legendRow}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+            <Text style={styles.legendText}>Jackpot (x100)</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#9b59b6' }]} />
+            <Text style={styles.legendText}>Rare (x25)</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#27ae60' }]} />
+            <Text style={styles.legendText}>Common (x5)</Text>
+          </View>
+        </View>
       </View>
       
       {slotResult && (
@@ -783,23 +875,68 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#d4af37',
-    shadowColor: '#d4af37',
+    borderColor: '#27ae60',
+    shadowColor: '#27ae60',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 5,
+    overflow: 'hidden',
   },
   reelSpinning: {
     borderColor: '#fff',
     backgroundColor: '#2a2a2a',
   },
+  reelJackpot: {
+    borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    backgroundColor: '#2a2a1a',
+  },
+  reelRare: {
+    borderColor: '#9b59b6',
+    shadowColor: '#9b59b6',
+    backgroundColor: '#2a1a2a',
+  },
   reelEmoji: {
     fontSize: 56,
   },
   reelImage: {
-    width: 60,
-    height: 60,
+    width: 70,
+    height: 70,
+  },
+  legendContainer: {
+    width: '100%',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  legendTitle: {
+    color: '#d4af37',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    color: '#888',
+    fontSize: 10,
   },
   resultContainer: {
     width: '100%',
