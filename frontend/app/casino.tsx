@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -87,6 +88,7 @@ export default function CasinoScreen() {
   const [slotResult, setSlotResult] = useState<any>(null);
   const spinIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [showSlotsHelp, setShowSlotsHelp] = useState(false);
   
   // Blackjack state
   const [bjBet, setBjBet] = useState(50);
@@ -339,8 +341,153 @@ export default function CasinoScreen() {
     </View>
   );
 
+  const renderSlotsHelpModal = () => (
+    <Modal
+      visible={showSlotsHelp}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowSlotsHelp(false)}
+    >
+      <View style={styles.helpOverlay}>
+        <View style={styles.helpModal}>
+          <View style={styles.helpHeader}>
+            <Text style={styles.helpTitle}>🎰 HOW TO PLAY</Text>
+            <TouchableOpacity onPress={() => setShowSlotsHelp(false)} style={styles.helpCloseBtn}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.helpContent} showsVerticalScrollIndicator={false}>
+            {/* Instructions */}
+            <View style={styles.helpSection}>
+              <Text style={styles.helpSectionTitle}>INSTRUCTIONS</Text>
+              <Text style={styles.helpText}>1. Select your bet amount ($10, $50, or $100)</Text>
+              <Text style={styles.helpText}>2. Press BET to spin the reels</Text>
+              <Text style={styles.helpText}>3. Match symbols on the center line to win!</Text>
+            </View>
+            
+            {/* Payout Chart */}
+            <View style={styles.helpSection}>
+              <Text style={styles.helpSectionTitle}>PAYOUT CHART</Text>
+              
+              {/* Jackpot Symbols */}
+              <View style={styles.payoutCategory}>
+                <Text style={styles.payoutCategoryTitle}>💎 JACKPOT SYMBOLS</Text>
+                
+                <View style={styles.payoutRow}>
+                  <View style={styles.payoutSymbolContainer}>
+                    <Image source={{ uri: SLOT_IMAGES.appsolut_logo.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>AppSolut Group</Text>
+                    <Text style={styles.payoutJackpot}>3x = 100x BET (JACKPOT!)</Text>
+                    <Text style={styles.payoutSmall}>2x = 10x BET</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.payoutRow}>
+                  <View style={styles.payoutSymbolContainer}>
+                    <Image source={{ uri: SLOT_IMAGES.street_legends.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>Street Legends</Text>
+                    <Text style={styles.payoutJackpot}>3x = 100x BET (JACKPOT!)</Text>
+                    <Text style={styles.payoutSmall}>2x = 10x BET</Text>
+                  </View>
+                </View>
+              </View>
+              
+              {/* Rare Symbol */}
+              <View style={styles.payoutCategory}>
+                <Text style={[styles.payoutCategoryTitle, { color: '#9b59b6' }]}>💜 RARE SYMBOL</Text>
+                
+                <View style={styles.payoutRow}>
+                  <View style={[styles.payoutSymbolContainer, { borderColor: '#9b59b6' }]}>
+                    <Image source={{ uri: SLOT_IMAGES.hush_logo.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>Hush Music Ent</Text>
+                    <Text style={styles.payoutRare}>3x = 25x BET (BIG WIN!)</Text>
+                    <Text style={styles.payoutSmall}>2x = 5x BET</Text>
+                  </View>
+                </View>
+              </View>
+              
+              {/* Common Symbols */}
+              <View style={styles.payoutCategory}>
+                <Text style={[styles.payoutCategoryTitle, { color: '#27ae60' }]}>💚 COMMON SYMBOLS</Text>
+                
+                <View style={styles.payoutRow}>
+                  <View style={[styles.payoutSymbolContainer, { borderColor: '#27ae60' }]}>
+                    <Image source={{ uri: SLOT_IMAGES.coconut.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>Coconut</Text>
+                    <Text style={styles.payoutCommon}>3x = 8x BET</Text>
+                    <Text style={styles.payoutSmall}>2x = 2x BET</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.payoutRow}>
+                  <View style={[styles.payoutSymbolContainer, { borderColor: '#27ae60' }]}>
+                    <Image source={{ uri: SLOT_IMAGES.peach.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>Peach</Text>
+                    <Text style={styles.payoutCommon}>3x = 6x BET</Text>
+                    <Text style={styles.payoutSmall}>2x = 1.5x BET</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.payoutRow}>
+                  <View style={[styles.payoutSymbolContainer, { borderColor: '#27ae60' }]}>
+                    <Image source={{ uri: SLOT_IMAGES.eggplant.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>Eggplant</Text>
+                    <Text style={styles.payoutCommon}>3x = 5x BET</Text>
+                    <Text style={styles.payoutSmall}>2x = 1.5x BET</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.payoutRow}>
+                  <View style={[styles.payoutSymbolContainer, { borderColor: '#27ae60' }]}>
+                    <Image source={{ uri: SLOT_IMAGES.banana.url }} style={styles.payoutImage} resizeMode="contain" />
+                  </View>
+                  <View style={styles.payoutInfo}>
+                    <Text style={styles.payoutName}>Banana</Text>
+                    <Text style={styles.payoutCommon}>3x = 5x BET</Text>
+                    <Text style={styles.payoutSmall}>2x = 1.5x BET</Text>
+                  </View>
+                </View>
+              </View>
+              
+              {/* No Match */}
+              <View style={styles.payoutCategory}>
+                <Text style={[styles.payoutCategoryTitle, { color: '#e74c3c' }]}>❌ NO MATCH</Text>
+                <Text style={styles.payoutLoss}>No matching symbols = Lose bet</Text>
+              </View>
+            </View>
+          </ScrollView>
+          
+          <TouchableOpacity style={styles.helpCloseButton} onPress={() => setShowSlotsHelp(false)}>
+            <Text style={styles.helpCloseButtonText}>GOT IT!</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const renderSlots = () => (
     <View style={styles.slotsContainer}>
+      {/* Help Button */}
+      <TouchableOpacity style={styles.helpButton} onPress={() => setShowSlotsHelp(true)}>
+        <Text style={styles.helpButtonText}>?</Text>
+      </TouchableOpacity>
+      
+      {/* Help Modal */}
+      {renderSlotsHelpModal()}
+      
       <View style={styles.slotsHeader}>
         <LinearGradient colors={['#1a1a1a', '#0d0d0d']} style={styles.slotsHeaderBg}>
           <Text style={styles.slotsTitle}>🎰 SLOTS 🎰</Text>
@@ -1342,5 +1489,164 @@ const styles = StyleSheet.create({
   },
   numberBtnTextActive: {
     color: '#000',
+  },
+  // Help Button & Modal Styles
+  helpButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#d4af37',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    shadowColor: '#d4af37',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  helpButtonText: {
+    color: '#000',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  helpOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  helpModal: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: '#d4af37',
+    overflow: 'hidden',
+  },
+  helpHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#0d0d0d',
+    borderBottomWidth: 2,
+    borderBottomColor: '#d4af37',
+  },
+  helpTitle: {
+    color: '#d4af37',
+    fontSize: 20,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  helpCloseBtn: {
+    padding: 4,
+  },
+  helpContent: {
+    padding: 16,
+    maxHeight: 400,
+  },
+  helpSection: {
+    marginBottom: 20,
+  },
+  helpSectionTitle: {
+    color: '#d4af37',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  helpText: {
+    color: '#ccc',
+    fontSize: 14,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  payoutCategory: {
+    marginBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    padding: 12,
+  },
+  payoutCategoryTitle: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  payoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  payoutSymbolContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#2a2a2a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    marginRight: 12,
+  },
+  payoutImage: {
+    width: 40,
+    height: 40,
+  },
+  payoutInfo: {
+    flex: 1,
+  },
+  payoutName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  payoutJackpot: {
+    color: '#FFD700',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  payoutRare: {
+    color: '#9b59b6',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  payoutCommon: {
+    color: '#27ae60',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  payoutSmall: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  payoutLoss: {
+    color: '#e74c3c',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  helpCloseButton: {
+    backgroundColor: '#d4af37',
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderTopWidth: 2,
+    borderTopColor: '#b8860b',
+  },
+  helpCloseButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 2,
   },
 });
