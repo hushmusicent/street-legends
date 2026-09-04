@@ -23,136 +23,6 @@ import { getLevelConfig, getRunawayRewards } from '../hooks/useRunawayGame';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Privacy Policy Text
-const PRIVACY_POLICY_TEXT = `PRIVACY POLICY
-
-Last Updated: June 2026
-
-Street Legends ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our mobile application.
-
-INFORMATION WE COLLECT
-
-1. Location Data
-We collect your device's GPS location to provide location-based gameplay features. This includes your real-time position for map display, territory control, and proximity-based interactions.
-
-2. Account Information
-When you create a character, we store your chosen username and game progress data.
-
-3. Device Information
-We may collect device identifiers and technical information to improve app performance and prevent abuse.
-
-4. Gameplay Data
-We collect data about your in-game activities, including battles, missions completed, items acquired, guild memberships, and social interactions.
-
-HOW WE USE YOUR INFORMATION
-
-• To provide and maintain the game experience
-• To enable location-based features and map functionality
-• To save your game progress and character data
-• To facilitate multiplayer features and social interactions
-• To improve and optimize the application
-• To detect and prevent cheating or abuse
-
-DATA STORAGE AND SECURITY
-
-Your data is stored securely on our servers. We implement appropriate technical and organizational measures to protect your personal information against unauthorized access, alteration, or destruction.
-
-DATA SHARING
-
-We do not sell your personal information. We may share data with:
-• Service providers who assist in operating our application
-• Law enforcement when required by law
-• Other players (limited to your public username and game statistics)
-
-YOUR RIGHTS
-
-You have the right to:
-• Access your personal data
-• Request deletion of your account and data
-• Opt out of location tracking (note: this will limit gameplay features)
-
-CHILDREN'S PRIVACY
-
-Street Legends is not intended for children under 13. We do not knowingly collect personal information from children under 13.
-
-CHANGES TO THIS POLICY
-
-We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new policy in the app.
-
-CONTACT US
-
-If you have questions about this Privacy Policy, please contact us through our support channels.`;
-
-// Deletion Policy Text
-const DELETION_POLICY_TEXT = `ACCOUNT & DATA DELETION POLICY
-
-Last Updated: June 2026
-
-This policy explains how you can delete your Street Legends account and what happens to your data when you do.
-
-HOW TO DELETE YOUR ACCOUNT
-
-You can delete your account directly from the app:
-1. Open the Options menu (gear icon)
-2. Scroll down and tap "DELETE ACCOUNT"
-3. Confirm your decision twice to prevent accidental deletion
-
-WHAT GETS DELETED
-
-When you delete your account, the following data is PERMANENTLY removed:
-
-• Character Profile
-  - Username and avatar
-  - Level and experience points
-  - All stats (strength, defense, speed, luck)
-
-• Progress & Assets
-  - Cash and bank balance
-  - All inventory items and weapons
-  - Owned territories and income
-  - Skill levels and upgrades
-
-• Social Data
-  - Guild memberships
-  - Friends list and followers
-  - Friend requests
-  - Battle history and PvP records
-
-• Activity Data
-  - Mission completion history
-  - Achievement progress
-  - Casino winnings/losses
-  - Mini-game high scores
-
-• Fitness Data
-  - Step counts and exercise records
-  - Health-based rewards history
-
-DELETION TIMELINE
-
-• Immediate: Your account becomes inaccessible
-• Within 24 hours: All associated data is purged from our active databases
-• Within 30 days: Data is removed from backup systems
-
-IMPORTANT NOTES
-
-• Account deletion is IRREVERSIBLE
-• You cannot recover your character, items, or progress
-• Your username may become available for others to use
-• Any real money spent on in-app purchases is non-refundable
-• Guild ownership will be transferred or the guild dissolved
-
-DATA RETENTION EXCEPTIONS
-
-We may retain certain data as required by law or for legitimate business purposes:
-• Transaction records (for financial compliance)
-• Data necessary to resolve disputes or enforce our terms
-• Anonymized, aggregated data that cannot identify you
-
-QUESTIONS?
-
-If you have questions about account deletion or need assistance, please contact our support team before deleting your account.`;
-
 // Credits Text
 const CREDITS_TEXT = `Powered by - Emergent
 
@@ -170,7 +40,7 @@ interface OptionsModalProps {
 }
 
 // Modal content screens
-type ModalScreen = 'main' | 'privacy' | 'deletion' | 'credits';
+type ModalScreen = 'main' | 'credits';
 
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
   const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel, packageGrabLevel, setPackageGrabLevel, savePackageGrabLevel, loadPackageGrabLevel, shootoutLevel, setShootoutLevel, saveShootoutLevel, loadShootoutLevel } = useGameStore();
@@ -337,54 +207,6 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
       setCurrentScreen('main');
     }
   }, [visible]);
-
-  // Render Privacy Policy Screen
-  const renderPrivacyScreen = () => (
-    <View style={styles.subScreenContainer}>
-      <View style={styles.subScreenHeader}>
-        <TouchableOpacity onPress={() => setCurrentScreen('main')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Ionicons name="shield-checkmark" size={24} color="#10b981" />
-        <Text style={styles.subScreenTitle}>PRIVACY POLICY</Text>
-        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color="#888" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.subScreenDivider} />
-      <ScrollView 
-        style={styles.scrollContent} 
-        showsVerticalScrollIndicator={true}
-        contentContainerStyle={styles.scrollContentContainer}
-      >
-        <Text style={styles.policyTextContent}>{PRIVACY_POLICY_TEXT}</Text>
-      </ScrollView>
-    </View>
-  );
-
-  // Render Deletion Policy Screen
-  const renderDeletionScreen = () => (
-    <View style={styles.subScreenContainer}>
-      <View style={styles.subScreenHeader}>
-        <TouchableOpacity onPress={() => setCurrentScreen('main')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Ionicons name="trash-outline" size={24} color="#ef4444" />
-        <Text style={styles.subScreenTitle}>DELETION POLICY</Text>
-        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color="#888" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.subScreenDivider} />
-      <ScrollView 
-        style={styles.scrollContent} 
-        showsVerticalScrollIndicator={true}
-        contentContainerStyle={styles.scrollContentContainer}
-      >
-        <Text style={styles.policyTextContent}>{DELETION_POLICY_TEXT}</Text>
-      </ScrollView>
-    </View>
-  );
 
   // Render Credits Screen
   const renderCreditsScreen = () => (
@@ -845,32 +667,6 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
 
       <View style={styles.divider} />
 
-      {/* Privacy Policy */}
-      <TouchableOpacity 
-        style={styles.policyRow} 
-        onPress={() => setCurrentScreen('privacy')} 
-        activeOpacity={0.7}
-      >
-        <Ionicons name="shield-checkmark" size={22} color="#10b981" />
-        <Text style={styles.policyText}>PRIVACY POLICY</Text>
-        <Ionicons name="chevron-forward" size={18} color="#10b981" />
-      </TouchableOpacity>
-
-      <View style={styles.divider} />
-
-      {/* Deletion Policy */}
-      <TouchableOpacity 
-        style={styles.deletionPolicyRow} 
-        onPress={() => setCurrentScreen('deletion')} 
-        activeOpacity={0.7}
-      >
-        <Ionicons name="document-text" size={22} color="#ef4444" />
-        <Text style={styles.deletionPolicyText}>DELETION POLICY</Text>
-        <Ionicons name="chevron-forward" size={18} color="#ef4444" />
-      </TouchableOpacity>
-
-      <View style={styles.divider} />
-
       {/* Credits */}
       <TouchableOpacity 
         style={styles.creditsRow} 
@@ -929,8 +725,6 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
           activeOpacity={1}
         >
           {currentScreen === 'main' && renderMainScreen()}
-          {currentScreen === 'privacy' && renderPrivacyScreen()}
-          {currentScreen === 'deletion' && renderDeletionScreen()}
           {currentScreen === 'credits' && renderCreditsScreen()}
         </TouchableOpacity>
       </TouchableOpacity>
@@ -1244,45 +1038,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
-  // Policy Row Styles
-  policyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  policyText: {
-    color: '#10b981',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 2,
-    flex: 1,
-    marginLeft: 10,
-  },
-  deletionPolicyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-  },
-  deletionPolicyText: {
-    color: '#ef4444',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 2,
-    flex: 1,
-    marginLeft: 10,
-  },
+  // Credits Row Styles
   creditsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1329,17 +1085,6 @@ const styles = StyleSheet.create({
   panelExpanded: {
     maxHeight: SCREEN_HEIGHT * 0.75,
     height: SCREEN_HEIGHT * 0.7,
-  },
-  scrollContent: {
-    flex: 1,
-  },
-  scrollContentContainer: {
-    paddingBottom: 20,
-  },
-  policyTextContent: {
-    color: '#ccc',
-    fontSize: 13,
-    lineHeight: 20,
   },
   // Credits Screen Styles
   creditsContainer: {
