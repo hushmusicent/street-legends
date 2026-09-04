@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Alert,
   ActivityIndicator,
   ScrollView,
@@ -15,19 +14,20 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// Slot symbol images with background removal through rembg endpoint
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-const REMBG_URL = `${API_URL}/api/sprites/remove-bg?url=`;
 
-const SLOT_IMAGES: Record<string, string> = {
-  banana: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/3e11e9d5a4b449009a0aaf7cd40bae08_banana_final.png')}`,
-  eggplant: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/4b06ea3da33c487d8cd119d08536488a_eggplant_proper.png')}`,
-  peach: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/13f85a4e675447a8ad5ea5bfc4b458ca_peach_final.png')}`,
-  cherry: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/1542a0365098433d908dc5c6dae7ac7d_cherry_bulging_cutout.png')}`,
-  coconut: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/c0de795464404b5a94a8a84ce0261937_coconut_better_final.png')}`,
-  hush_logo: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/0f04deb61e8046059161f6b73cff5327_Resized_mainlogo.jpeg')}`,
-  appsolut_logo: `${REMBG_URL}${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/3530b3b6fe0a4ab78e6ba887f7cf5276_appsolut_atg.jpg')}`,
+// Slot symbols using emojis for reliable display
+const SLOT_SYMBOLS: Record<string, { emoji: string; name: string }> = {
+  cherry: { emoji: '🍒', name: 'Cherry' },
+  banana: { emoji: '🍌', name: 'Banana' },
+  peach: { emoji: '🍑', name: 'Peach' },
+  eggplant: { emoji: '🍆', name: 'Eggplant' },
+  coconut: { emoji: '🥥', name: 'Coconut' },
+  seven: { emoji: '7️⃣', name: 'Lucky 7' },
+  diamond: { emoji: '💎', name: 'Diamond' },
 };
+
+const SYMBOL_KEYS = Object.keys(SLOT_SYMBOLS);
 
 type GameType = 'menu' | 'slots' | 'blackjack' | 'roulette';
 
@@ -47,9 +47,10 @@ export default function CasinoScreen() {
   
   // Slots state
   const [slotBet, setSlotBet] = useState(10);
-  const [slotReels, setSlotReels] = useState<string[]>(['cherry', 'peach', 'banana']);
+  const [slotReels, setSlotReels] = useState<string[]>(['cherry', 'banana', 'peach']);
   const [slotSpinning, setSlotSpinning] = useState(false);
   const [slotResult, setSlotResult] = useState<any>(null);
+  const spinIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Blackjack state
   const [bjBet, setBjBet] = useState(50);
@@ -63,6 +64,15 @@ export default function CasinoScreen() {
   const [rouletteResult, setRouletteResult] = useState<any>(null);
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
 
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (spinIntervalRef.current) {
+        clearInterval(spinIntervalRef.current);
+      }
+    };
+  }, []);
+
   const refreshPlayer = async () => {
     if (!playerId) return;
     try {
@@ -74,9 +84,18 @@ export default function CasinoScreen() {
     }
   };
 
+  // Get random symbol for spinning animation
+  const getRandomSymbol = () => {
+    return SYMBOL_KEYS[Math.floor(Math.random() * SYMBOL_KEYS.length)];
+  };
+
   // ============== SLOTS ==============
   const playSlots = async () => {
-    if (!playerId || slotSpinning) return;
+    if (!playerId) {
+      Alert.alert('Error', 'Please log in to play');
+      return;
+    }
+    if (slotSpinning) return;
     if ((player?.cash || 0) < slotBet) {
       Alert.alert('Not Enough Cash', `You need $${slotBet} to play. You have $${player?.cash || 0}`);
       return;
@@ -85,37 +104,61 @@ export default function CasinoScreen() {
     setSlotSpinning(true);
     setSlotResult(null);
 
-    // Simulate spinning animation
-    const spinInterval = setInterval(() => {
-      const randomSymbols = ['banana', 'eggplant', 'peach', 'cherry', 'coconut', 'hush_logo', 'appsolut_logo'];
-      setSlotReels([
-        randomSymbols[Math.floor(Math.random() * 5)],
-        randomSymbols[Math.floor(Math.random() * 5)],
-        randomSymbols[Math.floor(Math.random() * 5)],
-      ]);
-    }, 100);
+    // Start spinning animation
+    spinIntervalRef.current = setInterval(() => {
+      setSlotReels([getRandomSymbol(), getRandomSymbol(), getRandomSymbol()]);
+    }, 80);
 
     try {
       const response = await fetch(`${API_URL}/api/casinos/slots?player_id=${playerId}&bet_amount=${slotBet}`, {
         method: 'POST',
       });
+      
       const data = await response.json();
       
       if (!response.ok) {
         throw new Error(data.detail || 'Failed to play slots');
       }
 
+      // Map backend symbols to our symbols (backend may return different names)
+      const mapSymbol = (symbol: string): string => {
+        const symbolMap: Record<string, string> = {
+          'banana': 'banana',
+          'eggplant': 'eggplant',
+          'peach': 'peach',
+          'cherry': 'cherry',
+          'coconut': 'coconut',
+          'hush_logo': 'seven',
+          'appsolut_logo': 'diamond',
+          '7': 'seven',
+          'seven': 'seven',
+          'diamond': 'diamond',
+        };
+        return symbolMap[symbol] || 'cherry';
+      };
+
+      // Stop spinning after delay and show result
       setTimeout(() => {
-        clearInterval(spinInterval);
-        setSlotReels(data.reels);
+        if (spinIntervalRef.current) {
+          clearInterval(spinIntervalRef.current);
+          spinIntervalRef.current = null;
+        }
+        
+        const finalReels = data.reels ? data.reels.map(mapSymbol) : [getRandomSymbol(), getRandomSymbol(), getRandomSymbol()];
+        setSlotReels(finalReels);
         setSlotResult(data);
         setSlotSpinning(false);
         refreshPlayer();
       }, 1500);
+
     } catch (e: any) {
-      clearInterval(spinInterval);
+      console.error('Slots error:', e);
+      if (spinIntervalRef.current) {
+        clearInterval(spinIntervalRef.current);
+        spinIntervalRef.current = null;
+      }
       setSlotSpinning(false);
-      Alert.alert('Error', e.message);
+      Alert.alert('Error', e.message || 'Failed to play slots');
     }
   };
 
@@ -247,20 +290,18 @@ export default function CasinoScreen() {
     <View style={styles.slotsContainer}>
       <View style={styles.slotsHeader}>
         <LinearGradient colors={['#1a1a1a', '#0d0d0d']} style={styles.slotsHeaderBg}>
-          <Text style={styles.slotsTitle}>SLOTS</Text>
+          <Text style={styles.slotsTitle}>🎰 SLOTS 🎰</Text>
         </LinearGradient>
       </View>
       
       <View style={styles.reelsContainer}>
-        <LinearGradient colors={['#1a1a1a', '#0a0a0a', '#1a1a1a']} style={styles.reelsBg}>
+        <LinearGradient colors={['#2a1a0a', '#1a0a00', '#2a1a0a']} style={styles.reelsBg}>
           <View style={styles.reels}>
             {slotReels.map((symbol, index) => (
-              <View key={index} style={styles.reel}>
-                <Image 
-                  source={{ uri: SLOT_IMAGES[symbol] }} 
-                  style={styles.reelImage}
-                  resizeMode="contain"
-                />
+              <View key={index} style={[styles.reel, slotSpinning && styles.reelSpinning]}>
+                <Text style={styles.reelEmoji}>
+                  {SLOT_SYMBOLS[symbol]?.emoji || '🍒'}
+                </Text>
               </View>
             ))}
           </View>
@@ -288,7 +329,8 @@ export default function CasinoScreen() {
           <TouchableOpacity
             key={amount}
             style={[styles.betButton, slotBet === amount && styles.betButtonActive]}
-            onPress={() => setSlotBet(amount)}
+            onPress={() => !slotSpinning && setSlotBet(amount)}
+            disabled={slotSpinning}
           >
             <Text style={[styles.betButtonText, slotBet === amount && styles.betButtonTextActive]}>
               ${amount}
@@ -302,11 +344,14 @@ export default function CasinoScreen() {
         onPress={playSlots}
         disabled={slotSpinning}
       >
-        <LinearGradient colors={['#e74c3c', '#c0392b', '#e74c3c']} style={styles.spinButtonGradient}>
+        <LinearGradient colors={slotSpinning ? ['#666', '#444', '#666'] : ['#e74c3c', '#c0392b', '#e74c3c']} style={styles.spinButtonGradient}>
           {slotSpinning ? (
-            <ActivityIndicator color="#fff" />
+            <View style={styles.spinningContainer}>
+              <ActivityIndicator color="#fff" size="small" />
+              <Text style={styles.spinningText}>SPINNING...</Text>
+            </View>
           ) : (
-            <Text style={styles.spinButtonText}>BET</Text>
+            <Text style={styles.spinButtonText}>🎰 BET ${slotBet}</Text>
           )}
         </LinearGradient>
       </TouchableOpacity>
@@ -702,10 +747,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   slotsTitle: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#d4af37',
-    letterSpacing: 8,
+    letterSpacing: 4,
     textShadowColor: '#d4af37',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 10,
@@ -725,19 +770,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    height: 120,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 8,
+    height: 140,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
   },
   reel: {
-    width: 80,
-    height: 80,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
+    width: 90,
+    height: 100,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#333',
+    borderWidth: 3,
+    borderColor: '#d4af37',
+    shadowColor: '#d4af37',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  reelSpinning: {
+    borderColor: '#fff',
+    backgroundColor: '#2a2a2a',
+  },
+  reelEmoji: {
+    fontSize: 56,
   },
   reelImage: {
     width: 60,
@@ -770,6 +828,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  spinningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  spinningText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 2,
   },
   betButtons: {
     flexDirection: 'row',
