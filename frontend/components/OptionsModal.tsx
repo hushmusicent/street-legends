@@ -232,9 +232,13 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
         </TouchableOpacity>
       </View>
       <View style={styles.subScreenDivider} />
-      <View style={styles.creditsContainer}>
+      <ScrollView 
+        style={styles.creditsScrollView}
+        contentContainerStyle={styles.creditsScrollContent}
+        showsVerticalScrollIndicator={true}
+      >
         <Text style={styles.creditsText}>{CREDITS_TEXT}</Text>
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -1195,6 +1199,16 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT * 0.7,
   },
   // Credits Screen Styles
+  creditsScrollView: {
+    flex: 1,
+  },
+  creditsScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
   creditsContainer: {
     flex: 1,
     justifyContent: 'center',
