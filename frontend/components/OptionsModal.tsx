@@ -26,9 +26,19 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // Credits Text
 const CREDITS_TEXT = `Powered by - Emergent
 
-Developed by - Emergent
+Lead Director - Calvin King
 
-Published by - Emergent`;
+Lead Game Designer - Calvin King
+
+Environment Designer - Emergent
+
+Software Engineer - Emergent
+
+Art Director - Meta Ai & Emergent
+
+Narrative Director - Calvin King
+
+Testers - You the People`;
 
 
 interface OptionsModalProps {
