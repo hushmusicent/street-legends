@@ -4894,6 +4894,461 @@ async def rob_bank(bank_id: str, player_id: str):
         }
 
 
+# ============== CASINO SYSTEM ==============
+
+CASINO_NAMES = [
+    "Golden Chip Casino", "Lucky Seven Casino", "The High Roller", "Diamond Palace",
+    "Jackpot Junction", "Royal Flush Casino", "Fortune's Edge", "The Strip Club Casino",
+    "Neon Nights Casino", "Big Stakes Casino", "The Betting Baron", "Cash King Casino",
+]
+
+SLOT_SYMBOLS = ["banana", "eggplant", "peach", "cherry", "coconut", "hush_logo", "appsolut_logo"]
+# Symbol weights: fruit symbols are common, logos are rare (jackpot)
+SLOT_WEIGHTS = [20, 20, 20, 20, 15, 3, 2]  # Total: 100
+
+# Slot payouts: {symbol: {3_match: multiplier, 2_match: multiplier}}
+SLOT_PAYOUTS = {
+    "banana": {"3": 5, "2": 1.5},
+    "eggplant": {"3": 5, "2": 1.5},
+    "peach": {"3": 6, "2": 1.5},
+    "cherry": {"3": 8, "2": 2},
+    "coconut": {"3": 10, "2": 2},
+    "hush_logo": {"3": 50, "2": 5},      # Rare jackpot symbol
+    "appsolut_logo": {"3": 75, "2": 7},  # Rarest jackpot symbol
+}
+
+@api_router.get("/casinos/spawn")
+async def spawn_casinos(latitude: float, longitude: float, player_level: int = 1):
+    """Spawn casinos near a location — uncommon, only 15% of areas have one"""
+    grid_lat = round(latitude * 200) / 200
+    grid_lng = round(longitude * 200) / 200
+    area_seed = hash(f"casino_{grid_lat}_{grid_lng}")
+    rng = random.Random(area_seed)
+    
+    # Only spawn in ~15% of areas
+    if rng.random() > 0.15:
+        return []
+    
+    # Check if casinos already exist nearby
+    existing = await db.casinos.find({
+        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
+        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
+    }).to_list(10)
+    
+    if existing:
+        for casino in existing:
+            casino.pop("_id", None)
+        return existing
+    
+    lat_offset = rng.uniform(-0.003, 0.003)
+    lng_offset = rng.uniform(-0.003, 0.003)
+    
+    casino = {
+        "id": str(uuid.uuid4()),
+        "name": rng.choice(CASINO_NAMES),
+        "latitude": latitude + lat_offset,
+        "longitude": longitude + lng_offset,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.casinos.insert_one(casino)
+    casino.pop("_id", None)
+    return [casino]
+
+
+@api_router.post("/casinos/slots")
+async def play_slots(player_id: str, bet_amount: int):
+    """Play slot machine - spin 3 reels"""
+    if bet_amount not in [10, 50, 100]:
+        raise HTTPException(status_code=400, detail="Bet must be $10, $50, or $100")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player_cash = player.get("cash", 0)
+    if player_cash < bet_amount:
+        raise HTTPException(status_code=400, detail=f"Not enough cash. You have ${player_cash}")
+    
+    # Spin 3 reels using weighted random
+    reels = random.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=3)
+    
+    # Calculate winnings
+    winnings = 0
+    result_type = "loss"
+    
+    # Check for 3 of a kind
+    if reels[0] == reels[1] == reels[2]:
+        multiplier = SLOT_PAYOUTS[reels[0]]["3"]
+        winnings = int(bet_amount * multiplier)
+        result_type = "jackpot" if reels[0] in ["hush_logo", "appsolut_logo"] else "big_win"
+    # Check for 2 of a kind (first two or last two)
+    elif reels[0] == reels[1] or reels[1] == reels[2]:
+        matching_symbol = reels[0] if reels[0] == reels[1] else reels[1]
+        multiplier = SLOT_PAYOUTS[matching_symbol]["2"]
+        winnings = int(bet_amount * multiplier)
+        result_type = "small_win"
+    
+    # Calculate net change
+    net_change = winnings - bet_amount
+    new_cash = player_cash + net_change
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"cash": new_cash}}
+    )
+    
+    return {
+        "reels": reels,
+        "bet": bet_amount,
+        "winnings": winnings,
+        "net_change": net_change,
+        "new_cash": new_cash,
+        "result_type": result_type,
+    }
+
+
+@api_router.post("/casinos/blackjack/start")
+async def start_blackjack(player_id: str, bet_amount: int):
+    """Start a new blackjack game"""
+    if bet_amount < 10 or bet_amount > 1000:
+        raise HTTPException(status_code=400, detail="Bet must be between $10 and $1000")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player_cash = player.get("cash", 0)
+    if player_cash < bet_amount:
+        raise HTTPException(status_code=400, detail=f"Not enough cash. You have ${player_cash}")
+    
+    # Create a deck and shuffle
+    suits = ["hearts", "diamonds", "clubs", "spades"]
+    ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+    deck = [{"suit": s, "rank": r} for s in suits for r in ranks]
+    random.shuffle(deck)
+    
+    # Deal initial cards
+    player_cards = [deck.pop(), deck.pop()]
+    dealer_cards = [deck.pop(), deck.pop()]
+    
+    def calculate_hand_value(cards):
+        value = 0
+        aces = 0
+        for card in cards:
+            rank = card["rank"]
+            if rank in ["J", "Q", "K"]:
+                value += 10
+            elif rank == "A":
+                aces += 1
+                value += 11
+            else:
+                value += int(rank)
+        # Adjust for aces
+        while value > 21 and aces > 0:
+            value -= 10
+            aces -= 1
+        return value
+    
+    player_value = calculate_hand_value(player_cards)
+    dealer_value = calculate_hand_value([dealer_cards[0]])  # Only show first card
+    
+    # Check for natural blackjack
+    is_blackjack = player_value == 21
+    
+    game = {
+        "id": str(uuid.uuid4()),
+        "player_id": player_id,
+        "bet": bet_amount,
+        "deck": deck,
+        "player_cards": player_cards,
+        "dealer_cards": dealer_cards,
+        "player_value": player_value,
+        "status": "blackjack" if is_blackjack else "playing",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    
+    await db.blackjack_games.insert_one(game)
+    
+    # If blackjack, pay out immediately
+    if is_blackjack:
+        winnings = int(bet_amount * 2.5)  # 1.5x profit + original bet
+        new_cash = player_cash + winnings - bet_amount
+        await db.players.update_one({"id": player_id}, {"$set": {"cash": new_cash}})
+        
+        return {
+            "game_id": game["id"],
+            "player_cards": player_cards,
+            "dealer_cards": [dealer_cards[0], {"suit": "hidden", "rank": "?"}],
+            "dealer_full_cards": dealer_cards,
+            "player_value": player_value,
+            "dealer_value": calculate_hand_value(dealer_cards),
+            "status": "blackjack",
+            "message": "BLACKJACK! You win!",
+            "winnings": winnings,
+            "new_cash": new_cash,
+        }
+    
+    return {
+        "game_id": game["id"],
+        "player_cards": player_cards,
+        "dealer_cards": [dealer_cards[0], {"suit": "hidden", "rank": "?"}],
+        "player_value": player_value,
+        "dealer_value": dealer_value,
+        "status": "playing",
+    }
+
+
+@api_router.post("/casinos/blackjack/{game_id}/action")
+async def blackjack_action(game_id: str, action: str):
+    """Perform a blackjack action: hit, stand, or double"""
+    game = await db.blackjack_games.find_one({"id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if game["status"] != "playing":
+        raise HTTPException(status_code=400, detail="Game is already over")
+    
+    player = await db.players.find_one({"id": game["player_id"]})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player_cash = player.get("cash", 0)
+    bet = game["bet"]
+    deck = game["deck"]
+    player_cards = game["player_cards"]
+    dealer_cards = game["dealer_cards"]
+    
+    def calculate_hand_value(cards):
+        value = 0
+        aces = 0
+        for card in cards:
+            rank = card["rank"]
+            if rank in ["J", "Q", "K"]:
+                value += 10
+            elif rank == "A":
+                aces += 1
+                value += 11
+            else:
+                value += int(rank)
+        while value > 21 and aces > 0:
+            value -= 10
+            aces -= 1
+        return value
+    
+    if action == "hit":
+        player_cards.append(deck.pop())
+        player_value = calculate_hand_value(player_cards)
+        
+        if player_value > 21:
+            # Bust - player loses
+            new_cash = player_cash - bet
+            await db.players.update_one({"id": player["id"]}, {"$set": {"cash": new_cash}})
+            await db.blackjack_games.update_one({"id": game_id}, {"$set": {"status": "bust", "player_cards": player_cards}})
+            
+            return {
+                "player_cards": player_cards,
+                "dealer_cards": dealer_cards,
+                "player_value": player_value,
+                "dealer_value": calculate_hand_value(dealer_cards),
+                "status": "bust",
+                "message": "BUST! You lose!",
+                "winnings": -bet,
+                "new_cash": new_cash,
+            }
+        
+        await db.blackjack_games.update_one({"id": game_id}, {"$set": {"player_cards": player_cards, "deck": deck}})
+        
+        return {
+            "player_cards": player_cards,
+            "dealer_cards": [dealer_cards[0], {"suit": "hidden", "rank": "?"}],
+            "player_value": player_value,
+            "status": "playing",
+        }
+    
+    elif action == "double":
+        if player_cash < bet * 2:
+            raise HTTPException(status_code=400, detail="Not enough cash to double down")
+        
+        bet = bet * 2
+        player_cards.append(deck.pop())
+        player_value = calculate_hand_value(player_cards)
+        
+        if player_value > 21:
+            new_cash = player_cash - bet
+            await db.players.update_one({"id": player["id"]}, {"$set": {"cash": new_cash}})
+            await db.blackjack_games.update_one({"id": game_id}, {"$set": {"status": "bust", "player_cards": player_cards, "bet": bet}})
+            
+            return {
+                "player_cards": player_cards,
+                "dealer_cards": dealer_cards,
+                "player_value": player_value,
+                "dealer_value": calculate_hand_value(dealer_cards),
+                "status": "bust",
+                "message": "BUST! You lose!",
+                "winnings": -bet,
+                "new_cash": new_cash,
+            }
+        
+        # Fall through to stand logic
+        action = "stand"
+        await db.blackjack_games.update_one({"id": game_id}, {"$set": {"player_cards": player_cards, "bet": bet, "deck": deck}})
+    
+    if action == "stand":
+        player_value = calculate_hand_value(player_cards)
+        
+        # Dealer plays - hits on 16, stands on 17
+        dealer_value = calculate_hand_value(dealer_cards)
+        while dealer_value < 17:
+            dealer_cards.append(deck.pop())
+            dealer_value = calculate_hand_value(dealer_cards)
+        
+        # Determine winner
+        if dealer_value > 21:
+            status = "dealer_bust"
+            message = "Dealer busts! You win!"
+            winnings = bet
+        elif dealer_value > player_value:
+            status = "dealer_wins"
+            message = "Dealer wins!"
+            winnings = -bet
+        elif player_value > dealer_value:
+            status = "player_wins"
+            message = "You win!"
+            winnings = bet
+        else:
+            status = "push"
+            message = "Push! It's a tie."
+            winnings = 0
+        
+        new_cash = player_cash + winnings
+        await db.players.update_one({"id": player["id"]}, {"$set": {"cash": new_cash}})
+        await db.blackjack_games.update_one({"id": game_id}, {"$set": {"status": status, "dealer_cards": dealer_cards}})
+        
+        return {
+            "player_cards": player_cards,
+            "dealer_cards": dealer_cards,
+            "player_value": player_value,
+            "dealer_value": dealer_value,
+            "status": status,
+            "message": message,
+            "winnings": winnings,
+            "new_cash": new_cash,
+        }
+    
+    raise HTTPException(status_code=400, detail="Invalid action. Use 'hit', 'stand', or 'double'")
+
+
+@api_router.post("/casinos/roulette")
+async def play_roulette(player_id: str, bet_amount: int, bet_type: str, bet_value: str = ""):
+    """Play roulette - spin the wheel"""
+    if bet_amount < 10 or bet_amount > 1000:
+        raise HTTPException(status_code=400, detail="Bet must be between $10 and $1000")
+    
+    valid_bet_types = ["number", "red", "black", "odd", "even", "1-12", "13-24", "25-36", "1-18", "19-36"]
+    if bet_type not in valid_bet_types:
+        raise HTTPException(status_code=400, detail=f"Invalid bet type. Use: {', '.join(valid_bet_types)}")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player_cash = player.get("cash", 0)
+    if player_cash < bet_amount:
+        raise HTTPException(status_code=400, detail=f"Not enough cash. You have ${player_cash}")
+    
+    # Roulette wheel numbers (0-36, with 0 being green)
+    red_numbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
+    black_numbers = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35]
+    
+    # Spin the wheel
+    result_number = random.randint(0, 36)
+    
+    if result_number == 0:
+        result_color = "green"
+    elif result_number in red_numbers:
+        result_color = "red"
+    else:
+        result_color = "black"
+    
+    # Determine winnings
+    winnings = 0
+    win = False
+    
+    if bet_type == "number":
+        try:
+            bet_num = int(bet_value)
+            if bet_num < 0 or bet_num > 36:
+                raise HTTPException(status_code=400, detail="Number must be 0-36")
+            if result_number == bet_num:
+                winnings = bet_amount * 35
+                win = True
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid number")
+    
+    elif bet_type == "red":
+        if result_color == "red":
+            winnings = bet_amount * 2
+            win = True
+    
+    elif bet_type == "black":
+        if result_color == "black":
+            winnings = bet_amount * 2
+            win = True
+    
+    elif bet_type == "odd":
+        if result_number != 0 and result_number % 2 == 1:
+            winnings = bet_amount * 2
+            win = True
+    
+    elif bet_type == "even":
+        if result_number != 0 and result_number % 2 == 0:
+            winnings = bet_amount * 2
+            win = True
+    
+    elif bet_type == "1-12":
+        if 1 <= result_number <= 12:
+            winnings = bet_amount * 3
+            win = True
+    
+    elif bet_type == "13-24":
+        if 13 <= result_number <= 24:
+            winnings = bet_amount * 3
+            win = True
+    
+    elif bet_type == "25-36":
+        if 25 <= result_number <= 36:
+            winnings = bet_amount * 3
+            win = True
+    
+    elif bet_type == "1-18":
+        if 1 <= result_number <= 18:
+            winnings = bet_amount * 2
+            win = True
+    
+    elif bet_type == "19-36":
+        if 19 <= result_number <= 36:
+            winnings = bet_amount * 2
+            win = True
+    
+    net_change = winnings - bet_amount
+    new_cash = player_cash + net_change
+    
+    await db.players.update_one({"id": player_id}, {"$set": {"cash": new_cash}})
+    
+    return {
+        "result_number": result_number,
+        "result_color": result_color,
+        "bet_type": bet_type,
+        "bet_value": bet_value,
+        "bet_amount": bet_amount,
+        "win": win,
+        "winnings": winnings,
+        "net_change": net_change,
+        "new_cash": new_cash,
+    }
+
+
 # ============== CASTLE CANNON MINI-GAME SYSTEM ==============
 
 CASTLE_NAMES = [

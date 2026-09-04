@@ -8,6 +8,7 @@ import {
   spawnRestaurants,
   spawnNightclubs,
   spawnBanks,
+  spawnCasinos,
   spawnCastles,
   spawnCarChases,
   spawnRunaways,
@@ -45,6 +46,7 @@ export interface MapEntitiesData {
   restaurants: any[];
   nightclubs: any[];
   banks: any[];
+  casinos: any[];
   castles: any[];
   carChases: any[];
   runaways: any[];
@@ -87,6 +89,7 @@ export const useMapEntities = ({
         spawnRestaurants(latitude, longitude, playerLevel),
         spawnNightclubs(latitude, longitude, playerLevel),
         spawnBanks(latitude, longitude, playerLevel),
+        spawnCasinos(latitude, longitude, playerLevel),
         spawnCastles(latitude, longitude, playerLevel),
         spawnCarChases(latitude, longitude, playerLevel),
         spawnRunaways(latitude, longitude, playerLevel),
@@ -103,11 +106,12 @@ export const useMapEntities = ({
         restaurants: results[5].status === 'fulfilled' ? results[5].value : [],
         nightclubs: results[6].status === 'fulfilled' ? results[6].value : [],
         banks: results[7].status === 'fulfilled' ? results[7].value : [],
-        castles: results[8].status === 'fulfilled' ? results[8].value : [],
-        carChases: results[9].status === 'fulfilled' ? results[9].value : [],
-        runaways: results[10].status === 'fulfilled' ? results[10].value : [],
-        packageGrabs: results[11].status === 'fulfilled' ? results[11].value : [],
-        shootouts: results[12].status === 'fulfilled' ? results[12].value : [],
+        casinos: results[8].status === 'fulfilled' ? results[8].value : [],
+        castles: results[9].status === 'fulfilled' ? results[9].value : [],
+        carChases: results[10].status === 'fulfilled' ? results[10].value : [],
+        runaways: results[11].status === 'fulfilled' ? results[11].value : [],
+        packageGrabs: results[12].status === 'fulfilled' ? results[12].value : [],
+        shootouts: results[13].status === 'fulfilled' ? results[13].value : [],
       };
     },
     enabled: enabled && !!playerId && !!latitude && !!longitude,

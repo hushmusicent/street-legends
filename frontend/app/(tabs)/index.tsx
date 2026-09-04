@@ -162,6 +162,7 @@ export default function MapScreen() {
   const nearbyRestaurants = useMemo(() => entitiesData?.restaurants || [], [entitiesData?.restaurants]);
   const nearbyNightclubs = useMemo(() => entitiesData?.nightclubs || [], [entitiesData?.nightclubs]);
   const nearbyBanks = useMemo(() => entitiesData?.banks || [], [entitiesData?.banks]);
+  const nearbyCasinos = useMemo(() => entitiesData?.casinos || [], [entitiesData?.casinos]);
   const nearbyCastles = useMemo(() => entitiesData?.castles || [], [entitiesData?.castles]);
   const nearbyCarChases = useMemo(() => entitiesData?.carChases || [], [entitiesData?.carChases]);
   const nearbyRunaways = useMemo(() => entitiesData?.runaways || [], [entitiesData?.runaways]);
@@ -665,6 +666,13 @@ export default function MapScreen() {
       name: b.name,
       icon: '🏦',
     })),
+    ...nearbyCasinos.map((c) => ({
+      id: c.id,
+      coordinate: { latitude: c.latitude, longitude: c.longitude },
+      type: 'casino' as const,
+      name: c.name,
+      icon: '🎰',
+    })),
     ...nearbyCastles.map((c) => {
       const cooldownKey = `castle_${c.id}`;
       const remainingSecs = localCooldowns[cooldownKey] || 0;
@@ -758,6 +766,11 @@ export default function MapScreen() {
     } else if (marker.type === 'bank') {
       const bank = nearbyBanks.find((b) => b.id === marker.id);
       if (bank) setSelectedBank(bank);
+    } else if (marker.type === 'casino') {
+      const casino = nearbyCasinos.find((c) => c.id === marker.id);
+      if (casino) {
+        router.push({ pathname: '/casino', params: { id: casino.id, name: casino.name } });
+      }
     } else if (marker.type === 'castle') {
       const castle = nearbyCastles.find((c) => c.id === marker.id);
       if (castle) setSelectedCastle(castle);
@@ -774,7 +787,7 @@ export default function MapScreen() {
       const shootout = nearbyShootouts.find((s) => s.id === marker.id);
       if (shootout) setSelectedShootout(shootout);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, nearbyShootouts]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCasinos, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, nearbyShootouts]);
 
   if (loading) {
     return (

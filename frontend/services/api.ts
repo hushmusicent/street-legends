@@ -670,6 +670,12 @@ export const robBank = async (bankId: string, playerId: string) => {
   return response.data;
 };
 
+// ============== CASINOS ==============
+export const spawnCasinos = async (latitude: number, longitude: number, playerLevel: number = 1) => {
+  const response = await api.get(`/casinos/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
+  return response.data;
+};
+
 // Castle Cannon Mini-game API
 export const spawnCastles = async (latitude: number, longitude: number, playerLevel: number = 1) => {
   const response = await api.get(`/castles/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);
