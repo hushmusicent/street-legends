@@ -96,18 +96,60 @@ export default function CasinoScreen() {
   const [bjLoading, setBjLoading] = useState(false);
   
   // Roulette state
-  const [rouletteBet, setRouletteBet] = useState(50);
-  const [rouletteBetType, setRouletteBetType] = useState('red');
-  const [rouletteNumber, setRouletteNumber] = useState('');
+  const [selectedChip, setSelectedChip] = useState(25);
+  const [placedBets, setPlacedBets] = useState<{[key: string]: number}>({});
   const [rouletteResult, setRouletteResult] = useState<any>(null);
   const [rouletteSpinning, setRouletteSpinning] = useState(false);
+  const [wheelRotation, setWheelRotation] = useState(0);
+  const wheelAnimationRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Cleanup interval on unmount
+  // American Roulette wheel sequence (clockwise from 0)
+  const WHEEL_NUMBERS = [
+    '0', '28', '9', '26', '30', '11', '7', '20', '32', '17', '5', '22', '34', '15', '3', '24', '36', '13', '1',
+    '00', '27', '10', '25', '29', '12', '8', '19', '31', '18', '6', '21', '33', '16', '4', '23', '35', '14', '2'
+  ];
+
+  // Red numbers in American roulette
+  const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+  
+  const getNumberColor = (num: string): string => {
+    if (num === '0' || num === '00') return 'green';
+    return RED_NUMBERS.includes(parseInt(num)) ? 'red' : 'black';
+  };
+
+  const getTotalBets = (): number => {
+    return Object.values(placedBets).reduce((sum, bet) => sum + bet, 0);
+  };
+
+  const placeBet = (betType: string) => {
+    if (rouletteSpinning) return;
+    const totalAfterBet = getTotalBets() + selectedChip;
+    if ((player?.cash || 0) < totalAfterBet) {
+      Alert.alert('Not Enough Cash', `You need $${totalAfterBet} total. You have $${player?.cash || 0}`);
+      return;
+    }
+    setPlacedBets(prev => ({
+      ...prev,
+      [betType]: (prev[betType] || 0) + selectedChip
+    }));
+  };
+
+  const clearBets = () => {
+    if (rouletteSpinning) return;
+    setPlacedBets({});
+    setRouletteResult(null);
+  };
+
+  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       if (spinIntervalRef.current) {
         clearInterval(spinIntervalRef.current);
         spinIntervalRef.current = null;
+      }
+      if (wheelAnimationRef.current) {
+        clearInterval(wheelAnimationRef.current);
+        wheelAnimationRef.current = null;
       }
     };
   }, []);
@@ -273,41 +315,120 @@ export default function CasinoScreen() {
   };
 
   // ============== ROULETTE ==============
-  const playRoulette = async () => {
-    if (!playerId || rouletteSpinning) return;
-    if ((player?.cash || 0) < rouletteBet) {
-      Alert.alert('Not Enough Cash', `You need $${rouletteBet} to play. You have $${player?.cash || 0}`);
+  // Calculate winnings for a given bet
+  const calculateWinnings = (betType: string, betAmount: number, winningNumber: string): number => {
+    const num = winningNumber === '00' ? -1 : parseInt(winningNumber);
+    const isRed = RED_NUMBERS.includes(num);
+    const isBlack = num > 0 && !isRed;
+    const isEven = num > 0 && num % 2 === 0;
+    const isOdd = num > 0 && num % 2 === 1;
+    
+    // Single number bet
+    if (betType === winningNumber || betType === `num_${winningNumber}`) {
+      return betAmount * 35;
+    }
+    
+    // Color bets
+    if (betType === 'red' && isRed) return betAmount;
+    if (betType === 'black' && isBlack) return betAmount;
+    
+    // Even/Odd bets
+    if (betType === 'even' && isEven) return betAmount;
+    if (betType === 'odd' && isOdd) return betAmount;
+    
+    // 1-18 / 19-36 bets
+    if (betType === '1-18' && num >= 1 && num <= 18) return betAmount;
+    if (betType === '19-36' && num >= 19 && num <= 36) return betAmount;
+    
+    // Dozen bets
+    if (betType === '1st12' && num >= 1 && num <= 12) return betAmount * 2;
+    if (betType === '2nd12' && num >= 13 && num <= 24) return betAmount * 2;
+    if (betType === '3rd12' && num >= 25 && num <= 36) return betAmount * 2;
+    
+    // Column bets (1st column: 1,4,7... 2nd: 2,5,8... 3rd: 3,6,9...)
+    if (betType === 'col1' && num > 0 && num % 3 === 1) return betAmount * 2;
+    if (betType === 'col2' && num > 0 && num % 3 === 2) return betAmount * 2;
+    if (betType === 'col3' && num > 0 && num % 3 === 0) return betAmount * 2;
+    
+    return 0; // Loss
+  };
+
+  const spinRoulette = async () => {
+    if (!playerId) {
+      Alert.alert('Error', 'Please log in to play');
       return;
     }
-
-    if (rouletteBetType === 'number' && (rouletteNumber === '' || isNaN(parseInt(rouletteNumber)))) {
-      Alert.alert('Invalid Number', 'Please enter a number between 0 and 36');
+    if (rouletteSpinning) return;
+    
+    const totalBet = getTotalBets();
+    if (totalBet === 0) {
+      Alert.alert('No Bets Placed', 'Please place at least one bet before spinning');
+      return;
+    }
+    if ((player?.cash || 0) < totalBet) {
+      Alert.alert('Not Enough Cash', `You need $${totalBet} to play. You have $${player?.cash || 0}`);
       return;
     }
 
     setRouletteSpinning(true);
     setRouletteResult(null);
 
+    // Start wheel animation
+    let rotation = wheelRotation;
+    let speed = 30;
+    wheelAnimationRef.current = setInterval(() => {
+      rotation += speed;
+      setWheelRotation(rotation % 360);
+      if (speed > 2) {
+        speed *= 0.98; // Slow down gradually
+      }
+    }, 50);
+
     try {
-      const betValue = rouletteBetType === 'number' ? rouletteNumber : '';
+      // Call backend to get result
       const response = await fetch(
-        `${API_URL}/api/casinos/roulette?player_id=${playerId}&bet_amount=${rouletteBet}&bet_type=${rouletteBetType}&bet_value=${betValue}`,
-        { method: 'POST' }
+        `${API_URL}/api/casinos/roulette/spin?player_id=${playerId}`,
+        { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bets: placedBets })
+        }
       );
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to play roulette');
+        throw new Error(data.detail || 'Failed to spin roulette');
       }
 
+      // Let wheel spin for a bit then show result
       setTimeout(() => {
+        if (wheelAnimationRef.current) {
+          clearInterval(wheelAnimationRef.current);
+          wheelAnimationRef.current = null;
+        }
+        
+        // Calculate the final rotation to land on the winning number
+        const winningIndex = WHEEL_NUMBERS.indexOf(data.winning_number);
+        const anglePerNumber = 360 / WHEEL_NUMBERS.length;
+        const finalRotation = (winningIndex * anglePerNumber + 180) % 360; // 180 offset to point to top
+        setWheelRotation(finalRotation);
+        
         setRouletteResult(data);
         setRouletteSpinning(false);
         refreshPlayer();
-      }, 2000);
+        
+        // Clear bets after showing result
+        setTimeout(() => {
+          setPlacedBets({});
+        }, 3000);
+      }, 3000);
     } catch (e: any) {
+      if (wheelAnimationRef.current) {
+        clearInterval(wheelAnimationRef.current);
+        wheelAnimationRef.current = null;
+      }
       setRouletteSpinning(false);
-      Alert.alert('Error', e.message);
+      Alert.alert('Error', e.message || 'Failed to spin roulette');
     }
   };
 
@@ -706,158 +827,238 @@ export default function CasinoScreen() {
     </ScrollView>
   );
 
-  const renderRoulette = () => (
-    <ScrollView style={styles.rouletteContainer} contentContainerStyle={styles.rouletteContent}>
-      <Text style={styles.gameTitle}>ROULETTE</Text>
-      <Text style={styles.balanceSmall}>Balance: ${player?.cash || 0}</Text>
-      
-      <View style={styles.rouletteWheel}>
-        {rouletteSpinning ? (
-          <ActivityIndicator size="large" color="#d4af37" />
-        ) : rouletteResult ? (
-          <View style={styles.rouletteResultDisplay}>
-            <View style={[
-              styles.rouletteNumber,
-              rouletteResult.result_color === 'red' && styles.rouletteRed,
-              rouletteResult.result_color === 'black' && styles.rouletteBlack,
-              rouletteResult.result_color === 'green' && styles.rouletteGreen,
-            ]}>
-              <Text style={styles.rouletteNumberText}>{rouletteResult.result_number}</Text>
-            </View>
-            <Text style={styles.rouletteColorText}>{rouletteResult.result_color.toUpperCase()}</Text>
-          </View>
-        ) : (
-          <Text style={styles.rouletteWheelText}>🎡</Text>
-        )}
-      </View>
-      
-      {rouletteResult && (
-        <View style={[styles.resultContainer, rouletteResult.win ? styles.winResult : styles.lossResult]}>
-          <Text style={styles.resultText}>{rouletteResult.win ? '🎉 Winner!' : '😔 No luck'}</Text>
-          <Text style={styles.resultAmount}>
-            {rouletteResult.net_change >= 0 ? `+$${rouletteResult.winnings}` : `-$${rouletteBet}`}
-          </Text>
+  const renderRoulette = () => {
+    const renderChip = (betType: string, small: boolean = false) => {
+      const amount = placedBets[betType];
+      if (!amount) return null;
+      return (
+        <View style={[styles.placedChip, small && styles.placedChipSmall]}>
+          <Text style={[styles.placedChipText, small && styles.placedChipTextSmall]}>${amount}</Text>
         </View>
-      )}
-      
-      <View style={styles.rouletteBetSection}>
-        <Text style={styles.rouletteBetLabel}>Bet Amount</Text>
-        <View style={styles.rouletteBetAmounts}>
-          {[25, 50, 100, 250].map((amount) => (
-            <TouchableOpacity
-              key={amount}
-              style={[styles.rouletteBetBtn, rouletteBet === amount && styles.rouletteBetBtnActive]}
-              onPress={() => setRouletteBet(amount)}
-            >
-              <Text style={[styles.rouletteBetBtnText, rouletteBet === amount && styles.rouletteBetBtnTextActive]}>
-                ${amount}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        
-        <Text style={styles.rouletteBetLabel}>Bet Type</Text>
-        <View style={styles.rouletteBetTypes}>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, styles.rouletteRedBtn, rouletteBetType === 'red' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('red')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>RED (2x)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, styles.rouletteBlackBtn, rouletteBetType === 'black' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('black')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>BLACK (2x)</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.rouletteBetTypes}>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === 'odd' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('odd')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>ODD (2x)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === 'even' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('even')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>EVEN (2x)</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.rouletteBetTypes}>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === '1-18' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('1-18')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>1-18 (2x)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === '19-36' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('19-36')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>19-36 (2x)</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.rouletteBetTypes}>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === '1-12' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('1-12')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>1-12 (3x)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === '13-24' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('13-24')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>13-24 (3x)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rouletteTypeBtn, rouletteBetType === '25-36' && styles.rouletteTypeBtnActive]}
-            onPress={() => setRouletteBetType('25-36')}
-          >
-            <Text style={styles.rouletteTypeBtnText}>25-36 (3x)</Text>
-          </TouchableOpacity>
-        </View>
+      );
+    };
+
+    const renderNumberCell = (num: string) => {
+      const color = getNumberColor(num);
+      const betKey = `num_${num}`;
+      return (
         <TouchableOpacity
-          style={[styles.rouletteTypeBtn, styles.rouletteNumberBtn, rouletteBetType === 'number' && styles.rouletteTypeBtnActive]}
-          onPress={() => setRouletteBetType('number')}
+          key={num}
+          style={[
+            styles.tableCell,
+            color === 'red' && styles.tableCellRed,
+            color === 'black' && styles.tableCellBlack,
+            color === 'green' && styles.tableCellGreen,
+          ]}
+          onPress={() => placeBet(betKey)}
+          disabled={rouletteSpinning}
         >
-          <Text style={styles.rouletteTypeBtnText}>SINGLE # (35x)</Text>
+          <Text style={styles.tableCellText}>{num}</Text>
+          {renderChip(betKey, true)}
         </TouchableOpacity>
-        {rouletteBetType === 'number' && (
-          <View style={styles.numberInputContainer}>
-            <Text style={styles.numberInputLabel}>Enter number (0-36):</Text>
-            <View style={styles.numberGrid}>
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36].map((num) => (
-                <TouchableOpacity
+      );
+    };
+
+    return (
+      <ScrollView style={styles.rouletteContainer} contentContainerStyle={styles.rouletteScrollContent}>
+        {/* Header */}
+        <View style={styles.rouletteHeader}>
+          <Text style={styles.rouletteTitle}>🎰 AMERICAN ROULETTE</Text>
+          <Text style={styles.rouletteBalance}>Balance: ${player?.cash || 0}</Text>
+          {getTotalBets() > 0 && (
+            <Text style={styles.rouletteTotalBet}>Total Bet: ${getTotalBets()}</Text>
+          )}
+        </View>
+
+        {/* Roulette Wheel */}
+        <View style={styles.wheelContainer}>
+          <View style={[styles.wheel, { transform: [{ rotate: `${wheelRotation}deg` }] }]}>
+            {WHEEL_NUMBERS.map((num, index) => {
+              const angle = (index * 360) / WHEEL_NUMBERS.length;
+              const color = getNumberColor(num);
+              return (
+                <View
                   key={num}
-                  style={[styles.numberBtn, rouletteNumber === String(num) && styles.numberBtnActive]}
-                  onPress={() => setRouletteNumber(String(num))}
+                  style={[
+                    styles.wheelNumber,
+                    { transform: [{ rotate: `${angle}deg` }, { translateY: -65 }] },
+                  ]}
                 >
-                  <Text style={[styles.numberBtnText, rouletteNumber === String(num) && styles.numberBtnTextActive]}>{num}</Text>
-                </TouchableOpacity>
-              ))}
+                  <View style={[
+                    styles.wheelNumberInner,
+                    color === 'red' && styles.wheelNumberRed,
+                    color === 'black' && styles.wheelNumberBlack,
+                    color === 'green' && styles.wheelNumberGreen,
+                  ]}>
+                    <Text style={[styles.wheelNumberText, { transform: [{ rotate: `-${angle + wheelRotation}deg` }] }]}>
+                      {num}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+            <View style={styles.wheelCenter}>
+              <Text style={styles.wheelCenterText}>🎰</Text>
             </View>
           </View>
+          <View style={styles.wheelPointer}>
+            <Text style={styles.wheelPointerText}>▼</Text>
+          </View>
+        </View>
+
+        {/* Result Display */}
+        {rouletteResult && (
+          <View style={[styles.rouletteResultBox, rouletteResult.total_winnings > 0 ? styles.rouletteWin : styles.rouletteLoss]}>
+            <View style={[
+              styles.resultNumberBadge,
+              getNumberColor(rouletteResult.winning_number) === 'red' && styles.resultBadgeRed,
+              getNumberColor(rouletteResult.winning_number) === 'black' && styles.resultBadgeBlack,
+              getNumberColor(rouletteResult.winning_number) === 'green' && styles.resultBadgeGreen,
+            ]}>
+              <Text style={styles.resultNumberText}>{rouletteResult.winning_number}</Text>
+            </View>
+            <Text style={styles.rouletteResultText}>
+              {rouletteResult.total_winnings > 0 ? `🎉 Won $${rouletteResult.total_winnings}!` : '😔 No win'}
+            </Text>
+          </View>
         )}
-      </View>
-      
-      <TouchableOpacity 
-        style={[styles.spinButton, rouletteSpinning && styles.spinButtonDisabled]}
-        onPress={playRoulette}
-        disabled={rouletteSpinning}
-      >
-        <LinearGradient colors={['#e74c3c', '#c0392b', '#e74c3c']} style={styles.spinButtonGradient}>
-          {rouletteSpinning ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.spinButtonText}>SPIN</Text>
-          )}
-        </LinearGradient>
-      </TouchableOpacity>
-    </ScrollView>
-  );
+
+        {/* Chip Selection */}
+        <View style={styles.chipSelector}>
+          <Text style={styles.chipSelectorTitle}>SELECT CHIP</Text>
+          <View style={styles.chipRow}>
+            {[25, 50, 100, 500].map((value) => (
+              <TouchableOpacity
+                key={value}
+                style={[styles.chip, selectedChip === value && styles.chipSelected]}
+                onPress={() => setSelectedChip(value)}
+                disabled={rouletteSpinning}
+              >
+                <Text style={[styles.chipValue, selectedChip === value && styles.chipValueSelected]}>${value}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Betting Table - Green Felt */}
+        <View style={styles.bettingTable}>
+          {/* 0 and 00 */}
+          <View style={styles.zeroRow}>
+            {renderNumberCell('0')}
+            {renderNumberCell('00')}
+          </View>
+
+          {/* Main Number Grid - 3 columns x 12 rows */}
+          <View style={styles.numberGrid}>
+            {[...Array(12)].map((_, rowIndex) => (
+              <View key={rowIndex} style={styles.numberRow}>
+                {[1, 2, 3].map((col) => {
+                  const num = (rowIndex * 3) + col;
+                  return renderNumberCell(String(num));
+                })}
+              </View>
+            ))}
+          </View>
+
+          {/* Column bets (2 to 1) */}
+          <View style={styles.columnBets}>
+            <TouchableOpacity style={styles.columnBet} onPress={() => placeBet('col1')} disabled={rouletteSpinning}>
+              <Text style={styles.columnBetText}>2:1</Text>
+              {renderChip('col1', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.columnBet} onPress={() => placeBet('col2')} disabled={rouletteSpinning}>
+              <Text style={styles.columnBetText}>2:1</Text>
+              {renderChip('col2', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.columnBet} onPress={() => placeBet('col3')} disabled={rouletteSpinning}>
+              <Text style={styles.columnBetText}>2:1</Text>
+              {renderChip('col3', true)}
+            </TouchableOpacity>
+          </View>
+
+          {/* Dozen bets */}
+          <View style={styles.dozenBets}>
+            <TouchableOpacity style={styles.dozenBet} onPress={() => placeBet('1st12')} disabled={rouletteSpinning}>
+              <Text style={styles.dozenBetText}>1st 12</Text>
+              {renderChip('1st12', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dozenBet} onPress={() => placeBet('2nd12')} disabled={rouletteSpinning}>
+              <Text style={styles.dozenBetText}>2nd 12</Text>
+              {renderChip('2nd12', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dozenBet} onPress={() => placeBet('3rd12')} disabled={rouletteSpinning}>
+              <Text style={styles.dozenBetText}>3rd 12</Text>
+              {renderChip('3rd12', true)}
+            </TouchableOpacity>
+          </View>
+
+          {/* Outside bets - Row 1 */}
+          <View style={styles.outsideBets}>
+            <TouchableOpacity style={styles.outsideBet} onPress={() => placeBet('1-18')} disabled={rouletteSpinning}>
+              <Text style={styles.outsideBetText}>1-18</Text>
+              {renderChip('1-18', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.outsideBet, styles.outsideBetEven]} onPress={() => placeBet('even')} disabled={rouletteSpinning}>
+              <Text style={styles.outsideBetText}>EVEN</Text>
+              {renderChip('even', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.outsideBet, styles.outsideBetRed]} onPress={() => placeBet('red')} disabled={rouletteSpinning}>
+              <Text style={styles.outsideBetText}>RED</Text>
+              {renderChip('red', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.outsideBet, styles.outsideBetBlack]} onPress={() => placeBet('black')} disabled={rouletteSpinning}>
+              <Text style={styles.outsideBetText}>BLACK</Text>
+              {renderChip('black', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.outsideBet, styles.outsideBetOdd]} onPress={() => placeBet('odd')} disabled={rouletteSpinning}>
+              <Text style={styles.outsideBetText}>ODD</Text>
+              {renderChip('odd', true)}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.outsideBet} onPress={() => placeBet('19-36')} disabled={rouletteSpinning}>
+              <Text style={styles.outsideBetText}>19-36</Text>
+              {renderChip('19-36', true)}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.rouletteActions}>
+          <TouchableOpacity 
+            style={[styles.clearBetsBtn, rouletteSpinning && styles.btnDisabled]}
+            onPress={clearBets}
+            disabled={rouletteSpinning}
+          >
+            <Text style={styles.clearBetsBtnText}>CLEAR BETS</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.spinRouletteBtn, (rouletteSpinning || getTotalBets() === 0) && styles.btnDisabled]}
+            onPress={spinRoulette}
+            disabled={rouletteSpinning || getTotalBets() === 0}
+          >
+            <LinearGradient 
+              colors={rouletteSpinning ? ['#666', '#444'] : ['#c0392b', '#e74c3c', '#c0392b']} 
+              style={styles.spinRouletteBtnGradient}
+            >
+              {rouletteSpinning ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.spinRouletteBtnText}>SPIN</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Payouts Info */}
+        <View style={styles.payoutsInfo}>
+          <Text style={styles.payoutsTitle}>PAYOUTS</Text>
+          <Text style={styles.payoutText}>Single Number: 35 to 1</Text>
+          <Text style={styles.payoutText}>Dozens/Columns: 2 to 1</Text>
+          <Text style={styles.payoutText}>Red/Black/Odd/Even/1-18/19-36: 1 to 1</Text>
+        </View>
+      </ScrollView>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1328,168 +1529,411 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   
-  // Roulette styles
+  // Roulette styles - American Roulette
   rouletteContainer: {
     flex: 1,
+    backgroundColor: '#0a0a0a',
   },
-  rouletteContent: {
-    padding: 20,
+  rouletteScrollContent: {
+    padding: 12,
     alignItems: 'center',
+    paddingBottom: 40,
   },
-  rouletteWheel: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+  rouletteHeader: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  rouletteTitle: {
+    color: '#d4af37',
+    fontSize: 22,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  rouletteBalance: {
+    color: '#fff',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  rouletteTotalBet: {
+    color: '#f39c12',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  
+  // Wheel styles
+  wheelContainer: {
+    width: 180,
+    height: 180,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  wheel: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     backgroundColor: '#1a1a1a',
     borderWidth: 4,
     borderColor: '#d4af37',
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 20,
   },
-  rouletteWheelText: {
-    fontSize: 64,
-  },
-  rouletteResultDisplay: {
-    alignItems: 'center',
-  },
-  rouletteNumber: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  wheelNumber: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  rouletteRed: {
-    backgroundColor: '#e74c3c',
-  },
-  rouletteBlack: {
-    backgroundColor: '#2c3e50',
-  },
-  rouletteGreen: {
-    backgroundColor: '#27ae60',
-  },
-  rouletteNumberText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  rouletteColorText: {
-    color: '#d4af37',
-    fontSize: 14,
-    marginTop: 8,
-    fontWeight: 'bold',
-  },
-  rouletteBetSection: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  rouletteBetLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 8,
-    marginTop: 16,
-    letterSpacing: 1,
-  },
-  rouletteBetAmounts: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  rouletteBetBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1a',
-    borderWidth: 2,
-    borderColor: '#333',
-  },
-  rouletteBetBtnActive: {
-    borderColor: '#d4af37',
-  },
-  rouletteBetBtnText: {
-    color: '#888',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  rouletteBetBtnTextActive: {
-    color: '#d4af37',
-  },
-  rouletteBetTypes: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  rouletteTypeBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1a',
-    borderWidth: 2,
-    borderColor: '#444',
-  },
-  rouletteRedBtn: {
-    backgroundColor: 'rgba(231, 76, 60, 0.3)',
-    borderColor: '#e74c3c',
-  },
-  rouletteBlackBtn: {
-    backgroundColor: 'rgba(44, 62, 80, 0.5)',
-    borderColor: '#2c3e50',
-  },
-  rouletteNumberBtn: {
-    marginTop: 8,
-    backgroundColor: 'rgba(39, 174, 96, 0.3)',
-    borderColor: '#27ae60',
-  },
-  rouletteTypeBtnActive: {
-    borderColor: '#d4af37',
-    borderWidth: 3,
-  },
-  rouletteTypeBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  numberInputContainer: {
-    width: '100%',
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  numberInputLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  numberGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    maxWidth: 320,
-  },
-  numberBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 6,
-    backgroundColor: '#1a1a1a',
+  wheelNumberInner: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#333',
-  },
-  numberBtnActive: {
-    backgroundColor: '#d4af37',
     borderColor: '#d4af37',
   },
-  numberBtnText: {
+  wheelNumberRed: {
+    backgroundColor: '#c0392b',
+  },
+  wheelNumberBlack: {
+    backgroundColor: '#1a1a1a',
+  },
+  wheelNumberGreen: {
+    backgroundColor: '#27ae60',
+  },
+  wheelNumberText: {
+    color: '#fff',
+    fontSize: 7,
+    fontWeight: 'bold',
+  },
+  wheelCenter: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#0d0d0d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#d4af37',
+  },
+  wheelCenterText: {
+    fontSize: 24,
+  },
+  wheelPointer: {
+    position: 'absolute',
+    top: -5,
+  },
+  wheelPointerText: {
+    color: '#d4af37',
+    fontSize: 24,
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  
+  // Result styles
+  rouletteResultBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    gap: 12,
+  },
+  rouletteWin: {
+    backgroundColor: 'rgba(39, 174, 96, 0.3)',
+    borderWidth: 2,
+    borderColor: '#27ae60',
+  },
+  rouletteLoss: {
+    backgroundColor: 'rgba(231, 76, 60, 0.3)',
+    borderWidth: 2,
+    borderColor: '#e74c3c',
+  },
+  resultNumberBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resultBadgeRed: {
+    backgroundColor: '#c0392b',
+  },
+  resultBadgeBlack: {
+    backgroundColor: '#2c3e50',
+  },
+  resultBadgeGreen: {
+    backgroundColor: '#27ae60',
+  },
+  resultNumberText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  rouletteResultText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
+  // Chip Selector
+  chipSelector: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  chipSelectorTitle: {
     color: '#888',
+    fontSize: 11,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  chip: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#555',
+  },
+  chipSelected: {
+    borderColor: '#d4af37',
+    backgroundColor: '#2a2a1a',
+  },
+  chipValue: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  chipValueSelected: {
+    color: '#d4af37',
+  },
+  
+  // Betting Table
+  bettingTable: {
+    backgroundColor: '#0d5f2d',
+    borderRadius: 10,
+    padding: 8,
+    borderWidth: 3,
+    borderColor: '#8B4513',
+    width: '100%',
+    maxWidth: 360,
+  },
+  zeroRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  numberGrid: {
+    alignItems: 'center',
+  },
+  numberRow: {
+    flexDirection: 'row',
+    gap: 2,
+    marginBottom: 2,
+  },
+  tableCell: {
+    width: 34,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+    borderRadius: 3,
+  },
+  tableCellRed: {
+    backgroundColor: '#c0392b',
+  },
+  tableCellBlack: {
+    backgroundColor: '#1a1a1a',
+  },
+  tableCellGreen: {
+    backgroundColor: '#27ae60',
+  },
+  tableCellText: {
+    color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  numberBtnTextActive: {
-    color: '#000',
+  placedChip: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#d4af37',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#8B4513',
+    zIndex: 10,
   },
+  placedChipSmall: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  placedChipText: {
+    color: '#000',
+    fontSize: 8,
+    fontWeight: 'bold',
+  },
+  placedChipTextSmall: {
+    fontSize: 6,
+  },
+  
+  // Column and Dozen Bets
+  columnBets: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 2,
+    marginTop: 4,
+  },
+  columnBet: {
+    width: 34,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+    borderRadius: 3,
+  },
+  columnBetText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  dozenBets: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 2,
+    marginTop: 4,
+  },
+  dozenBet: {
+    flex: 1,
+    maxWidth: 110,
+    height: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+    borderRadius: 3,
+  },
+  dozenBetText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  
+  // Outside Bets
+  outsideBets: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 2,
+    marginTop: 4,
+  },
+  outsideBet: {
+    width: 54,
+    height: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+    borderRadius: 3,
+  },
+  outsideBetRed: {
+    backgroundColor: '#c0392b',
+  },
+  outsideBetBlack: {
+    backgroundColor: '#1a1a1a',
+  },
+  outsideBetEven: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  outsideBetOdd: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  outsideBetText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  
+  // Action Buttons
+  rouletteActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  clearBetsBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: '#444',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#666',
+  },
+  clearBetsBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  spinRouletteBtn: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  spinRouletteBtnGradient: {
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spinRouletteBtnText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  
+  // Payouts Info
+  payoutsInfo: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 360,
+  },
+  payoutsTitle: {
+    color: '#d4af37',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  payoutText: {
+    color: '#888',
+    fontSize: 10,
+    marginBottom: 2,
+  },
+  
   // Help Button & Modal Styles
   helpButton: {
     position: 'absolute',

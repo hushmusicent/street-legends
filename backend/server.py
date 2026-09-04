@@ -5349,6 +5349,137 @@ async def play_roulette(player_id: str, bet_amount: int, bet_type: str, bet_valu
     }
 
 
+class RouletteBetsRequest(BaseModel):
+    bets: dict
+
+
+@api_router.post("/casinos/roulette/spin")
+async def spin_american_roulette(player_id: str, request: RouletteBetsRequest):
+    """Play American roulette with multiple bets - includes 0 and 00"""
+    bets = request.bets
+    
+    if not bets:
+        raise HTTPException(status_code=400, detail="No bets placed")
+    
+    total_bet = sum(bets.values())
+    if total_bet < 1:
+        raise HTTPException(status_code=400, detail="Total bet must be at least $1")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player_cash = player.get("cash", 0)
+    if player_cash < total_bet:
+        raise HTTPException(status_code=400, detail=f"Not enough cash. You have ${player_cash}, need ${total_bet}")
+    
+    # American roulette wheel - includes 0 and 00
+    wheel_numbers = ['0', '00'] + [str(i) for i in range(1, 37)]
+    red_numbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
+    
+    # Spin the wheel
+    winning_number = random.choice(wheel_numbers)
+    
+    # Determine winning number properties
+    if winning_number in ['0', '00']:
+        winning_color = 'green'
+        winning_int = -1 if winning_number == '00' else 0
+    else:
+        winning_int = int(winning_number)
+        winning_color = 'red' if winning_int in red_numbers else 'black'
+    
+    # Calculate winnings for each bet
+    total_winnings = 0
+    winning_bets = []
+    
+    for bet_type, bet_amount in bets.items():
+        payout = 0
+        
+        # Single number bets (num_X format)
+        if bet_type.startswith('num_'):
+            bet_num = bet_type.replace('num_', '')
+            if bet_num == winning_number:
+                payout = bet_amount * 36  # 35:1 plus original bet
+                winning_bets.append(bet_type)
+        
+        # Color bets
+        elif bet_type == 'red':
+            if winning_color == 'red':
+                payout = bet_amount * 2
+                winning_bets.append(bet_type)
+        elif bet_type == 'black':
+            if winning_color == 'black':
+                payout = bet_amount * 2
+                winning_bets.append(bet_type)
+        
+        # Even/Odd bets (0 and 00 lose)
+        elif bet_type == 'even':
+            if winning_int > 0 and winning_int % 2 == 0:
+                payout = bet_amount * 2
+                winning_bets.append(bet_type)
+        elif bet_type == 'odd':
+            if winning_int > 0 and winning_int % 2 == 1:
+                payout = bet_amount * 2
+                winning_bets.append(bet_type)
+        
+        # 1-18 / 19-36 bets
+        elif bet_type == '1-18':
+            if 1 <= winning_int <= 18:
+                payout = bet_amount * 2
+                winning_bets.append(bet_type)
+        elif bet_type == '19-36':
+            if 19 <= winning_int <= 36:
+                payout = bet_amount * 2
+                winning_bets.append(bet_type)
+        
+        # Dozen bets
+        elif bet_type == '1st12':
+            if 1 <= winning_int <= 12:
+                payout = bet_amount * 3
+                winning_bets.append(bet_type)
+        elif bet_type == '2nd12':
+            if 13 <= winning_int <= 24:
+                payout = bet_amount * 3
+                winning_bets.append(bet_type)
+        elif bet_type == '3rd12':
+            if 25 <= winning_int <= 36:
+                payout = bet_amount * 3
+                winning_bets.append(bet_type)
+        
+        # Column bets (1st: 1,4,7... 2nd: 2,5,8... 3rd: 3,6,9...)
+        elif bet_type == 'col1':
+            if winning_int > 0 and winning_int % 3 == 1:
+                payout = bet_amount * 3
+                winning_bets.append(bet_type)
+        elif bet_type == 'col2':
+            if winning_int > 0 and winning_int % 3 == 2:
+                payout = bet_amount * 3
+                winning_bets.append(bet_type)
+        elif bet_type == 'col3':
+            if winning_int > 0 and winning_int % 3 == 0:
+                payout = bet_amount * 3
+                winning_bets.append(bet_type)
+        
+        total_winnings += payout
+    
+    # Calculate net change (winnings minus total bet)
+    net_change = total_winnings - total_bet
+    new_cash = player_cash + net_change
+    
+    await db.players.update_one({"id": player_id}, {"$set": {"cash": new_cash}})
+    
+    return {
+        "winning_number": winning_number,
+        "winning_color": winning_color,
+        "total_bet": total_bet,
+        "total_winnings": total_winnings,
+        "net_change": net_change,
+        "new_cash": new_cash,
+        "winning_bets": winning_bets,
+        "bets_placed": list(bets.keys()),
+    }
+
+
 # ============== CASTLE CANNON MINI-GAME SYSTEM ==============
 
 CASTLE_NAMES = [
