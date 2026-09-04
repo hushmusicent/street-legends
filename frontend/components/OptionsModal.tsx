@@ -672,6 +672,80 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
               </View>
             )}
           </View>
+          
+          {/* Casino Games Section */}
+          <View style={[styles.runawayContainer, { backgroundColor: 'rgba(255, 215, 0, 0.08)' }]}>
+            <View style={styles.miniGameItem}>
+              <Text style={{ fontSize: 22 }}>🎰</Text>
+              <View style={styles.miniGameInfo}>
+                <Text style={styles.miniGameTitle}>Casino Games</Text>
+                <Text style={styles.miniGameDesc}>Slots, Blackjack & Roulette</Text>
+              </View>
+            </View>
+            
+            {/* Slots */}
+            <TouchableOpacity 
+              style={[styles.casinoGameItem, { marginTop: 8 }]} 
+              onPress={() => {
+                onClose();
+                setShowMiniGames(false);
+                setTimeout(() => router.push({
+                  pathname: '/casino',
+                  params: { game: 'slots', standalone: 'true' }
+                }), 300);
+              }} 
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 20 }}>🍒</Text>
+              <View style={styles.miniGameInfo}>
+                <Text style={styles.casinoGameTitle}>Slots</Text>
+                <Text style={styles.casinoGameDesc}>Match symbols to win big!</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#FFD700" />
+            </TouchableOpacity>
+            
+            {/* Blackjack */}
+            <TouchableOpacity 
+              style={styles.casinoGameItem} 
+              onPress={() => {
+                onClose();
+                setShowMiniGames(false);
+                setTimeout(() => router.push({
+                  pathname: '/casino',
+                  params: { game: 'blackjack', standalone: 'true' }
+                }), 300);
+              }} 
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 20 }}>🃏</Text>
+              <View style={styles.miniGameInfo}>
+                <Text style={styles.casinoGameTitle}>Blackjack</Text>
+                <Text style={styles.casinoGameDesc}>Beat the dealer to 21!</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#FFD700" />
+            </TouchableOpacity>
+            
+            {/* Roulette */}
+            <TouchableOpacity 
+              style={styles.casinoGameItem} 
+              onPress={() => {
+                onClose();
+                setShowMiniGames(false);
+                setTimeout(() => router.push({
+                  pathname: '/casino',
+                  params: { game: 'roulette', standalone: 'true' }
+                }), 300);
+              }} 
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 20 }}>🎡</Text>
+              <View style={styles.miniGameInfo}>
+                <Text style={styles.casinoGameTitle}>Roulette</Text>
+                <Text style={styles.casinoGameDesc}>Bet on red, black, or numbers!</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#FFD700" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1029,6 +1103,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  // Casino Game Item Styles
+  casinoGameItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginHorizontal: 8,
+    marginBottom: 6,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.2)',
+    gap: 10,
+  },
+  casinoGameTitle: {
+    color: '#FFD700',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  casinoGameDesc: {
+    color: '#888',
+    fontSize: 10,
+    marginTop: 1,
   },
   deleteRow: {
     flexDirection: 'row',

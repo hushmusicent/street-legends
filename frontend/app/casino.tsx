@@ -32,9 +32,18 @@ const SLOT_IMAGES: Record<string, string> = {
 type GameType = 'menu' | 'slots' | 'blackjack' | 'roulette';
 
 export default function CasinoScreen() {
-  const { name: casinoName } = useLocalSearchParams<{ id: string; name: string }>();
+  const { name: casinoName, game: initialGame, standalone } = useLocalSearchParams<{ id: string; name: string; game?: string; standalone?: string }>();
   const { player, playerId, setPlayer } = useGameStore();
-  const [currentGame, setCurrentGame] = useState<GameType>('menu');
+  
+  // Determine initial game based on URL param
+  const getInitialGame = (): GameType => {
+    if (initialGame === 'slots') return 'slots';
+    if (initialGame === 'blackjack') return 'blackjack';
+    if (initialGame === 'roulette') return 'roulette';
+    return 'menu';
+  };
+  
+  const [currentGame, setCurrentGame] = useState<GameType>(getInitialGame());
   
   // Slots state
   const [slotBet, setSlotBet] = useState(10);
@@ -571,7 +580,16 @@ export default function CasinoScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton} 
-          onPress={() => currentGame === 'menu' ? router.back() : setCurrentGame('menu')}
+          onPress={() => {
+            if (currentGame === 'menu') {
+              router.back();
+            } else if (standalone === 'true' && initialGame) {
+              // If opened directly to a game from options, go back to previous screen
+              router.back();
+            } else {
+              setCurrentGame('menu');
+            }
+          }}
         >
           <Ionicons name="arrow-back" size={24} color="#d4af37" />
         </TouchableOpacity>
