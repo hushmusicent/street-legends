@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   Dimensions,
   Animated,
   Modal,
   Image,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -23,16 +23,13 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Game constants
 const GAME_WIDTH = Math.min(SCREEN_WIDTH - 20, 380);
-const GAME_HEIGHT = Math.min(SCREEN_HEIGHT - 280, 420);
-const CROSSHAIR_SIZE = 60;
-const GANG_MEMBER_WIDTH = 70;
-const GANG_MEMBER_HEIGHT = 100;
-const TOTAL_SHOTS = 12;
+const GAME_HEIGHT = Math.min(SCREEN_HEIGHT - 200, 500);
+const GANG_MEMBER_SIZE = 70;
 
 // API base URL for background removal
 const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_BACKEND_URL || process.env.EXPO_PUBLIC_API_URL || '';
 
-// Character sprite URLs
+// Character sprite URLs - 5 gang members
 const CHARACTER_SPRITES = {
   cowboy: {
     original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/05168415d6654f72bab2f6c82452d7b0_AQPZH2SCZMVdkXQRiMWNEyzVehHj0Uw5NdWG-7hJbPMozETNm8mrmOmZ6STIjFFLLIKWtjwrDDFChRnmKlcLLXR7.jpg',
@@ -61,7 +58,7 @@ const CHARACTER_SPRITES = {
   },
 };
 
-// Get sprite URL (with background removal if needed)
+// Get sprite URL
 const getSpriteUrl = (spriteKey: keyof typeof CHARACTER_SPRITES): string => {
   const sprite = CHARACTER_SPRITES[spriteKey];
   if (sprite.needsBgRemoval) {
@@ -70,64 +67,109 @@ const getSpriteUrl = (spriteKey: keyof typeof CHARACTER_SPRITES): string => {
   return sprite.original;
 };
 
-// 24-bit pixel art colors
-const COLORS = {
-  background: '#1a1a2e',
-  street: '#2d2d2d',
-  building: '#3d3d4d',
-  buildingAccent: '#4a4a5a',
-  crosshair: '#ff3333',
-  crosshairGlow: 'rgba(255, 51, 51, 0.3)',
-  hitFlash: '#ffff00',
+// 20 City backgrounds with different themes
+const CITY_BACKGROUNDS: { [key: number]: { colors: string[]; name: string; timeOfDay: string } } = {
+  1: { colors: ['#87CEEB', '#B0C4DE', '#778899'], name: 'Sunny Downtown', timeOfDay: 'day' },
+  2: { colors: ['#FFD700', '#FFA500', '#FF6347'], name: 'Sunset Strip', timeOfDay: 'sunset' },
+  3: { colors: ['#1a1a2e', '#16213e', '#0f3460'], name: 'Neon Night', timeOfDay: 'night' },
+  4: { colors: ['#2d3436', '#636e72', '#b2bec3'], name: 'Rainy Streets', timeOfDay: 'rain' },
+  5: { colors: ['#dfe6e9', '#b2bec3', '#636e72'], name: 'Snowy Winter', timeOfDay: 'snow' },
+  6: { colors: ['#ff7675', '#fd79a8', '#a29bfe'], name: 'Neon District', timeOfDay: 'night' },
+  7: { colors: ['#55efc4', '#81ecec', '#74b9ff'], name: 'Beach Town', timeOfDay: 'day' },
+  8: { colors: ['#2d3436', '#4a4a4a', '#6c6c6c'], name: 'Industrial Zone', timeOfDay: 'overcast' },
+  9: { colors: ['#ffeaa7', '#fdcb6e', '#f39c12'], name: 'Golden Hour', timeOfDay: 'sunset' },
+  10: { colors: ['#0c0c0c', '#1a1a1a', '#2d2d2d'], name: 'Midnight Alley', timeOfDay: 'night' },
+  11: { colors: ['#a8e6cf', '#dcedc1', '#ffd3b6'], name: 'Quiet Suburb', timeOfDay: 'day' },
+  12: { colors: ['#e17055', '#d63031', '#c0392b'], name: 'Red Light District', timeOfDay: 'night' },
+  13: { colors: ['#6c5ce7', '#a29bfe', '#dfe6e9'], name: 'Foggy Morning', timeOfDay: 'dawn' },
+  14: { colors: ['#00b894', '#00cec9', '#0984e3'], name: 'Tech District', timeOfDay: 'day' },
+  15: { colors: ['#2d3436', '#636e72', '#ff7675'], name: 'Bar District', timeOfDay: 'night' },
+  16: { colors: ['#fab1a0', '#ffeaa7', '#dfe6e9'], name: 'Spring Morning', timeOfDay: 'day' },
+  17: { colors: ['#0c0c0c', '#e17055', '#fdcb6e'], name: 'Fire District', timeOfDay: 'night' },
+  18: { colors: ['#74b9ff', '#0984e3', '#2d3436'], name: 'Harbor Docks', timeOfDay: 'dusk' },
+  19: { colors: ['#fdcb6e', '#e17055', '#d63031'], name: 'Desert Outskirts', timeOfDay: 'day' },
+  20: { colors: ['#0c0c0c', '#6c5ce7', '#fd79a8'], name: 'Cyber City', timeOfDay: 'night' },
 };
 
-// Level configuration - 20 levels
+// Hide spot types
+type HideSpotType = 'rooftop' | 'window' | 'doorway' | 'wall' | 'car' | 'street';
+
+interface HideSpot {
+  id: number;
+  type: HideSpotType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Generate hide spots for each level
+const generateHideSpots = (level: number): HideSpot[] => {
+  const spots: HideSpot[] = [];
+  const seed = level * 7919; // Prime number for variation
+  
+  // Rooftop spots (top of screen)
+  spots.push({ id: 1, type: 'rooftop', x: 30, y: 40, width: 65, height: 75 });
+  spots.push({ id: 2, type: 'rooftop', x: GAME_WIDTH / 2 - 32, y: 30, width: 65, height: 75 });
+  spots.push({ id: 3, type: 'rooftop', x: GAME_WIDTH - 95, y: 45, width: 65, height: 75 });
+  
+  // Window spots (middle-upper)
+  spots.push({ id: 4, type: 'window', x: 50, y: 130, width: 60, height: 70 });
+  spots.push({ id: 5, type: 'window', x: GAME_WIDTH - 110, y: 125, width: 60, height: 70 });
+  spots.push({ id: 6, type: 'window', x: GAME_WIDTH / 2 - 30, y: 140, width: 60, height: 70 });
+  
+  // Doorway spots (middle)
+  spots.push({ id: 7, type: 'doorway', x: 20, y: 230, width: 65, height: 85 });
+  spots.push({ id: 8, type: 'doorway', x: GAME_WIDTH - 85, y: 235, width: 65, height: 85 });
+  
+  // Wall spots (middle-lower)
+  spots.push({ id: 9, type: 'wall', x: GAME_WIDTH / 2 - 35, y: 260, width: 70, height: 80 });
+  spots.push({ id: 10, type: 'wall', x: 100, y: 280, width: 70, height: 80 });
+  
+  // Car spots (lower)
+  spots.push({ id: 11, type: 'car', x: 40, y: 350, width: 70, height: 75 });
+  spots.push({ id: 12, type: 'car', x: GAME_WIDTH - 110, y: 355, width: 70, height: 75 });
+  
+  // Street spots (bottom)
+  spots.push({ id: 13, type: 'street', x: GAME_WIDTH / 2 - 35, y: GAME_HEIGHT - 100, width: 70, height: 80 });
+  spots.push({ id: 14, type: 'street', x: 150, y: GAME_HEIGHT - 95, width: 70, height: 80 });
+  
+  return spots;
+};
+
+// Level configuration
 interface LevelConfig {
   level: number;
-  timeLimit: number;
-  crosshairSpeed: number;
-  crosshairErratic: number;
+  timeLimit: number; // seconds
+  spawnInterval: number; // ms between spawns
+  visibleDuration: number; // ms a gang member stays visible
+  maxSimultaneous: number; // max gang members visible at once
   hitReward: number;
   xpPerHit: number;
-  characterCount: number; // 3 at low levels, 5 at high levels
 }
 
 const getLevelConfig = (level: number): LevelConfig => {
   const clampedLevel = Math.min(20, Math.max(1, level));
   
-  const timeLimit = Math.max(15, 45 - (clampedLevel - 1) * 1.5);
-  const crosshairSpeed = 2 + (clampedLevel - 1) * 0.32;
-  const crosshairErratic = Math.max(10, 60 - (clampedLevel - 1) * 2.6);
+  // Level 1: Most time (60s), slow spawns, long visible duration
+  // Level 20: Least time (25s), fast spawns, short visible duration
+  const timeLimit = Math.max(25, 60 - (clampedLevel - 1) * 1.85);
+  const spawnInterval = Math.max(400, 1500 - (clampedLevel - 1) * 55);
+  const visibleDuration = Math.max(800, 2500 - (clampedLevel - 1) * 85);
+  const maxSimultaneous = Math.min(5, 2 + Math.floor(clampedLevel / 5));
   const hitReward = 5 + clampedLevel * 2;
   const xpPerHit = 2 + Math.floor(clampedLevel / 2);
-  
-  // Lower levels (1-7): 3 characters, Medium (8-14): 4 characters, High (15-20): 5 characters
-  let characterCount = 3;
-  if (clampedLevel >= 15) characterCount = 5;
-  else if (clampedLevel >= 8) characterCount = 4;
   
   return {
     level: clampedLevel,
     timeLimit,
-    crosshairSpeed,
-    crosshairErratic,
+    spawnInterval,
+    visibleDuration,
+    maxSimultaneous,
     hitReward,
     xpPerHit,
-    characterCount,
   };
 };
-
-// Gang member data
-interface GangMember {
-  id: number;
-  x: number;
-  y: number;
-  spriteKey: keyof typeof CHARACTER_SPRITES;
-  isHit: boolean;
-  hitAnim: Animated.Value;
-  width: number;
-  height: number;
-}
 
 // Reward calculation
 interface GameRewards {
@@ -149,274 +191,233 @@ const calculateRewards = (hits: number, level: number): GameRewards => {
   return { totalCash, totalXP, reputation };
 };
 
-// Position configurations for different levels
-const getPositionConfig = (level: number, characterCount: number): { x: number; y: number; spriteKey: keyof typeof CHARACTER_SPRITES; width: number; height: number }[] => {
-  const allSprites: (keyof typeof CHARACTER_SPRITES)[] = ['cowboy', 'bandana', 'crewJacket', 'dualGuns', 'girlRed'];
-  
-  // Shuffle sprites based on level to create variety
-  const shuffledSprites = [...allSprites].sort(() => {
-    // Use level as seed for consistent shuffling per level
-    return Math.sin(level * 12345) - 0.5;
-  });
-  
-  // Different layout patterns based on level ranges
-  const levelMod = level % 5; // Creates 5 different patterns
-  
-  if (characterCount === 3) {
-    // Lower levels - 3 characters with wide spacing
-    const positions3Wide = [
-      [
-        { x: 30, y: GAME_HEIGHT - 180, width: 70, height: 100 },
-        { x: GAME_WIDTH / 2 - 35, y: GAME_HEIGHT - 200, width: 70, height: 100 },
-        { x: GAME_WIDTH - 100, y: GAME_HEIGHT - 180, width: 70, height: 100 },
-      ],
-      [
-        { x: 50, y: GAME_HEIGHT - 190, width: 65, height: 95 },
-        { x: GAME_WIDTH / 2 - 32, y: GAME_HEIGHT - 170, width: 65, height: 95 },
-        { x: GAME_WIDTH - 115, y: GAME_HEIGHT - 195, width: 65, height: 95 },
-      ],
-      [
-        { x: 20, y: GAME_HEIGHT - 175, width: 75, height: 105 },
-        { x: GAME_WIDTH / 2 - 37, y: GAME_HEIGHT - 210, width: 75, height: 105 },
-        { x: GAME_WIDTH - 95, y: GAME_HEIGHT - 185, width: 75, height: 105 },
-      ],
-      [
-        { x: 60, y: GAME_HEIGHT - 185, width: 68, height: 98 },
-        { x: GAME_WIDTH / 2 - 34, y: GAME_HEIGHT - 195, width: 68, height: 98 },
-        { x: GAME_WIDTH - 128, y: GAME_HEIGHT - 175, width: 68, height: 98 },
-      ],
-      [
-        { x: 40, y: GAME_HEIGHT - 195, width: 72, height: 102 },
-        { x: GAME_WIDTH / 2 - 36, y: GAME_HEIGHT - 180, width: 72, height: 102 },
-        { x: GAME_WIDTH - 112, y: GAME_HEIGHT - 190, width: 72, height: 102 },
-      ],
-    ];
-    
-    return positions3Wide[levelMod].map((pos, i) => ({
-      ...pos,
-      spriteKey: shuffledSprites[i % shuffledSprites.length],
-    }));
-  }
-  
-  if (characterCount === 4) {
-    // Medium levels - 4 characters with moderate spacing
-    const positions4 = [
-      [
-        { x: 15, y: GAME_HEIGHT - 175, width: 65, height: 95 },
-        { x: GAME_WIDTH / 3 - 32, y: GAME_HEIGHT - 195, width: 65, height: 95 },
-        { x: (2 * GAME_WIDTH / 3) - 32, y: GAME_HEIGHT - 185, width: 65, height: 95 },
-        { x: GAME_WIDTH - 80, y: GAME_HEIGHT - 180, width: 65, height: 95 },
-      ],
-      [
-        { x: 25, y: GAME_HEIGHT - 185, width: 62, height: 92 },
-        { x: GAME_WIDTH / 4 - 31, y: GAME_HEIGHT - 200, width: 62, height: 92 },
-        { x: GAME_WIDTH / 2 - 31, y: GAME_HEIGHT - 175, width: 62, height: 92 },
-        { x: GAME_WIDTH - 87, y: GAME_HEIGHT - 190, width: 62, height: 92 },
-      ],
-      [
-        { x: 35, y: GAME_HEIGHT - 190, width: 68, height: 98 },
-        { x: GAME_WIDTH / 3 - 34, y: GAME_HEIGHT - 180, width: 68, height: 98 },
-        { x: (2 * GAME_WIDTH / 3) - 34, y: GAME_HEIGHT - 200, width: 68, height: 98 },
-        { x: GAME_WIDTH - 103, y: GAME_HEIGHT - 185, width: 68, height: 98 },
-      ],
-      [
-        { x: 20, y: GAME_HEIGHT - 180, width: 64, height: 94 },
-        { x: GAME_WIDTH / 4, y: GAME_HEIGHT - 195, width: 64, height: 94 },
-        { x: GAME_WIDTH / 2 + 10, y: GAME_HEIGHT - 185, width: 64, height: 94 },
-        { x: GAME_WIDTH - 84, y: GAME_HEIGHT - 195, width: 64, height: 94 },
-      ],
-      [
-        { x: 30, y: GAME_HEIGHT - 195, width: 66, height: 96 },
-        { x: GAME_WIDTH / 3 - 33, y: GAME_HEIGHT - 175, width: 66, height: 96 },
-        { x: (2 * GAME_WIDTH / 3) - 33, y: GAME_HEIGHT - 190, width: 66, height: 96 },
-        { x: GAME_WIDTH - 96, y: GAME_HEIGHT - 180, width: 66, height: 96 },
-      ],
-    ];
-    
-    return positions4[levelMod].map((pos, i) => ({
-      ...pos,
-      spriteKey: shuffledSprites[i % shuffledSprites.length],
-    }));
-  }
-  
-  // High levels - 5 characters with tighter/overlapping spacing
-  const positions5Tight = [
-    [
-      { x: 10, y: GAME_HEIGHT - 175, width: 58, height: 88 },
-      { x: 55, y: GAME_HEIGHT - 195, width: 58, height: 88 },
-      { x: GAME_WIDTH / 2 - 29, y: GAME_HEIGHT - 210, width: 58, height: 88 },
-      { x: GAME_WIDTH - 113, y: GAME_HEIGHT - 190, width: 58, height: 88 },
-      { x: GAME_WIDTH - 68, y: GAME_HEIGHT - 175, width: 58, height: 88 },
-    ],
-    [
-      { x: 15, y: GAME_HEIGHT - 185, width: 55, height: 85 },
-      { x: 60, y: GAME_HEIGHT - 175, width: 55, height: 85 },
-      { x: GAME_WIDTH / 2 - 27, y: GAME_HEIGHT - 200, width: 55, height: 85 },
-      { x: GAME_WIDTH - 115, y: GAME_HEIGHT - 180, width: 55, height: 85 },
-      { x: GAME_WIDTH - 60, y: GAME_HEIGHT - 195, width: 55, height: 85 },
-    ],
-    [
-      { x: 5, y: GAME_HEIGHT - 190, width: 60, height: 90 },
-      { x: 50, y: GAME_HEIGHT - 205, width: 60, height: 90 },
-      { x: GAME_WIDTH / 2 - 30, y: GAME_HEIGHT - 180, width: 60, height: 90 },
-      { x: GAME_WIDTH - 110, y: GAME_HEIGHT - 200, width: 60, height: 90 },
-      { x: GAME_WIDTH - 55, y: GAME_HEIGHT - 185, width: 60, height: 90 },
-    ],
-    [
-      { x: 20, y: GAME_HEIGHT - 180, width: 56, height: 86 },
-      { x: 65, y: GAME_HEIGHT - 200, width: 56, height: 86 },
-      { x: GAME_WIDTH / 2 - 28, y: GAME_HEIGHT - 190, width: 56, height: 86 },
-      { x: GAME_WIDTH - 121, y: GAME_HEIGHT - 175, width: 56, height: 86 },
-      { x: GAME_WIDTH - 65, y: GAME_HEIGHT - 200, width: 56, height: 86 },
-    ],
-    [
-      { x: 8, y: GAME_HEIGHT - 195, width: 57, height: 87 },
-      { x: 58, y: GAME_HEIGHT - 180, width: 57, height: 87 },
-      { x: GAME_WIDTH / 2 - 28, y: GAME_HEIGHT - 205, width: 57, height: 87 },
-      { x: GAME_WIDTH - 115, y: GAME_HEIGHT - 195, width: 57, height: 87 },
-      { x: GAME_WIDTH - 58, y: GAME_HEIGHT - 180, width: 57, height: 87 },
-    ],
-  ];
-  
-  return positions5Tight[levelMod].map((pos, i) => ({
-    ...pos,
-    spriteKey: shuffledSprites[i % shuffledSprites.length],
-  }));
-};
+// Gang member popup data
+interface GangMemberPopup {
+  id: number;
+  spotId: number;
+  spriteKey: keyof typeof CHARACTER_SPRITES;
+  opacity: Animated.Value;
+  scale: Animated.Value;
+  isHit: boolean;
+  hideTimeout?: NodeJS.Timeout;
+}
 
-export default function ShootoutSimulator() {
-  const params = useLocalSearchParams();
-  const shootoutId = params.shootoutId as string;
-  const shootoutName = params.shootoutName as string || 'Shootout';
-  const difficulty = parseInt(params.difficulty as string) || 1;
-  const isStandalone = params.standalone === 'true';
-  
-  const levelConfig = getLevelConfig(difficulty);
-  
-  const { playerId, refreshPlayer } = useGameStore();
-  const { invalidateCooldowns, invalidatePlayer } = useInvalidateMapQueries();
-  
-  const [gameId, setGameId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [showResultsModal, setShowResultsModal] = useState(false);
-  const [gameRewards, setGameRewards] = useState<GameRewards | null>(null);
-  
+export default function ShootoutSimulatorScreen() {
+  const { shootoutId, shootoutName, difficulty, standalone } = useLocalSearchParams<{
+    shootoutId: string;
+    shootoutName: string;
+    difficulty: string;
+    standalone?: string;
+  }>();
+
+  const { playerId, player, setPlayer } = useGameStore();
+  const invalidateMapQueries = useInvalidateMapQueries();
+  const isStandalone = standalone === 'true';
+
+  const level = parseInt(difficulty) || 1;
+  const config = getLevelConfig(level);
+
   // Game state
-  const [shotsRemaining, setShotsRemaining] = useState(TOTAL_SHOTS);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(config.timeLimit);
   const [hits, setHits] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(levelConfig.timeLimit);
-  const [isGameOver, setIsGameOver] = useState(false);
-  const [gangMembers, setGangMembers] = useState<GangMember[]>([]);
-  
-  // Crosshair position
-  const crosshairX = useRef(new Animated.Value(GAME_WIDTH / 2 - CROSSHAIR_SIZE / 2)).current;
-  const crosshairY = useRef(new Animated.Value(GAME_HEIGHT / 2 - CROSSHAIR_SIZE / 2)).current;
-  const crosshairPosRef = useRef({ x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 });
-  const crosshairDirRef = useRef({ dx: 1, dy: 1 });
-  const frameCountRef = useRef(0);
-  
-  const gameLoopRef = useRef<number | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const rewardAnimValues = useRef({
-    cash: new Animated.Value(0),
-    xp: new Animated.Value(0),
-    rep: new Animated.Value(0),
-  }).current;
+  const [activePopups, setActivePopups] = useState<GangMemberPopup[]>([]);
+  const [hideSpots] = useState<HideSpot[]>(() => generateHideSpots(level));
+  const [showResults, setShowResults] = useState(false);
+  const [rewards, setRewards] = useState<GameRewards | null>(null);
+  const [hitEffects, setHitEffects] = useState<{ id: number; x: number; y: number; opacity: Animated.Value }[]>([]);
 
-  // Initialize game
+  // Refs
+  const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
+  const spawnIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const popupIdRef = useRef(0);
+  const hitEffectIdRef = useRef(0);
+
+  // Background colors for current level
+  const bgColors = CITY_BACKGROUNDS[level] || CITY_BACKGROUNDS[1];
+
+  // Cleanup on unmount
   useEffect(() => {
-    initializeGame();
     return () => {
-      cleanup();
+      if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+      if (spawnIntervalRef.current) clearInterval(spawnIntervalRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      activePopups.forEach(popup => {
+        if (popup.hideTimeout) clearTimeout(popup.hideTimeout);
+      });
     };
   }, []);
 
-  const cleanup = () => {
-    if (gameLoopRef.current) {
-      cancelAnimationFrame(gameLoopRef.current);
-    }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-  };
+  // Spawn a new gang member
+  const spawnGangMember = useCallback(() => {
+    if (gameOver) return;
 
-  const initializeGame = async () => {
-    if (isStandalone) {
-      setGameId('standalone');
-      setLoading(false);
-      return;
-    }
-    
-    if (!playerId || !shootoutId) {
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      const result = await startShootout(shootoutId, playerId);
-      setGameId(result.game_id);
-    } catch (error: any) {
-      showGameToast({
-        type: 'error',
-        title: 'Error',
-        message: error?.response?.data?.detail || 'Failed to start shootout',
-        duration: 2000,
+    setActivePopups(current => {
+      if (current.length >= config.maxSimultaneous) return current;
+
+      // Find available spots (not currently occupied)
+      const occupiedSpotIds = current.map(p => p.spotId);
+      const availableSpots = hideSpots.filter(s => !occupiedSpotIds.includes(s.id));
+      
+      if (availableSpots.length === 0) return current;
+
+      // Pick random spot
+      const spot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
+      
+      // Pick random sprite
+      const spriteKeys = Object.keys(CHARACTER_SPRITES) as (keyof typeof CHARACTER_SPRITES)[];
+      const spriteKey = spriteKeys[Math.floor(Math.random() * spriteKeys.length)];
+
+      const newPopup: GangMemberPopup = {
+        id: ++popupIdRef.current,
+        spotId: spot.id,
+        spriteKey,
+        opacity: new Animated.Value(0),
+        scale: new Animated.Value(0.5),
+        isHit: false,
+      };
+
+      // Animate popup appearance
+      Animated.parallel([
+        Animated.timing(newPopup.opacity, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.spring(newPopup.scale, {
+          toValue: 1,
+          friction: 5,
+          tension: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Set timeout to hide
+      const visibleTime = config.visibleDuration + (Math.random() * 500 - 250); // Add some randomness
+      newPopup.hideTimeout = setTimeout(() => {
+        hideGangMember(newPopup.id);
+      }, visibleTime);
+
+      return [...current, newPopup];
+    });
+  }, [config.maxSimultaneous, config.visibleDuration, hideSpots, gameOver]);
+
+  // Hide a gang member (retreat)
+  const hideGangMember = useCallback((popupId: number) => {
+    setActivePopups(current => {
+      const popup = current.find(p => p.id === popupId);
+      if (!popup) return current;
+
+      // Animate retreat
+      Animated.parallel([
+        Animated.timing(popup.opacity, {
+          toValue: 0,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(popup.scale, {
+          toValue: 0.5,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setActivePopups(prev => prev.filter(p => p.id !== popupId));
       });
-      router.back();
-    } finally {
-      setLoading(false);
+
+      return current;
+    });
+  }, []);
+
+  // Handle tap on gang member
+  const handleTap = useCallback((popup: GangMemberPopup, spot: HideSpot) => {
+    if (popup.isHit || gameOver) return;
+
+    // Mark as hit
+    setActivePopups(current =>
+      current.map(p =>
+        p.id === popup.id ? { ...p, isHit: true } : p
+      )
+    );
+
+    // Clear hide timeout
+    if (popup.hideTimeout) {
+      clearTimeout(popup.hideTimeout);
     }
-  };
 
-  const initializeGangMembers = () => {
-    const positionConfig = getPositionConfig(difficulty, levelConfig.characterCount);
-    
-    const members: GangMember[] = positionConfig.map((config, i) => ({
-      id: i,
-      x: config.x,
-      y: config.y,
-      spriteKey: config.spriteKey,
-      isHit: false,
-      hitAnim: new Animated.Value(0),
-      width: config.width,
-      height: config.height,
-    }));
-    
-    setGangMembers(members);
-  };
+    // Increment hits
+    setHits(h => h + 1);
 
-  const startGame = () => {
-    cleanup();
+    // Add hit effect
+    const effectId = ++hitEffectIdRef.current;
+    const effectOpacity = new Animated.Value(1);
+    setHitEffects(prev => [...prev, { id: effectId, x: spot.x + spot.width / 2, y: spot.y + spot.height / 2, opacity: effectOpacity }]);
+
+    // Animate hit effect
+    Animated.timing(effectOpacity, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true,
+    }).start(() => {
+      setHitEffects(prev => prev.filter(e => e.id !== effectId));
+    });
+
+    // Animate gang member "hit" and remove
+    Animated.sequence([
+      Animated.timing(popup.scale, {
+        toValue: 1.3,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(popup.opacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(popup.scale, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      setActivePopups(prev => prev.filter(p => p.id !== popup.id));
+    });
+  }, [gameOver]);
+
+  // Start game
+  const startGame = useCallback(async () => {
+    // Start shootout on backend (for cooldown tracking)
+    if (!isStandalone && playerId && shootoutId) {
+      try {
+        await startShootout(playerId, shootoutId);
+      } catch (e: any) {
+        showGameToast(e.message || 'Failed to start shootout', 'error');
+        return;
+      }
+    }
+
     setGameStarted(true);
-    setShowResultsModal(false);
-    setGameRewards(null);
-    setShotsRemaining(TOTAL_SHOTS);
+    setGameOver(false);
     setHits(0);
-    setTimeRemaining(levelConfig.timeLimit);
-    setIsGameOver(false);
-    
-    // Reset crosshair
-    crosshairPosRef.current = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 };
-    crosshairX.setValue(GAME_WIDTH / 2 - CROSSHAIR_SIZE / 2);
-    crosshairY.setValue(GAME_HEIGHT / 2 - CROSSHAIR_SIZE / 2);
-    crosshairDirRef.current = { dx: Math.random() > 0.5 ? 1 : -1, dy: Math.random() > 0.5 ? 1 : -1 };
-    frameCountRef.current = 0;
-    
-    // Reset animations
-    rewardAnimValues.cash.setValue(0);
-    rewardAnimValues.xp.setValue(0);
-    rewardAnimValues.rep.setValue(0);
-    
-    initializeGangMembers();
-    runGameLoop();
-    startTimer();
-  };
+    setTimeLeft(config.timeLimit);
+    setActivePopups([]);
+    setShowResults(false);
+    setRewards(null);
 
-  const startTimer = () => {
-    timerRef.current = setInterval(() => {
-      setTimeRemaining(prev => {
+    // Start spawning gang members
+    spawnIntervalRef.current = setInterval(() => {
+      spawnGangMember();
+    }, config.spawnInterval);
+
+    // Initial spawn
+    setTimeout(() => spawnGangMember(), 300);
+
+    // Start timer
+    timerIntervalRef.current = setInterval(() => {
+      setTimeLeft(prev => {
         if (prev <= 1) {
           endGame();
           return 0;
@@ -424,506 +425,316 @@ export default function ShootoutSimulator() {
         return prev - 1;
       });
     }, 1000);
-  };
+  }, [config.timeLimit, config.spawnInterval, spawnGangMember, isStandalone, playerId, shootoutId]);
 
-  const runGameLoop = () => {
-    const loop = () => {
-      frameCountRef.current++;
-      
-      // Move crosshair
-      let { x, y } = crosshairPosRef.current;
-      let { dx, dy } = crosshairDirRef.current;
-      
-      // Random direction change based on erratic-ness
-      if (frameCountRef.current % Math.floor(levelConfig.crosshairErratic) === 0) {
-        const angleChange = (Math.random() - 0.5) * Math.PI;
-        const currentAngle = Math.atan2(dy, dx);
-        const newAngle = currentAngle + angleChange;
-        dx = Math.cos(newAngle);
-        dy = Math.sin(newAngle);
-        crosshairDirRef.current = { dx, dy };
-      }
-      
-      // Move crosshair
-      x += dx * levelConfig.crosshairSpeed;
-      y += dy * levelConfig.crosshairSpeed;
-      
-      // Bounce off walls
-      const padding = CROSSHAIR_SIZE / 2;
-      if (x < padding || x > GAME_WIDTH - padding) {
-        dx = -dx;
-        x = Math.max(padding, Math.min(GAME_WIDTH - padding, x));
-        crosshairDirRef.current.dx = dx;
-      }
-      if (y < padding || y > GAME_HEIGHT - padding) {
-        dy = -dy;
-        y = Math.max(padding, Math.min(GAME_HEIGHT - padding, y));
-        crosshairDirRef.current.dy = dy;
-      }
-      
-      crosshairPosRef.current = { x, y };
-      crosshairX.setValue(x - CROSSHAIR_SIZE / 2);
-      crosshairY.setValue(y - CROSSHAIR_SIZE / 2);
-      
-      gameLoopRef.current = requestAnimationFrame(loop);
-    };
-    
-    gameLoopRef.current = requestAnimationFrame(loop);
-  };
+  // End game
+  const endGame = useCallback(async () => {
+    setGameOver(true);
 
-  const handleShoot = useCallback(() => {
-    if (isGameOver || shotsRemaining <= 0) return;
-    
-    const newShotsRemaining = shotsRemaining - 1;
-    setShotsRemaining(newShotsRemaining);
-    
-    // Check if crosshair is over any gang member
-    const crosshairCenter = crosshairPosRef.current;
-    let hitMember: GangMember | null = null;
-    
-    for (const member of gangMembers) {
-      const hitTolerance = 15;
-      if (
-        crosshairCenter.x > member.x - hitTolerance &&
-        crosshairCenter.x < member.x + member.width + hitTolerance &&
-        crosshairCenter.y > member.y - hitTolerance &&
-        crosshairCenter.y < member.y + member.height + hitTolerance
-      ) {
-        hitMember = member;
-        break;
+    // Clear all intervals
+    if (spawnIntervalRef.current) {
+      clearInterval(spawnIntervalRef.current);
+      spawnIntervalRef.current = null;
+    }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    // Clear all popup timeouts
+    activePopups.forEach(popup => {
+      if (popup.hideTimeout) clearTimeout(popup.hideTimeout);
+    });
+
+    // Calculate rewards
+    const gameRewards = calculateRewards(hits, level);
+    setRewards(gameRewards);
+
+    // Complete on backend
+    if (!isStandalone && playerId && shootoutId) {
+      try {
+        const result = await completeShootout(playerId, shootoutId, hits, level);
+        if (result.player) {
+          setPlayer(result.player);
+        }
+        invalidateMapQueries();
+      } catch (e: any) {
+        console.error('Failed to complete shootout:', e);
       }
     }
-    
-    if (hitMember) {
-      setHits(prev => prev + 1);
-      
-      // Play hit animation
-      Animated.sequence([
-        Animated.timing(hitMember.hitAnim, {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(hitMember.hitAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-    
-    if (newShotsRemaining <= 0) {
+
+    // Show results after a short delay
+    setTimeout(() => {
+      setShowResults(true);
+    }, 500);
+  }, [hits, level, isStandalone, playerId, shootoutId, setPlayer, invalidateMapQueries, activePopups]);
+
+  // Manual end game (for timer reaching 0)
+  useEffect(() => {
+    if (timeLeft <= 0 && gameStarted && !gameOver) {
       endGame();
     }
-  }, [isGameOver, shotsRemaining, gangMembers]);
+  }, [timeLeft, gameStarted, gameOver, endGame]);
 
-  const endGame = useCallback(() => {
-    if (isGameOver) return;
-    
-    setIsGameOver(true);
-    cleanup();
-    
-    const rewards = calculateRewards(hits, difficulty);
-    setGameRewards(rewards);
-    setShowResultsModal(true);
-    
-    if (hits > 0) {
-      Animated.sequence([
-        Animated.timing(rewardAnimValues.cash, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rewardAnimValues.xp, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rewardAnimValues.rep, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-    
-    submitResults(hits);
-  }, [isGameOver, hits, difficulty]);
-
-  useEffect(() => {
-    if (gameStarted && !isGameOver) {
-      if (shotsRemaining <= 0 || timeRemaining <= 0) {
-        endGame();
-      }
-    }
-  }, [shotsRemaining, timeRemaining, gameStarted, isGameOver, endGame]);
-
-  const submitResults = async (finalHits: number) => {
-    if (!gameId) return;
-    
-    try {
-      const result = await completeShootout(gameId, finalHits, isStandalone);
-      
-      if (result.hits > 0) {
-        const rewardMessage = isStandalone
-          ? `${result.hits} hits! +$${result.rewards?.cash || 0} (Practice Mode: 50% rewards)`
-          : `${result.hits} hits! +$${result.rewards?.cash || 0}`;
-        showGameToast({
-          type: 'success',
-          title: 'SHOOTOUT COMPLETE!',
-          message: rewardMessage,
-          duration: 2000,
-        });
-        
-        if (refreshPlayer) refreshPlayer();
-      }
-      
-      if (playerId && !isStandalone) {
-        invalidateCooldowns(playerId);
-        invalidatePlayer(playerId);
-      } else if (playerId) {
-        invalidatePlayer(playerId);
-      }
-    } catch (error) {
-      console.error('Failed to complete shootout:', error);
-    }
-  };
-
-  const handleGoBack = () => {
-    cleanup();
+  // Close handler
+  const handleClose = () => {
     router.back();
   };
 
-  // Render street background
-  const renderBackground = () => (
-    <View style={styles.background}>
-      <View style={styles.sky} />
-      <View style={styles.buildingsContainer}>
-        <View style={[styles.building, { left: 0, width: 60, height: 150 }]}>
-          <View style={styles.window} />
-          <View style={[styles.window, { marginTop: 15 }]} />
+  // Render city background
+  const renderCityBackground = () => {
+    const isNight = bgColors.timeOfDay === 'night' || bgColors.timeOfDay === 'dusk';
+    
+    return (
+      <View style={[styles.cityBackground, { backgroundColor: bgColors.colors[0] }]}>
+        {/* Sky gradient */}
+        <View style={[styles.skyGradient, { backgroundColor: bgColors.colors[1] }]} />
+        
+        {/* Buildings - Back row */}
+        <View style={styles.buildingsBack}>
+          {[0, 1, 2, 3, 4].map(i => (
+            <View
+              key={`back-${i}`}
+              style={[
+                styles.buildingBack,
+                {
+                  left: i * (GAME_WIDTH / 5),
+                  height: 80 + (i % 3) * 30,
+                  backgroundColor: isNight ? '#1a1a2e' : '#4a4a5a',
+                },
+              ]}
+            >
+              {/* Windows */}
+              {[0, 1, 2].map(row => (
+                <View key={row} style={styles.windowRow}>
+                  {[0, 1].map(col => (
+                    <View
+                      key={col}
+                      style={[
+                        styles.windowSmall,
+                        { backgroundColor: isNight ? (Math.random() > 0.5 ? '#ffeaa7' : '#444') : '#74b9ff' },
+                      ]}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          ))}
         </View>
-        <View style={[styles.building, { left: 70, width: 80, height: 180 }]}>
-          <View style={styles.window} />
-          <View style={[styles.window, { marginTop: 15 }]} />
-          <View style={[styles.window, { marginTop: 15 }]} />
-        </View>
-        <View style={[styles.building, { right: 70, width: 80, height: 170 }]}>
-          <View style={styles.window} />
-          <View style={[styles.window, { marginTop: 15 }]} />
-        </View>
-        <View style={[styles.building, { right: 0, width: 60, height: 140 }]}>
-          <View style={styles.window} />
-          <View style={[styles.window, { marginTop: 15 }]} />
-        </View>
-      </View>
-      <View style={styles.street}>
-        <View style={styles.streetLine} />
-      </View>
-    </View>
-  );
 
-  // Render gang members with custom sprites
-  const renderGangMembers = () => {
-    return gangMembers.map(member => {
-      const hitScale = member.hitAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 0.8],
-      });
-      const hitRotate = member.hitAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '-15deg'],
-      });
-      const hitOpacity = member.hitAnim.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: [1, 0.5, 1],
-      });
-      
-      const spriteUrl = getSpriteUrl(member.spriteKey);
-      
-      return (
-        <Animated.View
-          key={member.id}
-          style={[
-            styles.gangMember,
-            {
-              left: member.x,
-              top: member.y,
-              width: member.width,
-              height: member.height,
-              transform: [
-                { scale: hitScale },
-                { rotate: hitRotate },
-              ],
-              opacity: hitOpacity,
-            },
-          ]}
-        >
-          <Image
-            source={{ uri: spriteUrl }}
-            style={styles.gangMemberSprite}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      );
-    });
+        {/* Buildings - Front row */}
+        <View style={styles.buildingsFront}>
+          {[0, 1, 2, 3].map(i => (
+            <View
+              key={`front-${i}`}
+              style={[
+                styles.buildingFront,
+                {
+                  left: i * (GAME_WIDTH / 4) + 20,
+                  height: 180 + (i % 2) * 50,
+                  backgroundColor: isNight ? '#2d2d3d' : '#636e72',
+                },
+              ]}
+            >
+              {/* Large windows */}
+              {[0, 1, 2, 3, 4].map(row => (
+                <View key={row} style={styles.windowRow}>
+                  {[0, 1, 2].map(col => (
+                    <View
+                      key={col}
+                      style={[
+                        styles.windowLarge,
+                        { backgroundColor: isNight ? (Math.random() > 0.4 ? '#ffeaa7' : '#333') : '#81ecec' },
+                      ]}
+                    />
+                  ))}
+                </View>
+              ))}
+              {/* Door */}
+              <View style={[styles.door, { backgroundColor: isNight ? '#1a1a1a' : '#2d3436' }]} />
+            </View>
+          ))}
+        </View>
+
+        {/* Street */}
+        <View style={[styles.street, { backgroundColor: bgColors.colors[2] }]}>
+          {/* Street lines */}
+          <View style={styles.streetLine} />
+          <View style={[styles.streetLine, { top: 20 }]} />
+          
+          {/* Parked cars */}
+          <View style={[styles.parkedCar, { left: 30, backgroundColor: '#e74c3c' }]} />
+          <View style={[styles.parkedCar, { left: GAME_WIDTH - 80, backgroundColor: '#3498db' }]} />
+        </View>
+
+        {/* Level indicator */}
+        <View style={styles.levelBadge}>
+          <Text style={styles.levelBadgeText}>{bgColors.name}</Text>
+        </View>
+      </View>
+    );
   };
 
-  // Render crosshair
-  const renderCrosshair = () => (
+  // Render gang member popup
+  const renderGangMember = (popup: GangMemberPopup) => {
+    const spot = hideSpots.find(s => s.id === popup.spotId);
+    if (!spot) return null;
+
+    return (
+      <Animated.View
+        key={popup.id}
+        style={[
+          styles.gangMemberContainer,
+          {
+            left: spot.x,
+            top: spot.y,
+            width: spot.width,
+            height: spot.height,
+            opacity: popup.opacity,
+            transform: [{ scale: popup.scale }],
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.gangMemberTouchable}
+          onPress={() => handleTap(popup, spot)}
+          activeOpacity={0.8}
+          disabled={popup.isHit}
+        >
+          {/* Hide spot indicator */}
+          <View style={[styles.hideSpotBg, styles[`hideSpot_${spot.type}` as keyof typeof styles] as any]} />
+          
+          {/* Gang member sprite */}
+          <Image
+            source={{ uri: getSpriteUrl(popup.spriteKey) }}
+            style={[
+              styles.gangMemberSprite,
+              popup.isHit && styles.gangMemberHit,
+            ]}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  // Render hit effect
+  const renderHitEffect = (effect: { id: number; x: number; y: number; opacity: Animated.Value }) => (
     <Animated.View
+      key={effect.id}
       style={[
-        styles.crosshair,
+        styles.hitEffect,
         {
-          left: crosshairX,
-          top: crosshairY,
+          left: effect.x - 30,
+          top: effect.y - 30,
+          opacity: effect.opacity,
         },
       ]}
     >
-      <View style={styles.crosshairGlow} />
-      <View style={styles.crosshairCenter} />
-      <View style={[styles.crosshairLine, styles.crosshairLineH]} />
-      <View style={[styles.crosshairLine, styles.crosshairLineV]} />
-      <View style={styles.crosshairCircle} />
+      <Text style={styles.hitEffectText}>💥 HIT!</Text>
     </Animated.View>
   );
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading Shootout...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-          <Ionicons name="close" size={24} color="#fff" />
+        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+          <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{shootoutName}</Text>
-          <Text style={styles.headerSubtitle}>Level {difficulty} {'⭐'.repeat(Math.min(5, Math.ceil(difficulty / 4)))} • {levelConfig.characterCount} targets</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>SHOOTOUT</Text>
+          <Text style={styles.headerSubtitle}>Level {level} - {bgColors.name}</Text>
+        </View>
+        <View style={styles.headerRight}>
+          {gameStarted && !gameOver && (
+            <View style={styles.timerContainer}>
+              <Ionicons name="time" size={18} color={timeLeft <= 10 ? '#e74c3c' : '#f39c12'} />
+              <Text style={[styles.timerText, timeLeft <= 10 && styles.timerTextLow]}>{Math.ceil(timeLeft)}s</Text>
+            </View>
+          )}
         </View>
       </View>
 
       {/* Stats Bar */}
-      {gameStarted && (
-        <View style={styles.statsBar}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>SHOTS</Text>
-            <Text style={styles.statValue}>{shotsRemaining}/{TOTAL_SHOTS}</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>HITS</Text>
-            <Text style={[styles.statValue, { color: '#27ae60' }]}>{hits}</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>TIME</Text>
-            <Text style={[styles.statValue, { color: timeRemaining <= 10 ? '#e74c3c' : '#fff' }]}>
-              {timeRemaining}s
-            </Text>
-          </View>
+      <View style={styles.statsBar}>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>HITS</Text>
+          <Text style={styles.statValue}>{hits}</Text>
         </View>
-      )}
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>REWARD</Text>
+          <Text style={styles.statValue}>${hits * config.hitReward}</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>TIME</Text>
+          <Text style={[styles.statValue, timeLeft <= 10 && styles.statValueLow]}>{Math.ceil(timeLeft)}s</Text>
+        </View>
+      </View>
 
       {/* Game Area */}
       <View style={styles.gameContainer}>
-        {!gameStarted ? (
-          <View style={styles.startScreen}>
-            <Text style={styles.startEmoji}>🔫🎯</Text>
-            <Text style={styles.startTitle}>SHOOTOUT</Text>
-            
-            <View style={styles.instructionsCard}>
-              <View style={styles.instructionRow}>
-                <Text style={styles.instructionIcon}>🎯</Text>
-                <Text style={styles.instructionText}>Crosshair moves automatically</Text>
-              </View>
-              <View style={styles.instructionRow}>
-                <Text style={styles.instructionIcon}>👆</Text>
-                <Text style={styles.instructionText}>Tap anywhere to shoot</Text>
-              </View>
-              <View style={styles.instructionRow}>
-                <Text style={styles.instructionIcon}>🧍</Text>
-                <Text style={styles.instructionText}>Hit gang members for points</Text>
-              </View>
-              <View style={styles.instructionRow}>
-                <Text style={styles.instructionIcon}>⏱️</Text>
-                <Text style={styles.instructionText}>Score before time runs out!</Text>
-              </View>
+        {/* City Background */}
+        {renderCityBackground()}
+
+        {/* Gang Member Popups */}
+        {activePopups.map(renderGangMember)}
+
+        {/* Hit Effects */}
+        {hitEffects.map(renderHitEffect)}
+
+        {/* Start Screen */}
+        {!gameStarted && (
+          <View style={styles.startOverlay}>
+            <View style={styles.startBox}>
+              <Text style={styles.startTitle}>🎯 SHOOTOUT SIMULATOR</Text>
+              <Text style={styles.startSubtitle}>Level {level}</Text>
+              <Text style={styles.startInstructions}>
+                Tap the gang members as they pop up!{'\n'}
+                Time: {Math.floor(config.timeLimit)}s{'\n'}
+                Reward: ${config.hitReward}/hit
+              </Text>
+              <TouchableOpacity style={styles.startButton} onPress={startGame}>
+                <Text style={styles.startButtonText}>START</Text>
+              </TouchableOpacity>
             </View>
-            
-            <View style={styles.statsHint}>
-              <Text style={styles.statsHintText}>🔫 {TOTAL_SHOTS} shots • ⏱️ {Math.floor(levelConfig.timeLimit)}s • 🧍 {levelConfig.characterCount} targets</Text>
-            </View>
-            
-            <TouchableOpacity style={styles.startButton} onPress={startGame} activeOpacity={0.8}>
-              <Ionicons name="flash" size={24} color="#fff" />
-              <Text style={styles.startButtonText}>START SHOOTOUT</Text>
-              <Ionicons name="arrow-forward" size={22} color="#fff" />
-            </TouchableOpacity>
           </View>
-        ) : (
-          <TouchableWithoutFeedback onPress={handleShoot}>
-            <View style={[styles.gameArea, { width: GAME_WIDTH, height: GAME_HEIGHT }]}>
-              {renderBackground()}
-              {renderGangMembers()}
-              {renderCrosshair()}
-              
-              {isGameOver && (
-                <View style={styles.gameOverOverlay}>
-                  <Text style={styles.gameOverEmoji}>
-                    {hits > 0 ? '🎯' : '💨'}
-                  </Text>
-                  <Text style={[styles.gameOverText, { color: hits > 0 ? '#27ae60' : '#e74c3c' }]}>
-                    {hits > 0 ? `${hits} HITS!` : 'NO HITS'}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </TouchableWithoutFeedback>
         )}
       </View>
 
-      {/* Shoot instruction */}
-      {gameStarted && !isGameOver && (
-        <View style={styles.shootHint}>
-          <Ionicons name="hand-left" size={24} color="#888" />
-          <Text style={styles.shootHintText}>TAP TO SHOOT</Text>
-        </View>
-      )}
-
       {/* Results Modal */}
-      <Modal
-        visible={showResultsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowResultsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.resultsModal}>
-            {hits > 0 ? (
-              <>
-                <View style={styles.resultHeader}>
-                  <Text style={styles.resultEmoji}>🎯🔫</Text>
-                  <Text style={styles.resultTitle}>SHOOTOUT COMPLETE!</Text>
-                  <Text style={styles.resultSubtitle}>Nice shooting!</Text>
-                </View>
-                
-                <View style={styles.hitsCard}>
-                  <Text style={styles.hitsLabel}>Total Hits</Text>
-                  <Text style={styles.hitsValue}>{hits}</Text>
-                  <Text style={styles.hitsAccuracy}>
-                    {Math.round((hits / TOTAL_SHOTS) * 100)}% accuracy
-                  </Text>
-                </View>
-                
-                <View style={styles.rewardsContainer}>
-                  <Text style={styles.rewardsTitle}>🎁 REWARDS</Text>
-                  
-                  <Animated.View style={[styles.rewardRow, {
-                    opacity: rewardAnimValues.cash,
-                    transform: [{
-                      translateX: rewardAnimValues.cash.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-50, 0],
-                      }),
-                    }],
-                  }]}>
-                    <View style={styles.rewardIcon}>
-                      <Text style={styles.rewardIconText}>💰</Text>
-                    </View>
-                    <View style={styles.rewardDetails}>
-                      <Text style={styles.rewardLabel}>Cash</Text>
-                      <Text style={styles.rewardValue}>+${gameRewards?.totalCash || 0}</Text>
-                    </View>
-                  </Animated.View>
-                  
-                  <Animated.View style={[styles.rewardRow, {
-                    opacity: rewardAnimValues.xp,
-                    transform: [{
-                      translateX: rewardAnimValues.xp.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-50, 0],
-                      }),
-                    }],
-                  }]}>
-                    <View style={[styles.rewardIcon, { backgroundColor: '#2196f320' }]}>
-                      <Text style={styles.rewardIconText}>⭐</Text>
-                    </View>
-                    <View style={styles.rewardDetails}>
-                      <Text style={styles.rewardLabel}>Experience</Text>
-                      <Text style={[styles.rewardValue, { color: '#2196f3' }]}>+{gameRewards?.totalXP || 0} XP</Text>
-                    </View>
-                  </Animated.View>
-                  
-                  <Animated.View style={[styles.rewardRow, {
-                    opacity: rewardAnimValues.rep,
-                    transform: [{
-                      translateX: rewardAnimValues.rep.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-50, 0],
-                      }),
-                    }],
-                  }]}>
-                    <View style={[styles.rewardIcon, { backgroundColor: '#9c27b020' }]}>
-                      <Text style={styles.rewardIconText}>👑</Text>
-                    </View>
-                    <View style={styles.rewardDetails}>
-                      <Text style={styles.rewardLabel}>Reputation</Text>
-                      <Text style={[styles.rewardValue, { color: '#9c27b0' }]}>+{gameRewards?.reputation || 0}</Text>
-                    </View>
-                  </Animated.View>
-                </View>
-                
-                <TouchableOpacity style={styles.collectButton} onPress={handleGoBack}>
-                  <Ionicons name="checkmark-circle" size={24} color="#fff" />
-                  <Text style={styles.collectButtonText}>COLLECT REWARDS</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.playAgainButton} onPress={startGame}>
-                  <Text style={styles.playAgainText}>Play Again</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <View style={styles.resultHeader}>
-                  <Text style={styles.resultEmoji}>💨🔫</Text>
-                  <Text style={[styles.resultTitle, { color: '#e74c3c' }]}>NO HITS!</Text>
-                  <Text style={styles.resultSubtitle}>Better luck next time</Text>
-                </View>
-                
-                <View style={styles.statsContainer}>
-                  <View style={styles.statRow}>
-                    <Text style={styles.statRowLabel}>Shots Fired:</Text>
-                    <Text style={styles.statRowValue}>{TOTAL_SHOTS - shotsRemaining}</Text>
-                  </View>
-                  <View style={styles.statRow}>
-                    <Text style={styles.statRowLabel}>Hits:</Text>
-                    <Text style={[styles.statRowValue, { color: '#e74c3c' }]}>0</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.noRewardsBox}>
-                  <Ionicons name="close-circle" size={40} color="#e74c3c" />
-                  <Text style={styles.noRewardsText}>No Rewards</Text>
-                  <Text style={styles.noRewardsSubtext}>Score at least 1 hit to earn rewards!</Text>
-                </View>
-                
-                <TouchableOpacity style={styles.retryButtonLarge} onPress={startGame}>
-                  <Ionicons name="refresh" size={24} color="#fff" />
-                  <Text style={styles.retryButtonLargeText}>TRY AGAIN</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
-                  <Text style={styles.exitButtonLargeText}>Exit</Text>
-                </TouchableOpacity>
-              </>
-            )}
+      <Modal visible={showResults} transparent animationType="fade">
+        <View style={styles.resultsOverlay}>
+          <View style={styles.resultsBox}>
+            <Text style={styles.resultsTitle}>
+              {hits >= 15 ? '🏆 EXCELLENT!' : hits >= 10 ? '🎯 GREAT!' : hits >= 5 ? '👍 GOOD!' : '💪 PRACTICE MORE!'}
+            </Text>
+            <Text style={styles.resultsSubtitle}>SHOOTOUT COMPLETE</Text>
+            
+            <View style={styles.resultsStats}>
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Hits:</Text>
+                <Text style={styles.resultValue}>{hits}</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Cash Earned:</Text>
+                <Text style={[styles.resultValue, styles.resultCash]}>${rewards?.totalCash || 0}</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>XP Earned:</Text>
+                <Text style={[styles.resultValue, styles.resultXP]}>+{rewards?.totalXP || 0}</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Rep Gained:</Text>
+                <Text style={[styles.resultValue, styles.resultRep]}>+{rewards?.reputation || 0}</Text>
+              </View>
+            </View>
+
+            <View style={styles.resultsActions}>
+              <TouchableOpacity style={styles.resultsButton} onPress={handleClose}>
+                <Text style={styles.resultsButtonText}>DONE</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -936,483 +747,376 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0a',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#1a1a1a',
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#333',
-    justifyContent: 'center',
+  closeButton: {
+    padding: 4,
+  },
+  headerCenter: {
     alignItems: 'center',
   },
-  headerInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
   headerTitle: {
-    color: '#fff',
+    color: '#f39c12',
     fontSize: 18,
     fontWeight: 'bold',
+    letterSpacing: 2,
   },
   headerSubtitle: {
-    color: '#e74c3c',
-    fontSize: 12,
+    color: '#888',
+    fontSize: 11,
     marginTop: 2,
+  },
+  headerRight: {
+    width: 60,
+    alignItems: 'flex-end',
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  timerText: {
+    color: '#f39c12',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  timerTextLow: {
+    color: '#e74c3c',
   },
   statsBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: 10,
-    backgroundColor: '#111',
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    paddingVertical: 10,
+    backgroundColor: '#1a1a1a',
+    borderBottomWidth: 2,
+    borderBottomColor: '#333',
   },
-  statBox: {
+  statItem: {
     alignItems: 'center',
   },
   statLabel: {
     color: '#666',
     fontSize: 10,
-    fontWeight: 'bold',
+    letterSpacing: 1,
   },
   statValue: {
     color: '#fff',
-    fontSize: 20,
-    fontWeight: '900',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  statValueLow: {
+    color: '#e74c3c',
   },
   gameContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  startScreen: {
-    alignItems: 'center',
-    padding: 24,
-  },
-  startEmoji: {
-    fontSize: 56,
-    marginBottom: 12,
-  },
-  startTitle: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  instructionsCard: {
-    backgroundColor: '#252525',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#333',
-    width: '100%',
-    maxWidth: 320,
-  },
-  instructionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  instructionIcon: {
-    fontSize: 20,
-    width: 40,
-    textAlign: 'center',
-  },
-  instructionText: {
-    color: '#e0e0e0',
-    fontSize: 13,
-    fontWeight: '500',
-    flex: 1,
-    marginLeft: 8,
-  },
-  statsHint: {
-    backgroundColor: 'rgba(231, 76, 60, 0.15)',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(231, 76, 60, 0.3)',
-  },
-  statsHintText: {
-    color: '#e74c3c',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  startButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    backgroundColor: '#c0392b',
-    paddingHorizontal: 32,
-    paddingVertical: 18,
-    borderRadius: 16,
-    borderWidth: 3,
-    borderColor: '#e74c3c',
-    shadowColor: '#c0392b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  startButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  gameArea: {
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    alignSelf: 'center',
+    marginVertical: 10,
+    borderRadius: 12,
     overflow: 'hidden',
-    position: 'relative',
+    borderWidth: 3,
+    borderColor: '#333',
   },
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  sky: {
+  
+  // City background styles
+  cityBackground: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '40%',
-    backgroundColor: '#1a1a2e',
-  },
-  buildingsContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '70%',
-  },
-  building: {
-    position: 'absolute',
     bottom: 0,
-    backgroundColor: COLORS.building,
+  },
+  skyGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '30%',
+    opacity: 0.5,
+  },
+  buildingsBack: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  buildingBack: {
+    position: 'absolute',
+    width: GAME_WIDTH / 5 - 5,
+    bottom: 0,
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
-    padding: 8,
   },
-  window: {
-    width: 20,
-    height: 15,
-    backgroundColor: '#ffeaa7',
-    opacity: 0.7,
-    alignSelf: 'center',
+  buildingsFront: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+    height: 250,
+  },
+  buildingFront: {
+    position: 'absolute',
+    width: GAME_WIDTH / 4 - 30,
+    bottom: 0,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    padding: 5,
+  },
+  windowRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 4,
+  },
+  windowSmall: {
+    width: 10,
+    height: 12,
+    borderRadius: 1,
+  },
+  windowLarge: {
+    width: 14,
+    height: 18,
     borderRadius: 2,
+  },
+  door: {
+    position: 'absolute',
+    bottom: 0,
+    left: '30%',
+    width: '40%',
+    height: 30,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
   },
   street: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 60,
-    backgroundColor: COLORS.street,
+    height: 80,
+  },
+  streetLine: {
+    position: 'absolute',
+    top: 10,
+    left: '10%',
+    right: '10%',
+    height: 3,
+    backgroundColor: '#ffeaa7',
+    opacity: 0.5,
+  },
+  parkedCar: {
+    position: 'absolute',
+    bottom: 15,
+    width: 50,
+    height: 25,
+    borderRadius: 6,
+  },
+  levelBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  levelBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+
+  // Gang member styles
+  gangMemberContainer: {
+    position: 'absolute',
+    zIndex: 10,
+  },
+  gangMemberTouchable: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  streetLine: {
-    width: '80%',
-    height: 4,
-    backgroundColor: '#f1c40f',
-  },
-  gangMember: {
+  hideSpotBg: {
     position: 'absolute',
-    zIndex: 5,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 8,
+    opacity: 0.3,
+  },
+  hideSpot_rooftop: {
+    backgroundColor: '#2d3436',
+  },
+  hideSpot_window: {
+    backgroundColor: '#636e72',
+  },
+  hideSpot_doorway: {
+    backgroundColor: '#2d2d2d',
+  },
+  hideSpot_wall: {
+    backgroundColor: '#4a4a4a',
+  },
+  hideSpot_car: {
+    backgroundColor: '#1a1a1a',
+  },
+  hideSpot_street: {
+    backgroundColor: '#2d3436',
   },
   gangMemberSprite: {
     width: '100%',
     height: '100%',
   },
-  crosshair: {
+  gangMemberHit: {
+    tintColor: '#ff0000',
+  },
+
+  // Hit effect
+  hitEffect: {
     position: 'absolute',
-    width: CROSSHAIR_SIZE,
-    height: CROSSHAIR_SIZE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  crosshairGlow: {
-    position: 'absolute',
-    width: CROSSHAIR_SIZE + 10,
-    height: CROSSHAIR_SIZE + 10,
-    borderRadius: (CROSSHAIR_SIZE + 10) / 2,
-    backgroundColor: COLORS.crosshairGlow,
-  },
-  crosshairCenter: {
-    position: 'absolute',
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.crosshair,
-  },
-  crosshairLine: {
-    position: 'absolute',
-    backgroundColor: COLORS.crosshair,
-  },
-  crosshairLineH: {
-    width: CROSSHAIR_SIZE - 10,
-    height: 2,
-  },
-  crosshairLineV: {
-    width: 2,
-    height: CROSSHAIR_SIZE - 10,
-  },
-  crosshairCircle: {
-    position: 'absolute',
-    width: CROSSHAIR_SIZE - 20,
-    height: CROSSHAIR_SIZE - 20,
-    borderRadius: (CROSSHAIR_SIZE - 20) / 2,
-    borderWidth: 2,
-    borderColor: COLORS.crosshair,
-  },
-  gameOverOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    width: 60,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 20,
   },
-  gameOverEmoji: {
-    fontSize: 64,
+  hitEffectText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffeaa7',
+    textShadowColor: '#e74c3c',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  // Start overlay
+  startOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  startBox: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#f39c12',
+    width: '85%',
+  },
+  startTitle: {
+    color: '#f39c12',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  startSubtitle: {
+    color: '#888',
+    fontSize: 16,
     marginBottom: 16,
   },
-  gameOverText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  shootHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: 16,
-    backgroundColor: '#111',
-  },
-  shootHintText: {
-    color: '#888',
+  startInstructions: {
+    color: '#aaa',
     fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  startButton: {
+    backgroundColor: '#f39c12',
+    paddingHorizontal: 48,
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  startButtonText: {
+    color: '#000',
+    fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 2,
   },
-  // Modal styles
-  modalOverlay: {
+
+  // Results modal
+  resultsOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0,0,0,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
-  resultsModal: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 20,
+  resultsBox: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
     padding: 24,
-    width: '100%',
-    maxWidth: 360,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#333',
+    borderWidth: 3,
+    borderColor: '#27ae60',
+    width: '85%',
   },
-  resultHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  resultEmoji: {
-    fontSize: 56,
-    marginBottom: 8,
-  },
-  resultTitle: {
-    fontSize: 28,
+  resultsTitle: {
+    color: '#f39c12',
+    fontSize: 26,
     fontWeight: 'bold',
-    color: '#27ae60',
     marginBottom: 4,
   },
-  resultSubtitle: {
+  resultsSubtitle: {
+    color: '#888',
     fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
+    letterSpacing: 2,
+    marginBottom: 20,
   },
-  hitsCard: {
-    backgroundColor: 'rgba(39, 174, 96, 0.15)',
-    borderRadius: 14,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
+  resultsStats: {
     width: '100%',
-    borderWidth: 1,
-    borderColor: 'rgba(39, 174, 96, 0.3)',
+    marginBottom: 20,
   },
-  hitsLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  hitsValue: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#27ae60',
-  },
-  hitsAccuracy: {
-    color: '#666',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  statsContainer: {
-    width: '100%',
-    backgroundColor: '#0f0f1a',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  statRow: {
+  resultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
   },
-  statRowLabel: {
+  resultLabel: {
+    color: '#888',
     fontSize: 14,
-    color: '#888',
   },
-  statRowValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  resultValue: {
     color: '#fff',
-  },
-  rewardsContainer: {
-    width: '100%',
-    backgroundColor: '#0a2a0a',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#4caf5040',
-  },
-  rewardsTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#27ae60',
-    textAlign: 'center',
-    marginBottom: 16,
   },
-  rewardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  rewardIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#4caf5020',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  rewardIconText: {
-    fontSize: 22,
-  },
-  rewardDetails: {
-    flex: 1,
-  },
-  rewardLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginBottom: 2,
-  },
-  rewardValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  resultCash: {
     color: '#27ae60',
   },
-  collectButton: {
+  resultXP: {
+    color: '#3498db',
+  },
+  resultRep: {
+    color: '#9b59b6',
+  },
+  resultsActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 16,
+  },
+  resultsButton: {
     backgroundColor: '#27ae60',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    width: '100%',
-    gap: 8,
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
-  collectButtonText: {
+  resultsButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  playAgainButton: {
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  playAgainText: {
-    color: '#888',
-    fontSize: 14,
-    textDecorationLine: 'underline',
-  },
-  noRewardsBox: {
-    width: '100%',
-    backgroundColor: '#2a0a0a',
-    borderRadius: 12,
-    padding: 24,
-    marginBottom: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e74c3c40',
-  },
-  noRewardsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#e74c3c',
-    marginTop: 8,
-  },
-  noRewardsSubtext: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  retryButtonLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f39c12',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    width: '100%',
-    gap: 8,
-  },
-  retryButtonLargeText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  exitButtonLarge: {
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  exitButtonLargeText: {
-    color: '#888',
-    fontSize: 14,
-    textDecorationLine: 'underline',
+    letterSpacing: 1,
   },
 });
