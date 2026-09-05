@@ -94,6 +94,9 @@ export default function CasinoScreen() {
   const [bjBet, setBjBet] = useState(50);
   const [bjGame, setBjGame] = useState<any>(null);
   const [bjLoading, setBjLoading] = useState(false);
+  const [bjDealerRevealing, setBjDealerRevealing] = useState(false);
+  const [bjShowResult, setBjShowResult] = useState(false);
+  const [bjFinalResult, setBjFinalResult] = useState<any>(null);
   
   // Roulette state
   const [selectedChip, setSelectedChip] = useState(25);
@@ -268,6 +271,10 @@ export default function CasinoScreen() {
     }
 
     setBjLoading(true);
+    setBjDealerRevealing(false);
+    setBjShowResult(false);
+    setBjFinalResult(null);
+    
     try {
       const response = await fetch(`${API_URL}/api/casinos/blackjack/start?player_id=${playerId}&bet_amount=${bjBet}`, {
         method: 'POST',
@@ -290,7 +297,7 @@ export default function CasinoScreen() {
   };
 
   const blackjackAction = async (action: string) => {
-    if (!bjGame || bjLoading) return;
+    if (!bjGame || bjLoading || bjDealerRevealing) return;
 
     setBjLoading(true);
     try {
@@ -303,12 +310,40 @@ export default function CasinoScreen() {
         throw new Error(data.detail || 'Action failed');
       }
 
-      setBjGame({ ...bjGame, ...data });
+      // If game is over (stand, double, or bust), show dealer reveal animation
       if (data.status !== 'playing') {
-        refreshPlayer();
+        setBjDealerRevealing(true);
+        setBjFinalResult(data);
+        
+        // First show dealer's full hand (cards revealed)
+        setBjGame({ 
+          ...bjGame, 
+          dealer_cards: data.dealer_cards,
+          dealer_value: data.dealer_value,
+          player_cards: data.player_cards,
+          player_value: data.player_value,
+          status: 'revealing' // Custom status for reveal phase
+        });
+        
+        // After delay, show the result
+        setTimeout(() => {
+          setBjGame({ ...bjGame, ...data });
+          setBjDealerRevealing(false);
+          setBjShowResult(true);
+          refreshPlayer();
+          
+          // Reset after showing result
+          setTimeout(() => {
+            setBjShowResult(false);
+          }, 3000);
+        }, 2500); // 2.5 second delay to see the cards
+      } else {
+        // Game continues (hit and not bust)
+        setBjGame({ ...bjGame, ...data });
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
+      setBjDealerRevealing(false);
     } finally {
       setBjLoading(false);
     }
@@ -738,94 +773,136 @@ export default function CasinoScreen() {
     );
   };
 
-  const renderBlackjack = () => (
-    <ScrollView style={styles.bjContainer} contentContainerStyle={styles.bjContent}>
-      <Text style={styles.gameTitle}>BLACKJACK</Text>
-      <Text style={styles.balanceSmall}>Balance: ${player?.cash || 0}</Text>
-      
-      {!bjGame || bjGame.status !== 'playing' ? (
-        <View style={styles.bjSetup}>
-          <Text style={styles.bjBetLabel}>Select Bet Amount</Text>
-          <View style={styles.bjBetButtons}>
-            {[25, 50, 100, 250, 500].map((amount) => (
-              <TouchableOpacity
-                key={amount}
-                style={[styles.bjBetBtn, bjBet === amount && styles.bjBetBtnActive]}
-                onPress={() => setBjBet(amount)}
-              >
-                <Text style={[styles.bjBetBtnText, bjBet === amount && styles.bjBetBtnTextActive]}>
-                  ${amount}
+  const renderBlackjack = () => {
+    const isGameActive = bjGame && (bjGame.status === 'playing' || bjGame.status === 'revealing' || bjDealerRevealing);
+    const showDealerValue = bjGame?.status !== 'playing' || bjDealerRevealing;
+    
+    return (
+      <ScrollView style={styles.bjContainer} contentContainerStyle={styles.bjContent}>
+        <Text style={styles.gameTitle}>BLACKJACK</Text>
+        <Text style={styles.balanceSmall}>Balance: ${player?.cash || 0}</Text>
+        
+        {!isGameActive ? (
+          <View style={styles.bjSetup}>
+            <Text style={styles.bjBetLabel}>Select Bet Amount</Text>
+            <View style={styles.bjBetButtons}>
+              {[25, 50, 100, 250, 500].map((amount) => (
+                <TouchableOpacity
+                  key={amount}
+                  style={[styles.bjBetBtn, bjBet === amount && styles.bjBetBtnActive]}
+                  onPress={() => setBjBet(amount)}
+                >
+                  <Text style={[styles.bjBetBtnText, bjBet === amount && styles.bjBetBtnTextActive]}>
+                    ${amount}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            {bjGame && bjGame.status !== 'playing' && bjShowResult && (
+              <View style={[styles.bjResultBox, bjGame.winnings >= 0 ? styles.winResult : styles.lossResult]}>
+                <Text style={styles.bjResultText}>{bjGame.message}</Text>
+                <Text style={styles.bjResultAmount}>
+                  {bjGame.winnings >= 0 ? `+$${bjGame.winnings}` : `-$${Math.abs(bjGame.winnings)}`}
                 </Text>
-              </TouchableOpacity>
-            ))}
+              </View>
+            )}
+            
+            <TouchableOpacity 
+              style={styles.dealButton}
+              onPress={startBlackjack}
+              disabled={bjLoading}
+            >
+              <LinearGradient colors={['#27ae60', '#1e8449', '#27ae60']} style={styles.dealButtonGradient}>
+                {bjLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.dealButtonText}>DEAL</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-          
-          {bjGame && bjGame.status !== 'playing' && (
-            <View style={[styles.bjResultBox, bjGame.winnings >= 0 ? styles.winResult : styles.lossResult]}>
-              <Text style={styles.bjResultText}>{bjGame.message}</Text>
-              <Text style={styles.bjResultAmount}>
-                {bjGame.winnings >= 0 ? `+$${bjGame.winnings}` : `-$${Math.abs(bjGame.winnings)}`}
+        ) : (
+          <View style={styles.bjTable}>
+            {/* Dealer's Hand */}
+            <View style={styles.bjHand}>
+              <Text style={styles.bjHandLabel}>
+                DEALER {showDealerValue && bjGame.dealer_value ? `(${bjGame.dealer_value})` : ''}
               </Text>
+              <View style={styles.bjCards}>
+                {bjGame.dealer_cards?.map((card: any, i: number) => (
+                  <View key={i} style={styles.bjCardWrapper}>
+                    {renderCard(card)}
+                    {bjDealerRevealing && i === bjGame.dealer_cards.length - 1 && (
+                      <View style={styles.cardRevealGlow} />
+                    )}
+                  </View>
+                ))}
+              </View>
             </View>
-          )}
-          
-          <TouchableOpacity 
-            style={styles.dealButton}
-            onPress={startBlackjack}
-            disabled={bjLoading}
-          >
-            <LinearGradient colors={['#27ae60', '#1e8449', '#27ae60']} style={styles.dealButtonGradient}>
-              {bjLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.dealButtonText}>DEAL</Text>}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.bjTable}>
-          <View style={styles.bjHand}>
-            <Text style={styles.bjHandLabel}>DEALER</Text>
-            <View style={styles.bjCards}>
-              {bjGame.dealer_cards?.map((card: any, i: number) => (
-                <View key={i}>{renderCard(card)}</View>
-              ))}
+            
+            {/* Dealer Revealing Message */}
+            {bjDealerRevealing && (
+              <View style={styles.revealingMessage}>
+                <Text style={styles.revealingText}>Dealer reveals...</Text>
+              </View>
+            )}
+            
+            {/* Result Display (shown during reveal phase) */}
+            {bjFinalResult && bjDealerRevealing && (
+              <View style={[styles.bjInGameResult, bjFinalResult.winnings >= 0 ? styles.winResult : styles.lossResult]}>
+                <Text style={styles.bjResultText}>{bjFinalResult.message}</Text>
+                <Text style={styles.bjResultAmount}>
+                  {bjFinalResult.winnings >= 0 ? `+$${bjFinalResult.winnings}` : `-$${Math.abs(bjFinalResult.winnings)}`}
+                </Text>
+              </View>
+            )}
+            
+            {/* Player's Hand */}
+            <View style={styles.bjHand}>
+              <Text style={styles.bjHandLabel}>YOUR HAND ({bjGame.player_value})</Text>
+              <View style={styles.bjCards}>
+                {bjGame.player_cards?.map((card: any, i: number) => (
+                  <View key={i}>{renderCard(card)}</View>
+                ))}
+              </View>
             </View>
+            
+            {/* Action Buttons - only show when game is active and not revealing */}
+            {bjGame.status === 'playing' && !bjDealerRevealing && (
+              <View style={styles.bjActions}>
+                <TouchableOpacity 
+                  style={styles.bjActionBtn} 
+                  onPress={() => blackjackAction('hit')}
+                  disabled={bjLoading}
+                >
+                  <Text style={styles.bjActionText}>HIT</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.bjActionBtn} 
+                  onPress={() => blackjackAction('stand')}
+                  disabled={bjLoading}
+                >
+                  <Text style={styles.bjActionText}>STAND</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.bjActionBtn, styles.bjDoubleBtn]} 
+                  onPress={() => blackjackAction('double')}
+                  disabled={bjLoading || (player?.cash || 0) < bjBet * 2}
+                >
+                  <Text style={styles.bjActionText}>DOUBLE</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* New Hand Button - shown after result */}
+            {bjDealerRevealing && (
+              <View style={styles.bjNewHandContainer}>
+                <ActivityIndicator color="#d4af37" size="small" />
+                <Text style={styles.bjNewHandHint}>Returning to bet screen...</Text>
+              </View>
+            )}
           </View>
-          
-          <View style={styles.bjHand}>
-            <Text style={styles.bjHandLabel}>YOUR HAND ({bjGame.player_value})</Text>
-            <View style={styles.bjCards}>
-              {bjGame.player_cards?.map((card: any, i: number) => (
-                <View key={i}>{renderCard(card)}</View>
-              ))}
-            </View>
-          </View>
-          
-          <View style={styles.bjActions}>
-            <TouchableOpacity 
-              style={styles.bjActionBtn} 
-              onPress={() => blackjackAction('hit')}
-              disabled={bjLoading}
-            >
-              <Text style={styles.bjActionText}>HIT</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.bjActionBtn} 
-              onPress={() => blackjackAction('stand')}
-              disabled={bjLoading}
-            >
-              <Text style={styles.bjActionText}>STAND</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.bjActionBtn, styles.bjDoubleBtn]} 
-              onPress={() => blackjackAction('double')}
-              disabled={bjLoading || (player?.cash || 0) < bjBet * 2}
-            >
-              <Text style={styles.bjActionText}>DOUBLE</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </ScrollView>
-  );
+        )}
+      </ScrollView>
+    );
+  };
 
   const renderRoulette = () => {
     const renderChip = (betType: string, small: boolean = false) => {
@@ -1430,6 +1507,13 @@ const styles = StyleSheet.create({
     marginVertical: 20,
     alignItems: 'center',
   },
+  bjInGameResult: {
+    width: '90%',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
   bjResultText: {
     color: '#fff',
     fontSize: 18,
@@ -1440,6 +1524,43 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  revealingMessage: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  revealingText: {
+    color: '#d4af37',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  bjCardWrapper: {
+    position: 'relative',
+  },
+  cardRevealGlow: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 10,
+    borderWidth: 3,
+    borderColor: '#d4af37',
+    shadowColor: '#d4af37',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+  },
+  bjNewHandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+  },
+  bjNewHandHint: {
+    color: '#888',
+    fontSize: 12,
   },
   dealButton: {
     width: '60%',
