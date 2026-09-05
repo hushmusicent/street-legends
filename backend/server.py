@@ -6612,6 +6612,34 @@ async def start_shootout(shootout_id: str, player_id: str):
     }
 
 
+@api_router.post("/shootouts/standalone/start")
+async def start_standalone_shootout(player_id: str, level: int = 1):
+    """Start a standalone shootout game from the options menu"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Create game session for standalone mode
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "shootout_id": "standalone",
+        "shootout_name": f"Training Level {level}",
+        "status": "active",
+        "started_at": datetime.utcnow().isoformat(),
+        "standalone": True,
+        "level": level,
+    }
+    
+    await db.shootout_games.insert_one(game)
+    
+    return {
+        "game_id": game_id,
+        "shootout_name": game["shootout_name"],
+    }
+
+
 @api_router.post("/shootouts/game/{game_id}/complete")
 async def complete_shootout(game_id: str, hits: int, standalone: bool = False):
     """Complete a shootout game and award rewards based on hits"""

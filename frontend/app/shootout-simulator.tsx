@@ -8,63 +8,59 @@ import {
   Animated,
   Modal,
   Image,
-  ImageBackground,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../stores/gameStore';
-import { startShootout, completeShootout } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
-import Constants from 'expo-constants';
+import { startShootout as apiStartShootout, completeShootout as apiCompleteShootout, getPlayer } from '../services/api';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// API URL
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 // Game constants
 const GAME_WIDTH = Math.min(SCREEN_WIDTH - 20, 380);
 const GAME_HEIGHT = Math.min(SCREEN_HEIGHT - 200, 500);
-const GANG_MEMBER_SIZE = 70;
 
-// API base URL for background removal
-const API_BASE_URL = Constants.expoConfig?.extra?.EXPO_BACKEND_URL || process.env.EXPO_PUBLIC_API_URL || '';
-
-// Character sprite URLs - 5 gang members
+// Character sprite URLs - 5 gang members with direct URLs (no bg removal needed for these)
 const CHARACTER_SPRITES = {
   cowboy: {
-    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/05168415d6654f72bab2f6c82452d7b0_AQPZH2SCZMVdkXQRiMWNEyzVehHj0Uw5NdWG-7hJbPMozETNm8mrmOmZ6STIjFFLLIKWtjwrDDFChRnmKlcLLXR7.jpg',
-    needsBgRemoval: true,
+    url: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/05168415d6654f72bab2f6c82452d7b0_AQPZH2SCZMVdkXQRiMWNEyzVehHj0Uw5NdWG-7hJbPMozETNm8mrmOmZ6STIjFFLLIKWtjwrDDFChRnmKlcLLXR7.jpg',
     name: 'Cowboy',
+    emoji: '🤠',
   },
   bandana: {
-    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/c07d7e1fbb8c44eb962c77a46b74a893_AQMN4ikUKuAU-0zhhOSDaZOWw65Nj9dItWHT1ZNubA4ZREzZJpzpFwzpd4R_LiwVETxLOe84jK2gVm-y0AnU4kDm.jpg',
-    needsBgRemoval: true,
+    url: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/c07d7e1fbb8c44eb962c77a46b74a893_AQMN4ikUKuAU-0zhhOSDaZOWw65Nj9dItWHT1ZNubA4ZREzZJpzpFwzpd4R_LiwVETxLOe84jK2gVm-y0AnU4kDm.jpg',
     name: 'Bandana',
+    emoji: '😎',
   },
   crewJacket: {
-    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/8dca7a6977dd4701b3e1d791602862fb_crew3_cutout.png',
-    needsBgRemoval: false,
+    url: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/8dca7a6977dd4701b3e1d791602862fb_crew3_cutout.png',
     name: 'Crew Jacket',
+    emoji: '🧥',
   },
   dualGuns: {
-    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/8b8d7d50201349a6a33bbeecbfb0ed5f_guy_2_guns_cutout.png',
-    needsBgRemoval: false,
+    url: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/8b8d7d50201349a6a33bbeecbfb0ed5f_guy_2_guns_cutout.png',
     name: 'Dual Guns',
+    emoji: '🔫',
   },
   girlRed: {
-    original: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/3ae4914efaaf4047acf32ef42f44f11d_violent_tech_cutout.png',
-    needsBgRemoval: false,
+    url: 'https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/3ae4914efaaf4047acf32ef42f44f11d_violent_tech_cutout.png',
     name: 'Girl Red',
+    emoji: '👩',
   },
 };
 
-// Get sprite URL
+const SPRITE_KEYS = Object.keys(CHARACTER_SPRITES) as (keyof typeof CHARACTER_SPRITES)[];
+
+// Helper function to get sprite URL
 const getSpriteUrl = (spriteKey: keyof typeof CHARACTER_SPRITES): string => {
-  const sprite = CHARACTER_SPRITES[spriteKey];
-  if (sprite.needsBgRemoval) {
-    return `${API_BASE_URL}/api/sprites/remove-bg?url=${encodeURIComponent(sprite.original)}`;
-  }
-  return sprite.original;
+  return CHARACTER_SPRITES[spriteKey]?.url || '';
 };
 
 // 20 City backgrounds with different themes
@@ -227,6 +223,7 @@ export default function ShootoutSimulatorScreen() {
   const [showResults, setShowResults] = useState(false);
   const [rewards, setRewards] = useState<GameRewards | null>(null);
   const [hitEffects, setHitEffects] = useState<{ id: number; x: number; y: number; opacity: Animated.Value }[]>([]);
+  const [gameId, setGameId] = useState<string | null>(null);
 
   // Refs
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
@@ -389,13 +386,34 @@ export default function ShootoutSimulatorScreen() {
 
   // Start game
   const startGame = useCallback(async () => {
-    // Start shootout on backend (for cooldown tracking)
+    let newGameId: string | null = null;
+    
+    // Start shootout on backend (for cooldown tracking and game session creation)
     if (!isStandalone && playerId && shootoutId) {
       try {
-        await startShootout(playerId, shootoutId);
+        const result = await apiStartShootout(shootoutId, playerId);
+        newGameId = result.game_id;
+        setGameId(newGameId);
       } catch (e: any) {
-        showGameToast(e.message || 'Failed to start shootout', 'error');
+        const errorMsg = e.response?.data?.detail || e.message || 'Failed to start shootout';
+        showGameToast(errorMsg, 'error');
         return;
+      }
+    } else if (isStandalone && playerId) {
+      // For standalone mode, create a temporary game session via a dedicated endpoint
+      try {
+        const response = await fetch(`${API_URL}/api/shootouts/standalone/start?player_id=${playerId}&level=${level}`, {
+          method: 'POST',
+        });
+        if (!response.ok) {
+          throw new Error('Failed to start standalone game');
+        }
+        const result = await response.json();
+        newGameId = result.game_id;
+        setGameId(newGameId);
+      } catch (e: any) {
+        console.log('Standalone mode - continuing without backend tracking');
+        // In standalone mode, we can still play locally
       }
     }
 
@@ -425,7 +443,7 @@ export default function ShootoutSimulatorScreen() {
         return prev - 1;
       });
     }, 1000);
-  }, [config.timeLimit, config.spawnInterval, spawnGangMember, isStandalone, playerId, shootoutId]);
+  }, [config.timeLimit, config.spawnInterval, spawnGangMember, isStandalone, playerId, shootoutId, level]);
 
   // End game
   const endGame = useCallback(async () => {
@@ -446,20 +464,43 @@ export default function ShootoutSimulatorScreen() {
       if (popup.hideTimeout) clearTimeout(popup.hideTimeout);
     });
 
-    // Calculate rewards
+    // Calculate rewards locally for display
     const gameRewards = calculateRewards(hits, level);
     setRewards(gameRewards);
 
-    // Complete on backend
-    if (!isStandalone && playerId && shootoutId) {
+    // Complete on backend and get real rewards
+    if (gameId && playerId) {
       try {
-        const result = await completeShootout(playerId, shootoutId, hits, level);
-        if (result.player) {
-          setPlayer(result.player);
+        const result = await apiCompleteShootout(gameId, hits, isStandalone);
+        
+        // Update rewards from backend response if available
+        if (result.rewards) {
+          setRewards({
+            totalCash: result.rewards.cash || 0,
+            totalXP: result.rewards.xp || 0,
+            reputation: result.rewards.reputation || 0,
+          });
         }
+        
+        // Refresh player data to get updated balances
+        if (playerId) {
+          try {
+            const updatedPlayer = await getPlayer(playerId);
+            setPlayer(updatedPlayer);
+          } catch (playerErr) {
+            console.error('Failed to refresh player data:', playerErr);
+          }
+        }
+        
         invalidateMapQueries();
+        
+        if (result.message) {
+          showGameToast(result.message, 'success');
+        }
       } catch (e: any) {
         console.error('Failed to complete shootout:', e);
+        // Still show local rewards even if backend call fails
+        showGameToast('Rewards may not have saved. Check your balance.', 'error');
       }
     }
 
@@ -467,7 +508,7 @@ export default function ShootoutSimulatorScreen() {
     setTimeout(() => {
       setShowResults(true);
     }, 500);
-  }, [hits, level, isStandalone, playerId, shootoutId, setPlayer, invalidateMapQueries, activePopups]);
+  }, [hits, level, isStandalone, playerId, gameId, setPlayer, invalidateMapQueries, activePopups]);
 
   // Manual end game (for timer reaching 0)
   useEffect(() => {
