@@ -15,9 +15,18 @@ export default function Index() {
   const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
+  const [forceShowContent, setForceShowContent] = useState(false);
 
   useEffect(() => {
     initializeApp();
+    
+    // Fallback: Force show content after 5 seconds if still loading
+    const fallbackTimer = setTimeout(() => {
+      setForceShowContent(true);
+      setLoading(false);
+    }, 5000);
+    
+    return () => clearTimeout(fallbackTimer);
   }, []);
 
   const handleNavigate = async (path: string) => {
@@ -27,26 +36,45 @@ export default function Index() {
   const initializeApp = async () => {
     try {
       setLoading(true);
-      const storedId = await loadStoredPlayerId();
+      
+      // Add a timeout to prevent indefinite loading
+      const timeoutPromise = new Promise<null>((_, reject) => 
+        setTimeout(() => reject(new Error('Initialization timeout')), 10000)
+      );
+      
+      const storedId = await Promise.race([
+        loadStoredPlayerId(),
+        timeoutPromise
+      ]).catch(() => null);
 
       if (storedId) {
         try {
-          const playerData = await getPlayer(storedId);
-          setPlayer(playerData);
-          setPlayerId(storedId);
-          router.replace('/(tabs)');
+          const playerData = await Promise.race([
+            getPlayer(storedId),
+            new Promise<null>((_, reject) => 
+              setTimeout(() => reject(new Error('Player fetch timeout')), 8000)
+            )
+          ]);
+          if (playerData) {
+            setPlayer(playerData);
+            setPlayerId(storedId);
+            router.replace('/(tabs)');
+            return;
+          }
         } catch (err) {
+          console.log('Failed to fetch player, showing login screen');
           setPlayerId('');
         }
       }
     } catch (err) {
+      console.log('App initialization error:', err);
       setError('Failed to initialize app');
     } finally {
       setLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !forceShowContent) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#e74c3c" />
