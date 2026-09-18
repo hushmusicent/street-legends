@@ -147,12 +147,12 @@ interface LevelConfig {
 const getLevelConfig = (level: number): LevelConfig => {
   const clampedLevel = Math.min(20, Math.max(1, level));
   
-  // Level 1: Most time (60s), slow spawns, long visible duration
-  // Level 20: Least time (25s), fast spawns, short visible duration
+  // Level 1: Most time (60s), faster spawns, shorter visible duration
+  // Level 20: Least time (25s), very fast spawns, very short visible duration
   const timeLimit = Math.max(25, 60 - (clampedLevel - 1) * 1.85);
-  const spawnInterval = Math.max(400, 1500 - (clampedLevel - 1) * 55);
-  const visibleDuration = Math.max(800, 2500 - (clampedLevel - 1) * 85);
-  const maxSimultaneous = Math.min(5, 2 + Math.floor(clampedLevel / 5));
+  const spawnInterval = Math.max(250, 800 - (clampedLevel - 1) * 30); // Faster spawns (was 1500-400)
+  const visibleDuration = Math.max(600, 1800 - (clampedLevel - 1) * 60); // Shorter duration (was 2500-800)
+  const maxSimultaneous = Math.min(6, 3 + Math.floor(clampedLevel / 4)); // More simultaneous targets
   const hitReward = 5 + clampedLevel * 2;
   const xpPerHit = 2 + Math.floor(clampedLevel / 2);
   
@@ -194,8 +194,11 @@ interface GangMemberPopup {
   spriteKey: keyof typeof CHARACTER_SPRITES;
   opacity: Animated.Value;
   scale: Animated.Value;
+  translateX: Animated.Value;
+  translateY: Animated.Value;
   isHit: boolean;
   hideTimeout?: NodeJS.Timeout;
+  movementAnimation?: Animated.CompositeAnimation;
 }
 
 export default function ShootoutSimulatorScreen() {
@@ -267,12 +270,18 @@ export default function ShootoutSimulatorScreen() {
       const spriteKeys = Object.keys(CHARACTER_SPRITES) as (keyof typeof CHARACTER_SPRITES)[];
       const spriteKey = spriteKeys[Math.floor(Math.random() * spriteKeys.length)];
 
+      // Movement range based on spot type
+      const moveRangeX = spot.type === 'street' ? 40 : (spot.type === 'car' ? 30 : 25);
+      const moveRangeY = spot.type === 'rooftop' ? 20 : (spot.type === 'window' ? 15 : 25);
+
       const newPopup: GangMemberPopup = {
         id: ++popupIdRef.current,
         spotId: spot.id,
         spriteKey,
         opacity: new Animated.Value(0),
         scale: new Animated.Value(0.5),
+        translateX: new Animated.Value(0),
+        translateY: new Animated.Value(0),
         isHit: false,
       };
 
@@ -280,19 +289,88 @@ export default function ShootoutSimulatorScreen() {
       Animated.parallel([
         Animated.timing(newPopup.opacity, {
           toValue: 1,
-          duration: 150,
+          duration: 100, // Faster appearance
           useNativeDriver: true,
         }),
         Animated.spring(newPopup.scale, {
           toValue: 1,
-          friction: 5,
-          tension: 100,
+          friction: 6,
+          tension: 120,
           useNativeDriver: true,
         }),
       ]).start();
 
+      // Create continuous side-to-side and up-down movement
+      const movementDuration = 300 + Math.random() * 200; // Fast movement (300-500ms per cycle)
+      const randomStartX = Math.random() > 0.5 ? moveRangeX : -moveRangeX;
+      const randomStartY = Math.random() > 0.5 ? moveRangeY : -moveRangeY;
+      
+      // Start movement animation loop
+      const createMovementLoop = () => {
+        const moveSequence = Animated.sequence([
+          // Move to one side
+          Animated.parallel([
+            Animated.timing(newPopup.translateX, {
+              toValue: randomStartX,
+              duration: movementDuration,
+              useNativeDriver: true,
+            }),
+            Animated.timing(newPopup.translateY, {
+              toValue: randomStartY * 0.5,
+              duration: movementDuration * 0.8,
+              useNativeDriver: true,
+            }),
+          ]),
+          // Move to other side
+          Animated.parallel([
+            Animated.timing(newPopup.translateX, {
+              toValue: -randomStartX,
+              duration: movementDuration,
+              useNativeDriver: true,
+            }),
+            Animated.timing(newPopup.translateY, {
+              toValue: -randomStartY * 0.5,
+              duration: movementDuration * 0.8,
+              useNativeDriver: true,
+            }),
+          ]),
+          // Move back up/down
+          Animated.parallel([
+            Animated.timing(newPopup.translateX, {
+              toValue: randomStartX * 0.5,
+              duration: movementDuration * 0.7,
+              useNativeDriver: true,
+            }),
+            Animated.timing(newPopup.translateY, {
+              toValue: randomStartY,
+              duration: movementDuration,
+              useNativeDriver: true,
+            }),
+          ]),
+          // Return towards center
+          Animated.parallel([
+            Animated.timing(newPopup.translateX, {
+              toValue: -randomStartX * 0.3,
+              duration: movementDuration * 0.6,
+              useNativeDriver: true,
+            }),
+            Animated.timing(newPopup.translateY, {
+              toValue: -randomStartY * 0.7,
+              duration: movementDuration * 0.9,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]);
+        
+        newPopup.movementAnimation = Animated.loop(moveSequence);
+        newPopup.movementAnimation.start();
+      };
+      
+      // Start movement after a tiny delay so it doesn't interfere with appear animation
+      setTimeout(createMovementLoop, 100);
+
       // Set timeout to hide
-      const visibleTime = config.visibleDuration + (Math.random() * 500 - 250); // Add some randomness
+      const visibleTime = config.visibleDuration + (Math.random() * 300 - 150); // Less randomness
       newPopup.hideTimeout = setTimeout(() => {
         hideGangMember(newPopup.id);
       }, visibleTime);
@@ -307,16 +385,21 @@ export default function ShootoutSimulatorScreen() {
       const popup = current.find(p => p.id === popupId);
       if (!popup) return current;
 
+      // Stop movement animation
+      if (popup.movementAnimation) {
+        popup.movementAnimation.stop();
+      }
+
       // Animate retreat
       Animated.parallel([
         Animated.timing(popup.opacity, {
           toValue: 0,
-          duration: 100,
+          duration: 80, // Faster retreat
           useNativeDriver: true,
         }),
         Animated.timing(popup.scale, {
           toValue: 0.5,
-          duration: 100,
+          duration: 80,
           useNativeDriver: true,
         }),
       ]).start(() => {
@@ -330,6 +413,11 @@ export default function ShootoutSimulatorScreen() {
   // Handle tap on gang member
   const handleTap = useCallback((popup: GangMemberPopup, spot: HideSpot) => {
     if (popup.isHit || gameOver) return;
+
+    // Stop movement animation immediately
+    if (popup.movementAnimation) {
+      popup.movementAnimation.stop();
+    }
 
     // Mark as hit
     setActivePopups(current =>
@@ -354,7 +442,7 @@ export default function ShootoutSimulatorScreen() {
     // Animate hit effect
     Animated.timing(effectOpacity, {
       toValue: 0,
-      duration: 500,
+      duration: 400, // Slightly faster
       useNativeDriver: true,
     }).start(() => {
       setHitEffects(prev => prev.filter(e => e.id !== effectId));
@@ -364,18 +452,18 @@ export default function ShootoutSimulatorScreen() {
     Animated.sequence([
       Animated.timing(popup.scale, {
         toValue: 1.3,
-        duration: 100,
+        duration: 80, // Faster hit response
         useNativeDriver: true,
       }),
       Animated.parallel([
         Animated.timing(popup.opacity, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
         Animated.timing(popup.scale, {
           toValue: 0,
-          duration: 200,
+          duration: 150,
           useNativeDriver: true,
         }),
       ]),
@@ -632,7 +720,11 @@ export default function ShootoutSimulatorScreen() {
             width: spot.width,
             height: spot.height,
             opacity: popup.opacity,
-            transform: [{ scale: popup.scale }],
+            transform: [
+              { scale: popup.scale },
+              { translateX: popup.translateX },
+              { translateY: popup.translateY },
+            ],
           },
         ]}
       >
