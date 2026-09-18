@@ -180,7 +180,19 @@ export default function MapScreen() {
 
   useEffect(() => {
     initializeLocation();
+    
+    // Fallback: If loading takes too long, use default location
+    const fallbackTimer = setTimeout(() => {
+      if (loading) {
+        console.log('[Map] Location init timeout, using default');
+        const defaultPos = { latitude: 40.7580, longitude: -73.9855 };
+        setCurrentPosition(defaultPos);
+        setLoading(false);
+      }
+    }, 8000);
+    
     return () => {
+      clearTimeout(fallbackTimer);
       if (locationSubscription.current) locationSubscription.current.remove();
       if (headingSubscription.current) headingSubscription.current.remove();
     };

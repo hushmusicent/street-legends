@@ -837,8 +837,13 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
         ref={webViewRef}
         source={{ html: mapHTML }}
         style={styles.map}
-        onLoad={() => setMapReady(true)}
-        onLoadEnd={() => setMapReady(true)}
+        onLoad={() => {
+          // Delay setting mapReady to ensure WebView is fully initialized
+          setTimeout(() => setMapReady(true), 100);
+        }}
+        onLoadEnd={() => {
+          setTimeout(() => setMapReady(true), 100);
+        }}
         onMessage={handleNativeMessage}
         javaScriptEnabled={true}
         domStorageEnabled={true}
@@ -850,11 +855,24 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
         showsVerticalScrollIndicator={false}
         bounces={false}
         scrollEnabled={false}
+        // SDK 57 specific props for better stability
+        webviewDebuggingEnabled={false}
+        cacheEnabled={true}
+        cacheMode="LOAD_DEFAULT"
+        setSupportMultipleWindows={false}
         renderLoading={() => (
           <View style={styles.loading}>
             <Text style={styles.loadingText}>Loading map...</Text>
           </View>
         )}
+        onError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('WebView error: ', nativeEvent);
+        }}
+        onRenderProcessGone={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('WebView process gone: ', nativeEvent.didCrash);
+        }}
       />
       <TouchableOpacity style={styles.centerButton} onPress={handleCenterPress} activeOpacity={0.7}>
         <Ionicons name="locate" size={22} color="#4285F4" />

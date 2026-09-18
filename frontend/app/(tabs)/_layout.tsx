@@ -15,8 +15,12 @@ export default function TabLayout() {
   // Aggressively hide Android navigation bar
   const hideNavBar = useCallback(() => {
     if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden');
-      NavigationBar.setBehaviorAsync('inset-swipe');
+      try {
+        NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+        NavigationBar.setBehaviorAsync('inset-swipe').catch(() => {});
+      } catch (e) {
+        // Ignore navigation bar errors
+      }
     }
   }, []);
 
@@ -37,7 +41,7 @@ export default function TabLayout() {
       subscription.remove();
       clearInterval(interval);
       if (Platform.OS === 'android') {
-        NavigationBar.setVisibilityAsync('visible');
+        NavigationBar.setVisibilityAsync('visible').catch(() => {});
       }
     };
   }, [hideNavBar]);
