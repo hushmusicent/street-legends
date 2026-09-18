@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, ScrollView } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, ScrollView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { getPlayer, API_URL } from '../services/api';
@@ -12,21 +12,18 @@ const APPSOLUT_LOGO = `${API_URL}/api/sprites/remove-bg?url=${encodeURIComponent
 const HUSH_LOGO = `${API_URL}/api/sprites/remove-bg?url=${encodeURIComponent('https://customer-assets-wrfwihn1.emergentagent.net/wingman/2ee6fe9a-5f4c-4c9c-953d-61a038744d9e/attachments/334c2ba3642c4dbe8d637f25db5a761c_Resized_mainlogo.jpeg')}`;
 
 export default function Index() {
-  const { playerId, setPlayer, setPlayerId, loadStoredPlayerId, setLoading, isLoading } = useGameStore();
+  const { setPlayer, setPlayerId, loadStoredPlayerId, setLoading } = useGameStore();
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
-  const [forceShowContent, setForceShowContent] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const initRef = useRef(false);
 
   useEffect(() => {
+    // Prevent double initialization
+    if (initRef.current) return;
+    initRef.current = true;
+    
     initializeApp();
-    
-    // Fallback: Force show content after 5 seconds if still loading
-    const fallbackTimer = setTimeout(() => {
-      setForceShowContent(true);
-      setLoading(false);
-    }, 5000);
-    
-    return () => clearTimeout(fallbackTimer);
   }, []);
 
   const handleNavigate = async (path: string) => {
@@ -34,47 +31,72 @@ export default function Index() {
   };
 
   const initializeApp = async () => {
+    console.log('[Init] Starting app initialization...');
+    
+    // Set a hard deadline - always show content after 3 seconds
+    const forceCompleteTimer = setTimeout(() => {
+      console.log('[Init] Force completing initialization');
+      setIsInitializing(false);
+      setLoading(false);
+    }, 3000);
+    
     try {
-      setLoading(true);
-      
-      // Add a timeout to prevent indefinite loading
-      const timeoutPromise = new Promise<null>((_, reject) => 
-        setTimeout(() => reject(new Error('Initialization timeout')), 10000)
-      );
-      
-      const storedId = await Promise.race([
-        loadStoredPlayerId(),
-        timeoutPromise
-      ]).catch(() => null);
+      // Try to load stored player ID with a short timeout
+      let storedId: string | null = null;
+      try {
+        const loadPromise = loadStoredPlayerId();
+        const timeoutPromise = new Promise<null>((resolve) => 
+          setTimeout(() => resolve(null), 2000)
+        );
+        storedId = await Promise.race([loadPromise, timeoutPromise]);
+        console.log('[Init] Stored ID:', storedId ? 'found' : 'not found');
+      } catch (e) {
+        console.log('[Init] Error loading stored ID:', e);
+        storedId = null;
+      }
 
       if (storedId) {
+        // Try to fetch player data with a short timeout
         try {
-          const playerData = await Promise.race([
-            getPlayer(storedId),
-            new Promise<null>((_, reject) => 
-              setTimeout(() => reject(new Error('Player fetch timeout')), 8000)
-            )
-          ]);
+          const fetchPromise = getPlayer(storedId);
+          const timeoutPromise = new Promise<null>((resolve) => 
+            setTimeout(() => resolve(null), 2500)
+          );
+          const playerData = await Promise.race([fetchPromise, timeoutPromise]);
+          
           if (playerData) {
+            console.log('[Init] Player data loaded, navigating to tabs');
             setPlayer(playerData);
             setPlayerId(storedId);
+            clearTimeout(forceCompleteTimer);
+            setIsInitializing(false);
+            setLoading(false);
             router.replace('/(tabs)');
             return;
           }
-        } catch (err) {
-          console.log('Failed to fetch player, showing login screen');
-          setPlayerId('');
+        } catch (e) {
+          console.log('[Init] Error fetching player:', e);
         }
+        // Clear stored ID if fetch failed
+        setPlayerId('');
       }
-    } catch (err) {
-      console.log('App initialization error:', err);
-      setError('Failed to initialize app');
-    } finally {
+      
+      // Show login screen
+      console.log('[Init] Showing login screen');
+      clearTimeout(forceCompleteTimer);
+      setIsInitializing(false);
+      setLoading(false);
+    } catch (e) {
+      console.log('[Init] Initialization error:', e);
+      clearTimeout(forceCompleteTimer);
+      setError('Failed to initialize');
+      setIsInitializing(false);
       setLoading(false);
     }
   };
 
-  if (isLoading && !forceShowContent) {
+  // Show loading screen only briefly
+  if (isInitializing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#e74c3c" />

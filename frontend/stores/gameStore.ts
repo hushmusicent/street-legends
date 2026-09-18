@@ -73,7 +73,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Initial state
   player: null,
   playerId: null,
-  isLoading: true,
+  isLoading: false,  // Start as false - let components manage their own loading
   currentPosition: null,
   nearbyMonsters: [],
   nearbyMissions: [],
