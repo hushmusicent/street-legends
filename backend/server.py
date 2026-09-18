@@ -222,6 +222,75 @@ def is_item_broken(inventory_item: dict) -> bool:
         return False  # Legacy string items are never broken
     return inventory_item.get("durability", 100) <= 0
 
+async def get_effective_stats(player: dict) -> dict:
+    """
+    Calculate effective stats based on equipment condition.
+    - Broken weapon: attack = 2
+    - Broken armor: defense = 0
+    - Broken accessory: luck = 0
+    - Broken vehicle: speed = 1
+    Returns a copy of player stats with adjustments applied.
+    """
+    base_stats = dict(player.get("stats", {}))
+    equipment = player.get("equipment", {})
+    equipment_durability = player.get("equipment_durability", {})
+    
+    # Check each slot for broken items
+    weapon_id = equipment.get("weapon")
+    armor_id = equipment.get("armor")
+    accessory_id = equipment.get("accessory")
+    vehicle_id = equipment.get("vehicle")
+    
+    # Check weapon - if broken, attack = 2
+    if weapon_id:
+        dur = equipment_durability.get("weapon", 100)
+        if dur <= 0:
+            base_stats["attack"] = 2
+    
+    # Check armor - if broken, defense = 0
+    if armor_id:
+        dur = equipment_durability.get("armor", 100)
+        if dur <= 0:
+            base_stats["defense"] = 0
+    
+    # Check accessory - if broken, luck = 0
+    if accessory_id:
+        dur = equipment_durability.get("accessory", 100)
+        if dur <= 0:
+            base_stats["luck"] = 0
+    
+    # Check vehicle - if broken, speed = 1
+    if vehicle_id:
+        dur = equipment_durability.get("vehicle", 100)
+        if dur <= 0:
+            base_stats["speed"] = 1
+    
+    return base_stats
+
+def get_speed_advantage(player_speed: int, enemy_speed: int) -> dict:
+    """
+    Calculate speed advantage for double attacks.
+    - Player speed > 5: Player may attack twice before enemy
+    - Enemy speed much higher: Enemy attacks twice more often
+    Returns: {"player_double": bool, "enemy_double": bool}
+    """
+    result = {"player_double": False, "enemy_double": False}
+    
+    # Player attacks twice if speed > 5
+    if player_speed > 5:
+        # Chance increases with speed difference
+        double_chance = min(0.6, 0.2 + (player_speed - 5) * 0.05)  # 20% base, +5% per point above 5
+        if random.random() < double_chance:
+            result["player_double"] = True
+    
+    # Enemy attacks twice if player speed is 1 (broken vehicle)
+    if player_speed <= 1:
+        # Enemy has 50% chance to attack twice when player speed is 1
+        if random.random() < 0.5:
+            result["enemy_double"] = True
+    
+    return result
+
 def migrate_inventory_item(item) -> dict:
     """Migrate old string inventory items to new dict format"""
     if isinstance(item, str):
@@ -2232,29 +2301,51 @@ async def battle_action(battle_id: str, action: BattleAction):
             raise HTTPException(status_code=404, detail="Enemy player not found")
         enemy_stats = enemy["stats"]
     
-    player_stats = player["stats"]
+    # Get effective stats based on equipment condition
+    player_stats = await get_effective_stats(player)
+    
     combat_log = battle["combat_log"]
     player_health = battle["player_health"]
     enemy_health = battle["enemy_health"]
     player_energy = battle["player_energy"]
     
-    # Player action
+    # Check for speed advantage (double attacks)
+    speed_adv = get_speed_advantage(player_stats.get("speed", 5), enemy_stats.get("speed", 5))
+    
+    # Determine how many times player attacks this turn (only for attack action)
+    player_attacks = 2 if speed_adv["player_double"] and action.action == "attack" else 1
+    if player_attacks > 1:
+        combat_log.append("⚡ Your superior speed allows a double attack!")
+    
+    # Player action(s)
     if action.action == "attack":
-        # Miss chance: 10% base, reduced by luck (min 5%)
-        miss_chance = max(0.05, 0.10 - (player_stats.get("luck", 0) * 0.005))
-        if random.random() < miss_chance:
-            combat_log.append("Your attack MISSED!")
-        else:
-            damage = max(1, player_stats["attack"] - enemy_stats.get("defense", 0) // 2)
-            # Crit chance: based on luck (5% base + luck bonus)
-            crit_chance = 0.05 + (player_stats.get("luck", 0) * 0.01)
-            crit = random.random() < crit_chance
-            if crit:
-                damage = int(damage * 2.0)
-                combat_log.append(f"💥 CRITICAL HIT! You deal {damage} damage!")
+        for attack_num in range(player_attacks):
+            if enemy_health <= 0:
+                break  # Enemy already defeated
+                
+            # Miss chance: 10% base, reduced by luck (min 5%). If luck is 0 (broken accessory), 25% miss
+            luck_val = player_stats.get("luck", 0)
+            if luck_val <= 0:
+                miss_chance = 0.25  # 25% miss chance with broken accessory
             else:
-                combat_log.append(f"You attack for {damage} damage!")
-            enemy_health -= damage
+                miss_chance = max(0.05, 0.10 - (luck_val * 0.005))
+            
+            if random.random() < miss_chance:
+                if luck_val <= 0:
+                    combat_log.append("Your attack MISSED! (Broken accessory - bad luck)")
+                else:
+                    combat_log.append("Your attack MISSED!")
+            else:
+                damage = max(1, player_stats["attack"] - enemy_stats.get("defense", 0) // 2)
+                # Crit chance: based on luck (5% base + luck bonus). 0 luck = no crits
+                crit_chance = 0.05 + (luck_val * 0.01) if luck_val > 0 else 0
+                crit = random.random() < crit_chance
+                if crit:
+                    damage = int(damage * 2.0)
+                    combat_log.append(f"💥 CRITICAL HIT! You deal {damage} damage!")
+                else:
+                    combat_log.append(f"You attack for {damage} damage!")
+                enemy_health -= damage
         
     elif action.action == "skill" and action.skill_id:
         skill = SKILLS.get(action.skill_id)
@@ -2422,22 +2513,40 @@ async def battle_action(battle_id: str, action: BattleAction):
         return serialize_doc(await db.battles.find_one({"id": battle_id}))
     
     # Enemy turn
-    # Enemy miss chance: 12% base
-    if random.random() < 0.12:
-        combat_log.append(f"{battle['enemy_name']}'s attack MISSED!")
-    else:
-        enemy_damage = max(1, enemy_stats.get("attack", 10) - player_stats["defense"] // 2)
-        if action.action == "defend":
-            enemy_damage = enemy_damage // 2
-        
-        # Enemy crit chance: 8%
-        if random.random() < 0.08:
-            enemy_damage = int(enemy_damage * 2.0)
-            combat_log.append(f"💥 {battle['enemy_name']} lands a CRITICAL HIT for {enemy_damage} damage!")
+    # Determine how many times enemy attacks this turn (double attack if player speed is 1)
+    enemy_attacks = 2 if speed_adv["enemy_double"] else 1
+    if enemy_attacks > 1:
+        combat_log.append(f"⚡ {battle['enemy_name']} exploits your low speed and attacks twice!")
+    
+    for enemy_attack_num in range(enemy_attacks):
+        if player_health <= 0:
+            break  # Player already defeated
+            
+        # Enemy miss chance: 12% base
+        if random.random() < 0.12:
+            combat_log.append(f"{battle['enemy_name']}'s attack MISSED!")
         else:
-            combat_log.append(f"{battle['enemy_name']} attacks for {enemy_damage} damage!")
-        
-        player_health -= enemy_damage
+            # Defense = 0 if armor is broken
+            defense_val = player_stats.get("defense", 0)
+            enemy_damage = max(1, enemy_stats.get("attack", 10) - defense_val // 2)
+            if action.action == "defend":
+                enemy_damage = enemy_damage // 2
+            
+            # Extra damage message if armor is broken
+            if defense_val <= 0:
+                enemy_damage = max(1, enemy_stats.get("attack", 10))  # Full damage with no defense
+            
+            # Enemy crit chance: 8%
+            if random.random() < 0.08:
+                enemy_damage = int(enemy_damage * 2.0)
+                combat_log.append(f"💥 {battle['enemy_name']} lands a CRITICAL HIT for {enemy_damage} damage!")
+            else:
+                if defense_val <= 0:
+                    combat_log.append(f"{battle['enemy_name']} attacks for {enemy_damage} damage! (No defense - broken armor)")
+                else:
+                    combat_log.append(f"{battle['enemy_name']} attacks for {enemy_damage} damage!")
+            
+            player_health -= enemy_damage
     
     # Check if player defeated
     if player_health <= 0:
@@ -4809,7 +4918,7 @@ async def spawn_banks(latitude: float, longitude: float, player_level: int = 1):
 
 @api_router.post("/banks/{bank_id}/rob")
 async def rob_bank(bank_id: str, player_id: str):
-    """Attempt to rob a bank — 50/50 chance of success or getting caught"""
+    """Attempt to rob a bank — success chance affected by luck"""
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -4837,13 +4946,24 @@ async def rob_bank(bank_id: str, player_id: str):
     player_level = player.get("level", 1)
     player_cash = player.get("cash", 0)
     
+    # Get effective stats (luck affects success chance)
+    effective_stats = await get_effective_stats(player)
+    luck_val = effective_stats.get("luck", 5)
+    
     # Calculate rewards based on player level (reduced by 50% for balance)
     base_reward = int((500 + (player_level * 100)) * 0.5)
     min_reward = int(base_reward * 0.5)
     max_reward = int(base_reward * 1.5)
     
-    # 50/50 chance of success
-    success = random.random() < 0.5
+    # Success chance: 50% base, modified by luck
+    # 0 luck (broken accessory) = 20% success chance
+    # Each luck point adds ~2% success chance up to max 70%
+    if luck_val <= 0:
+        success_chance = 0.20  # Very low chance with broken accessory
+    else:
+        success_chance = min(0.70, 0.50 + (luck_val * 0.02))  # 50% base + 2% per luck
+    
+    success = random.random() < success_chance
     
     if success:
         # Successful heist!
@@ -4875,6 +4995,11 @@ async def rob_bank(bank_id: str, player_id: str):
         new_cash = max(0, player_cash - fine)
         actual_fine = player_cash - new_cash
         
+        # Extra message if luck was low
+        fail_message = f"🚔 BUSTED! The cops caught you at {bank['name']}! You paid ${actual_fine} in fines."
+        if luck_val <= 0:
+            fail_message += " (Bad luck from broken accessory!)"
+        
         await db.players.update_one(
             {"id": player_id},
             {
@@ -4888,7 +5013,7 @@ async def rob_bank(bank_id: str, player_id: str):
         
         return {
             "success": False,
-            "message": f"🚔 BUSTED! The cops caught you at {bank['name']}! You paid ${actual_fine} in fines.",
+            "message": fail_message,
             "bank_name": bank["name"],
             "fine": actual_fine,
             "cash": new_cash,
@@ -4971,8 +5096,25 @@ async def play_slots(player_id: str, bet_amount: int):
     if player_cash < bet_amount:
         raise HTTPException(status_code=400, detail=f"Not enough cash. You have ${player_cash}")
     
+    # Get effective stats (luck affects slot outcomes)
+    effective_stats = await get_effective_stats(player)
+    luck_val = effective_stats.get("luck", 5)
+    
     # Spin 3 reels using weighted random
-    reels = random.choices(SLOT_SYMBOLS, weights=SLOT_WEIGHTS, k=3)
+    # If luck is 0 (broken accessory), heavily weight towards losses
+    if luck_val <= 0:
+        # Bad luck weights - much higher chance of low-value symbols
+        bad_luck_weights = [30, 35, 25, 5, 3, 1, 0.5, 0.4, 0.1]  # Heavily favors losses
+        reels = random.choices(SLOT_SYMBOLS, weights=bad_luck_weights, k=3)
+    else:
+        # Normal weights with slight luck bonus
+        adjusted_weights = list(SLOT_WEIGHTS)
+        # Better luck slightly improves high-value symbol chances
+        luck_bonus = luck_val * 0.02
+        for i in range(len(adjusted_weights)):
+            if i >= 5:  # High value symbols (indices 5+)
+                adjusted_weights[i] *= (1 + luck_bonus)
+        reels = random.choices(SLOT_SYMBOLS, weights=adjusted_weights, k=3)
     
     # Calculate winnings
     winnings = 0
@@ -5374,12 +5516,24 @@ async def spin_american_roulette(player_id: str, request: RouletteBetsRequest):
     if player_cash < total_bet:
         raise HTTPException(status_code=400, detail=f"Not enough cash. You have ${player_cash}, need ${total_bet}")
     
+    # Get effective stats (luck affects outcomes)
+    effective_stats = await get_effective_stats(player)
+    luck_val = effective_stats.get("luck", 5)
+    
     # American roulette wheel - includes 0 and 00
     wheel_numbers = ['0', '00'] + [str(i) for i in range(1, 37)]
     red_numbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
     
-    # Spin the wheel
-    winning_number = random.choice(wheel_numbers)
+    # Spin the wheel - luck affects the outcome
+    if luck_val <= 0:
+        # Bad luck: 40% chance to land on 0 or 00 (house edge)
+        if random.random() < 0.40:
+            winning_number = random.choice(['0', '00'])
+        else:
+            winning_number = random.choice(wheel_numbers)
+    else:
+        # Normal spin
+        winning_number = random.choice(wheel_numbers)
     
     # Determine winning number properties
     if winning_number in ['0', '00']:
