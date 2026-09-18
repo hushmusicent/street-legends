@@ -734,6 +734,19 @@ export const repairItem = async (playerId: string, itemIndex: number): Promise<{
   return response.data;
 };
 
+// Repair an equipped item by slot
+export const repairEquippedItem = async (playerId: string, slot: string): Promise<{
+  message: string;
+  repair_cost: number;
+  item_name: string;
+  slot: string;
+  new_durability: number;
+  max_durability: number;
+}> => {
+  const response = await api.post(`/players/${playerId}/repair-equipped/${slot}`);
+  return response.data;
+};
+
 // Car Chase APIs
 export const spawnCarChases = async (latitude: number, longitude: number, playerLevel: number = 1) => {
   const response = await api.get(`/car-chases/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);

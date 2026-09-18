@@ -36,6 +36,7 @@ import {
   equipSkill,
   unequipSkill,
   repairItem,
+  repairEquippedItem,
   getSocialStats,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
@@ -228,10 +229,10 @@ export default function CharacterScreen() {
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
-    // Increased repair cost multipliers (50-120% of item value)
-    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2 };
-    const mult = rarityMult[item.rarity] || 0.7;
-    const repairCost = Math.max(5, Math.floor(item.value * mult * damagePercent));
+    // Increased repair cost multipliers (75-180% of item value) - 50% higher
+    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8 };
+    const mult = rarityMult[item.rarity] || 1.0;
+    const repairCost = Math.max(8, Math.floor(item.value * mult * damagePercent));
     
     Alert.alert(
       'Repair Item',
@@ -243,6 +244,44 @@ export default function CharacterScreen() {
           onPress: async () => {
             try {
               const result = await repairItem(playerId, item.inventory_index!);
+              await loadAllData();
+              showGameToast({
+                type: 'success',
+                title: 'Item Repaired!',
+                message: result.message,
+                duration: 2500,
+              });
+            } catch (error: any) {
+              Alert.alert('Error', error?.response?.data?.detail || 'Failed to repair item');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Handler for repairing EQUIPPED items (uses slot instead of inventory_index)
+  const handleRepairEquippedItem = async (item: EquipmentItem, slot: string) => {
+    if (!playerId) return;
+    
+    const maxDur = item.max_durability || 100;
+    const curDur = item.durability || maxDur;
+    const damagePercent = (maxDur - curDur) / maxDur;
+    // Increased repair cost multipliers (75-180% of item value) - 50% higher
+    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8 };
+    const mult = rarityMult[item.rarity] || 1.0;
+    const repairCost = Math.max(8, Math.floor(item.value * mult * damagePercent));
+    
+    Alert.alert(
+      'Repair Equipped Item',
+      `Repair "${item.name}" for $${repairCost}?\n\nCurrent: ${curDur}/${maxDur}\nAfter repair: ${maxDur}/${maxDur}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: `Repair $${repairCost}`,
+          onPress: async () => {
+            try {
+              const result = await repairEquippedItem(playerId, slot);
               await loadAllData();
               showGameToast({
                 type: 'success',
@@ -444,7 +483,7 @@ export default function CharacterScreen() {
             equipped={equipped}
             classColor={classColor}
             onUnequip={handleUnequip}
-            onRepair={handleRepairItem}
+            onRepair={handleRepairEquippedItem}
             playerLevel={player.level}
             playerCash={player.cash}
           />
@@ -754,20 +793,20 @@ function EquipmentTab({
   equipped: Record<string, EquipmentItem | null>;
   classColor: string;
   onUnequip: (slot: string) => void;
-  onRepair: (item: EquipmentItem) => void;
+  onRepair: (item: EquipmentItem, slot: string) => void;
   playerLevel: number;
   playerCash: number;
 }) {
   const slots = ['weapon', 'armor', 'accessory', 'vehicle'];
 
-  // Calculate repair cost for equipped items (50-120% of item value)
+  // Calculate repair cost for equipped items (75-180% of item value) - 50% higher
   const getEquippedRepairCost = (item: EquipmentItem) => {
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
-    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2 };
-    const mult = rarityMult[item.rarity] || 0.7;
-    return Math.max(5, Math.floor(item.value * mult * damagePercent));
+    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8 };
+    const mult = rarityMult[item.rarity] || 1.0;
+    return Math.max(8, Math.floor(item.value * mult * damagePercent));
   };
 
   return (
@@ -835,7 +874,7 @@ function EquipmentTab({
                   {needsRepair && (
                     <TouchableOpacity
                       style={[styles.equippedRepairBtn, !canAffordRepair && styles.equippedRepairBtnDisabled]}
-                      onPress={() => canAffordRepair && onRepair(item)}
+                      onPress={() => canAffordRepair && onRepair(item, slot)}
                       disabled={!canAffordRepair}
                     >
                       <Ionicons name="construct" size={12} color={canAffordRepair ? '#fff' : '#555'} />
