@@ -171,11 +171,11 @@ DURABILITY_LOSS = {
 # Repair cost multiplier by rarity (cost = base_value * multiplier * damage_percent)
 # Increased by 50% for game balance
 REPAIR_COST_MULTIPLIER = {
-    "common": 0.45,      # was 0.3, +50%
-    "uncommon": 0.6,     # was 0.4, +50%
-    "rare": 0.75,        # was 0.5, +50%
-    "epic": 0.9,         # was 0.6, +50%
-    "legendary": 1.2,    # was 0.8, +50%
+    "common": 0.5,       # Higher repair costs
+    "uncommon": 0.65,    # Progressively more expensive
+    "rare": 0.8,         # Rare items cost more
+    "epic": 1.0,         # Epic items - full base value per damage
+    "legendary": 1.2,    # Legendary - premium repair cost
 }
 
 def get_max_durability(item_id: str) -> int:
@@ -211,9 +211,10 @@ def calculate_repair_cost(item_id: str, current_durability: int) -> int:
     damage_percent = (max_dur - current_durability) / max_dur
     rarity = item.get("rarity", "common")
     base_value = item.get("value", 10)
-    multiplier = REPAIR_COST_MULTIPLIER.get(rarity, 0.5)
+    multiplier = REPAIR_COST_MULTIPLIER.get(rarity, 0.7)
     
-    return max(1, int(base_value * multiplier * damage_percent))
+    # Minimum repair cost is $5
+    return max(5, int(base_value * multiplier * damage_percent))
 
 def is_item_broken(inventory_item: dict) -> bool:
     """Check if an inventory item is broken (0 durability)"""

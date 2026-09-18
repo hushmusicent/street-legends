@@ -228,9 +228,10 @@ export default function CharacterScreen() {
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
-    const rarityMult: Record<string, number> = { common: 0.3, uncommon: 0.4, rare: 0.5, epic: 0.6, legendary: 0.8 };
-    const mult = rarityMult[item.rarity] || 0.5;
-    const repairCost = Math.max(1, Math.floor(item.value * mult * damagePercent));
+    // Increased repair cost multipliers (50-120% of item value)
+    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2 };
+    const mult = rarityMult[item.rarity] || 0.7;
+    const repairCost = Math.max(5, Math.floor(item.value * mult * damagePercent));
     
     Alert.alert(
       'Repair Item',
@@ -443,7 +444,9 @@ export default function CharacterScreen() {
             equipped={equipped}
             classColor={classColor}
             onUnequip={handleUnequip}
+            onRepair={handleRepairItem}
             playerLevel={player.level}
+            playerCash={player.cash}
           />
         )}
         {activeTab === 'items' && (
@@ -744,14 +747,28 @@ function EquipmentTab({
   equipped,
   classColor,
   onUnequip,
+  onRepair,
   playerLevel,
+  playerCash,
 }: {
   equipped: Record<string, EquipmentItem | null>;
   classColor: string;
   onUnequip: (slot: string) => void;
+  onRepair: (item: EquipmentItem) => void;
   playerLevel: number;
+  playerCash: number;
 }) {
   const slots = ['weapon', 'armor', 'accessory', 'vehicle'];
+
+  // Calculate repair cost for equipped items (50-120% of item value)
+  const getEquippedRepairCost = (item: EquipmentItem) => {
+    const maxDur = item.max_durability || 100;
+    const curDur = item.durability || maxDur;
+    const damagePercent = (maxDur - curDur) / maxDur;
+    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2 };
+    const mult = rarityMult[item.rarity] || 0.7;
+    return Math.max(5, Math.floor(item.value * mult * damagePercent));
+  };
 
   return (
     <View>
@@ -764,6 +781,9 @@ function EquipmentTab({
         const durability = item?.durability ?? 100;
         const maxDurability = item?.max_durability ?? 100;
         const durabilityPercent = item ? (durability / maxDurability) * 100 : 100;
+        const needsRepair = item && durability < maxDurability;
+        const repairCost = item && needsRepair ? getEquippedRepairCost(item) : 0;
+        const canAffordRepair = playerCash >= repairCost;
         
         // Durability bar color
         let durabilityColor = '#4caf50';
@@ -811,6 +831,19 @@ function EquipmentTab({
                       </Text>
                     ))}
                   </View>
+                  {/* Repair button for equipped items */}
+                  {needsRepair && (
+                    <TouchableOpacity
+                      style={[styles.equippedRepairBtn, !canAffordRepair && styles.equippedRepairBtnDisabled]}
+                      onPress={() => canAffordRepair && onRepair(item)}
+                      disabled={!canAffordRepair}
+                    >
+                      <Ionicons name="construct" size={12} color={canAffordRepair ? '#fff' : '#555'} />
+                      <Text style={[styles.equippedRepairBtnText, !canAffordRepair && { color: '#555' }]}>
+                        REPAIR ${repairCost}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               ) : (
                 <Text style={styles.emptySlotText}>Empty - No item equipped</Text>
@@ -892,14 +925,16 @@ function ItemsTab({
     );
   }
 
-  // Calculate repair cost (30-80% of item value based on rarity)
+  // Calculate repair cost (50-120% of item value based on rarity - HIGHER COSTS)
   const getRepairCost = (item: EquipmentItem) => {
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
-    const rarityMult: Record<string, number> = { common: 0.3, uncommon: 0.4, rare: 0.5, epic: 0.6, legendary: 0.8 };
-    const mult = rarityMult[item.rarity] || 0.5;
-    return Math.max(1, Math.floor(item.value * mult * damagePercent));
+    // Increased multipliers: common 0.5, up to legendary 1.2
+    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2 };
+    const mult = rarityMult[item.rarity] || 0.7;
+    // Minimum cost is now $5 instead of $1
+    return Math.max(5, Math.floor(item.value * mult * damagePercent));
   };
 
   return (
@@ -1833,5 +1868,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 2,
     borderRadius: 12,
+  },
+  // Equipped item repair button
+  equippedRepairBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#27ae60',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  equippedRepairBtnDisabled: {
+    backgroundColor: '#333',
+  },
+  equippedRepairBtnText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
