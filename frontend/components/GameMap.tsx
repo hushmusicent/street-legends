@@ -211,35 +211,32 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
     };
 
     // API: Update territories (squares on map)
-    var territoryLayers = [];
-    var territoryIds = new Set();
+    var territoryLayers = {};  // Changed to object for easier lookup: { id: [layers] }
     window.updateTerritories = function(territories) {
       // Create a set of new territory IDs
       var newIds = new Set(territories.map(function(t) { return t.id; }));
       
-      // Remove layers that are no longer in the new data
-      var layersToRemove = [];
-      territoryLayers.forEach(function(layer, index) {
-        if (!newIds.has(layer._territoryId)) {
-          map.removeLayer(layer);
-          layersToRemove.push(index);
+      // Remove territories that are no longer in the data
+      Object.keys(territoryLayers).forEach(function(id) {
+        if (!newIds.has(id)) {
+          // Remove all layers for this territory
+          territoryLayers[id].forEach(function(layer) {
+            map.removeLayer(layer);
+          });
+          delete territoryLayers[id];
         }
       });
       
-      // Remove from array (in reverse to maintain indices)
-      for (var i = layersToRemove.length - 1; i >= 0; i--) {
-        territoryLayers.splice(layersToRemove[i], 1);
-      }
-      
       // Update existing and add new territories
       territories.forEach(function(t) {
-        // Skip if we already have this territory displayed
-        if (territoryIds.has(t.id)) {
-          // Update existing - find and update the rectangle
-          territoryLayers.forEach(function(layer) {
-            if (layer._territoryId === t.id && layer._isRect) {
-              var color = t.color || '#e74c3c';
-              var isOwned = !!t.owner_id;
+        var color = t.color || '#e74c3c';
+        var isOwned = !!t.owner_id;
+        var ownerPic = t.owner_pic || '';
+        
+        // If territory already exists, just update its style
+        if (territoryLayers[t.id]) {
+          territoryLayers[t.id].forEach(function(layer) {
+            if (layer._isRect) {
               layer.setStyle({
                 color: color,
                 fillColor: color,
@@ -248,14 +245,11 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
               });
             }
           });
-          return;
+          return; // Skip adding new layers
         }
         
-        // Add new territory
-        territoryIds.add(t.id);
-        var color = t.color || '#e74c3c';
-        var isOwned = !!t.owner_id;
-        var ownerPic = t.owner_pic || '';
+        // Add new territory - create array to hold all its layers
+        territoryLayers[t.id] = [];
         
         // Square territory zone using bounds or fallback calculation
         var bounds;
@@ -285,7 +279,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
           sendMessage({ type: 'territory', id: t.id });
         });
         rect.addTo(map);
-        territoryLayers.push(rect);
+        territoryLayers[t.id].push(rect);
         
         // Owner profile picture marker (large, prominent)
         if (isOwned && ownerPic) {
@@ -306,7 +300,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             sendMessage({ type: 'territory', id: t.id });
           });
           picMarker.addTo(map);
-          territoryLayers.push(picMarker);
+          territoryLayers[t.id].push(picMarker);
         }
         
         // Territory name label (below the pic or standalone)
@@ -324,14 +318,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
           sendMessage({ type: 'territory', id: t.id });
         });
         label.addTo(map);
-        territoryLayers.push(label);
-      });
-      
-      // Clean up territoryIds that are no longer in the data
-      territoryIds.forEach(function(id) {
-        if (!newIds.has(id)) {
-          territoryIds.delete(id);
-        }
+        territoryLayers[t.id].push(label);
       });
     };
 
