@@ -27,7 +27,6 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
-        "READ_MEDIA_IMAGES",
         "android.permission.ACTIVITY_RECOGNITION"
       ],
       "package": "com.emergent.streetempiretest.xfvyzd"
@@ -54,6 +53,13 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a profile picture from your gallery",
+          "cameraPermission": "Take photos for your character profile"
         }
       ],
       "expo-font",

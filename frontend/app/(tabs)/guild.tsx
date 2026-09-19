@@ -360,16 +360,9 @@ export default function GuildScreen() {
     }
     
     try {
-      // Request permission
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your photo library to upload a guild icon.');
-        return;
-      }
-      
-      // Launch image picker
+      // Launch image picker - uses system photo picker on Android 13+ (no permission needed)
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
