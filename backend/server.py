@@ -8298,6 +8298,71 @@ async def remove_background_from_sprite(url: str):
         raise HTTPException(status_code=500, detail=f"Failed to process image: {str(e)}")
 
 
+# ========== PRIVACY POLICY API ==========
+@api_router.get("/privacy")
+async def get_privacy_policy():
+    """Return the privacy policy for Street Legends - publicly accessible"""
+    return {
+        "app_name": "Street Legends",
+        "last_updated": "2026-09-20",
+        "contact_email": "hushmusicent419@gmail.com",
+        "policy": {
+            "introduction": "Street Legends ('we', 'our', or 'us') is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our mobile game.",
+            "data_collected": {
+                "account_info": [
+                    "Username and display name",
+                    "Email address (if provided)",
+                    "Profile picture (optional)",
+                    "Password (encrypted, never stored in plain text)"
+                ],
+                "gameplay_data": [
+                    "Character stats and progress",
+                    "In-game currency and inventory",
+                    "Guild membership and social interactions",
+                    "Battle history and achievements",
+                    "Mission completion data"
+                ],
+                "location_data": "GPS location is used for gameplay features like finding missions, monsters, and territories. Location is processed in real-time and not permanently stored.",
+                "device_info": "Basic device information for app compatibility and crash reporting"
+            },
+            "how_data_is_used": [
+                "Provide and maintain core gameplay features",
+                "Track your progress, stats, and achievements",
+                "Enable multiplayer features like guilds and PvP",
+                "Improve app performance and user experience",
+                "Respond to support requests"
+            ],
+            "data_storage": {
+                "where_stored": "Data is stored securely on MongoDB Atlas cloud servers with encryption at rest",
+                "security_measures": [
+                    "Encrypted data transmission (HTTPS/TLS)",
+                    "Secure cloud infrastructure with 24/7 monitoring",
+                    "Regular security updates and assessments",
+                    "Access controls limiting data access"
+                ]
+            },
+            "third_party_services": [
+                {"name": "MongoDB Atlas", "purpose": "Secure database hosting"},
+                {"name": "Emergent Object Storage", "purpose": "Profile picture and asset storage"},
+                {"name": "OpenStreetMap/Leaflet", "purpose": "Map data for location-based gameplay"},
+                {"name": "Expo/EAS", "purpose": "App distribution and updates"}
+            ],
+            "data_sharing": "We do NOT sell your personal data to third parties. Data is only shared with service providers under strict confidentiality agreements, or if required by law.",
+            "data_deletion": {
+                "how_to_request": [
+                    "Use the Delete Account option in the app's Settings/Options menu",
+                    "Email us at hushmusicent419@gmail.com with your username"
+                ],
+                "process": "Upon receiving a deletion request, we will verify your identity, delete your account and personal data within 30 days, and send confirmation once complete."
+            },
+            "contact": {
+                "email": "hushmusicent419@gmail.com",
+                "response_time": "We aim to respond to all inquiries within 5 business days"
+            }
+        }
+    }
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

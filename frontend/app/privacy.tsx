@@ -239,7 +239,7 @@ export default function PrivacyPolicyScreen() {
             <Ionicons name="mail" size={24} color="#3b82f6" />
             <View style={styles.contactInfo}>
               <Text style={styles.contactLabel}>Email for Privacy Inquiries:</Text>
-              <Text style={styles.contactValue}>privacy@streetlegends.app</Text>
+              <Text style={styles.contactValue}>hushmusicent419@gmail.com</Text>
             </View>
           </View>
           
@@ -252,7 +252,7 @@ export default function PrivacyPolicyScreen() {
             Use the Delete Account option in the app Settings/Options menu
           </BulletPoint>
           <BulletPoint>
-            Or email us at privacy@streetlegends.app with your username
+            Or email us at hushmusicent419@gmail.com with your username
           </BulletPoint>
           <Paragraph>
             Upon receiving a deletion request, we will:
