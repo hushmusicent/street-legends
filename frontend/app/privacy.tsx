@@ -82,7 +82,7 @@ export default function PrivacyPolicyScreen() {
 
           <Text style={styles.subheading}>1. Location Data</Text>
           <Paragraph>
-            Street Legends uses your device's location to power core gameplay features including:
+            Street Legends uses your device location to power core gameplay features including:
           </Paragraph>
           <BulletPoint>Discovering and capturing territories on the map</BulletPoint>
           <BulletPoint>Finding nearby missions, enemies, and points of interest</BulletPoint>
@@ -134,12 +134,34 @@ export default function PrivacyPolicyScreen() {
             Your data is never sold, rented, or traded to advertisers, data brokers, or any other 
             third parties for their marketing purposes.
           </Paragraph>
+          
+          <Text style={styles.subheading}>Third-Party Services We Use</Text>
+          <Paragraph>
+            We use the following third-party services to operate Street Legends:
+          </Paragraph>
+          <BulletPoint>
+            <Text style={styles.boldText}>Cloud Hosting (MongoDB Atlas):</Text> Stores your game data securely on encrypted servers
+          </BulletPoint>
+          <BulletPoint>
+            <Text style={styles.boldText}>Image Storage (Emergent Object Storage):</Text> Stores profile pictures and game assets
+          </BulletPoint>
+          <BulletPoint>
+            <Text style={styles.boldText}>Map Services (OpenStreetMap/Leaflet):</Text> Provides map data for location-based gameplay
+          </BulletPoint>
+          <BulletPoint>
+            <Text style={styles.boldText}>Expo/EAS:</Text> App distribution and update services
+          </BulletPoint>
+          
+          <Paragraph>
+            These service providers are bound by strict confidentiality agreements and only process 
+            data as necessary to provide their services.
+          </Paragraph>
+          
           <Paragraph>
             We may share limited information only in the following circumstances:
           </Paragraph>
           <BulletPoint>
-            With service providers who help us operate the app (e.g., cloud hosting), under strict 
-            confidentiality agreements
+            With service providers who help us operate the app, under strict confidentiality agreements
           </BulletPoint>
           <BulletPoint>
             If required by law or to protect the rights and safety of our users
@@ -150,13 +172,23 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         {/* Data Security */}
-        <Section title="Data Security">
+        <Section title="Data Storage & Security">
           <Paragraph>
-            We implement industry-standard security measures to protect your data, including:
+            We implement industry-standard security measures to protect your data:
           </Paragraph>
+          
+          <Text style={styles.subheading}>How We Store Your Data</Text>
+          <BulletPoint>Game data is stored on secure MongoDB Atlas cloud servers</BulletPoint>
+          <BulletPoint>Profile images are stored on encrypted object storage</BulletPoint>
+          <BulletPoint>Location data is processed in real-time and not permanently stored</BulletPoint>
+          <BulletPoint>All data is stored in secure data centers with 24/7 monitoring</BulletPoint>
+          
+          <Text style={styles.subheading}>Security Measures</Text>
           <BulletPoint>Encrypted data transmission (HTTPS/TLS)</BulletPoint>
-          <BulletPoint>Secure cloud storage infrastructure</BulletPoint>
-          <BulletPoint>Regular security assessments</BulletPoint>
+          <BulletPoint>Secure cloud storage infrastructure with encryption at rest</BulletPoint>
+          <BulletPoint>Regular security assessments and updates</BulletPoint>
+          <BulletPoint>Access controls limiting who can view your data</BulletPoint>
+          
           <Paragraph>
             While we strive to protect your information, no method of electronic transmission or 
             storage is 100% secure. We cannot guarantee absolute security.
@@ -197,15 +229,43 @@ export default function PrivacyPolicyScreen() {
         <Section title="Changes to This Policy">
           <Paragraph>
             We may update this Privacy Policy from time to time. We will notify you of any changes 
-            by posting the new Privacy Policy on this page and updating the "Last Updated" date.
+            by posting the new Privacy Policy on this page and updating the Last Updated date.
           </Paragraph>
         </Section>
 
-        {/* Contact */}
-        <Section title="Contact Us">
+        {/* Contact & Data Deletion */}
+        <Section title="Contact Us & Data Deletion">
+          <View style={styles.contactBox}>
+            <Ionicons name="mail" size={24} color="#3b82f6" />
+            <View style={styles.contactInfo}>
+              <Text style={styles.contactLabel}>Email for Privacy Inquiries:</Text>
+              <Text style={styles.contactValue}>privacy@streetlegends.app</Text>
+            </View>
+          </View>
+          
+          <Text style={styles.subheading}>Request Data Deletion</Text>
           <Paragraph>
-            If you have any questions about this Privacy Policy or our data practices, please 
-            contact us through the app's support feature or reach out to our development team.
+            You have the right to request deletion of your personal data. To delete your account 
+            and all associated data:
+          </Paragraph>
+          <BulletPoint>
+            Use the Delete Account option in the app Settings/Options menu
+          </BulletPoint>
+          <BulletPoint>
+            Or email us at privacy@streetlegends.app with your username
+          </BulletPoint>
+          <Paragraph>
+            Upon receiving a deletion request, we will:
+          </Paragraph>
+          <BulletPoint>Verify your identity to protect your account</BulletPoint>
+          <BulletPoint>Delete your account and personal data within 30 days</BulletPoint>
+          <BulletPoint>Send confirmation once deletion is complete</BulletPoint>
+          
+          <Text style={styles.subheading}>Other Inquiries</Text>
+          <Paragraph>
+            If you have any questions about this Privacy Policy, our data practices, or wish to 
+            exercise any of your rights, please contact us at the email above. We aim to respond 
+            to all inquiries within 5 business days.
           </Paragraph>
         </Section>
 
@@ -332,6 +392,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#4ade80',
     lineHeight: 22,
+  },
+  boldText: {
+    fontWeight: '700',
+    color: '#f5f5f5',
+  },
+  contactBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 4,
+  },
+  contactValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
   },
   footer: {
     marginTop: 24,
