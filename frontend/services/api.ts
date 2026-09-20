@@ -545,19 +545,44 @@ export const registerAccount = async (
   username: string,
   password: string,
   name: string,
-  characterClass: string
+  characterClass: string,
+  email?: string
 ): Promise<any> => {
   const response = await api.post('/auth/register', {
     username,
     password,
     name,
     character_class: characterClass,
+    email,
   });
   return response.data;
 };
 
 export const loginAccount = async (username: string, password: string): Promise<any> => {
   const response = await api.post('/auth/login', { username, password });
+  return response.data;
+};
+
+// Password Reset APIs
+export const forgotPassword = async (emailOrUsername: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.post('/auth/forgot-password', { email_or_username: emailOrUsername });
+  return response.data;
+};
+
+export const resetPassword = async (token: string, newPassword: string): Promise<{ message: string; success: boolean }> => {
+  const response = await api.post('/auth/reset-password', { token, new_password: newPassword });
+  return response.data;
+};
+
+export const changePassword = async (
+  playerId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ message: string; success: boolean }> => {
+  const response = await api.post(`/auth/change-password/${playerId}`, {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
   return response.data;
 };
 

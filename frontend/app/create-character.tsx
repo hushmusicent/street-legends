@@ -36,6 +36,7 @@ export default function CreateCharacter() {
   const { setPlayer, savePlayerId } = useGameStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [classes, setClasses] = useState<Record<string, CharacterClass>>({});
@@ -75,7 +76,7 @@ export default function CreateCharacter() {
     try {
       setCreating(true);
       setError(null);
-      const player = await registerAccount(username.trim(), password, name.trim(), selectedClass);
+      const player = await registerAccount(username.trim(), password, name.trim(), selectedClass, email.trim() || undefined);
       await savePlayerId(player.id);
       setPlayer(player);
       router.replace('/(tabs)');
@@ -134,6 +135,21 @@ export default function CreateCharacter() {
               secureTextEntry
               autoCapitalize="none"
             />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>EMAIL (OPTIONAL)</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={(t) => { setEmail(t); setError(null); }}
+              placeholder="For password recovery"
+              placeholderTextColor="#444"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+            <Text style={styles.inputHint}>Required for password reset</Text>
           </View>
 
           <Text style={[styles.sectionLabel, { marginTop: 24 }]}>CHARACTER</Text>
@@ -362,6 +378,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 2,
     marginBottom: 6,
+  },
+  inputHint: {
+    color: '#555',
+    fontSize: 10,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   loginLink: {
     flexDirection: 'row',

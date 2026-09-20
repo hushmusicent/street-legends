@@ -12,6 +12,8 @@ import {
   Platform,
   Modal,
   Pressable,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +40,7 @@ import {
   repairItem,
   repairEquippedItem,
   getSocialStats,
+  changePassword,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -111,6 +114,16 @@ export default function CharacterScreen() {
   const [uploadingPic, setUploadingPic] = useState(false);
   const [showPicMenu, setShowPicMenu] = useState(false);
   const [ownedTerritories, setOwnedTerritories] = useState<any[]>([]);
+  
+  // Change Password state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
 
   useEffect(() => {
     if (playerId) loadAllData();
@@ -313,6 +326,52 @@ export default function CharacterScreen() {
     ]);
   };
 
+  const openPasswordModal = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError(null);
+    setShowPasswordModal(true);
+  };
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setPasswordError(null);
+  };
+
+  const handleChangePassword = async () => {
+    if (!playerId) return;
+    
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password');
+      return;
+    }
+    if (!newPassword) {
+      setPasswordError('Please enter a new password');
+      return;
+    }
+    if (newPassword.length < 4) {
+      setPasswordError('New password must be at least 4 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      setPasswordError(null);
+      await changePassword(playerId, currentPassword, newPassword);
+      closePasswordModal();
+      Alert.alert('Success', 'Your password has been changed successfully.');
+    } catch (err: any) {
+      setPasswordError(err?.response?.data?.detail || 'Failed to change password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const pickImage = async () => {
     if (!playerId) return;
     setShowPicMenu(true);
@@ -443,9 +502,14 @@ export default function CharacterScreen() {
             <Text style={styles.xpTextSmall}>{player.xp}/{player.xp_to_next}</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Ionicons name="log-out-outline" size={22} color="#666" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={openPasswordModal} style={styles.settingsBtn}>
+            <Ionicons name="key-outline" size={20} color="#666" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <Ionicons name="log-out-outline" size={22} color="#666" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tab Bar */}
@@ -553,6 +617,119 @@ export default function CharacterScreen() {
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        </Pressable>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal
+        visible={showPasswordModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closePasswordModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closePasswordModal}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.pwdModalKeyboardView}
+          >
+            <Pressable style={styles.pwdModalSheet} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.modalHandle} />
+              
+              <TouchableOpacity style={styles.pwdModalCloseBtn} onPress={closePasswordModal}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+
+              <View style={styles.pwdModalHeader}>
+                <View style={styles.pwdModalIconWrap}>
+                  <Ionicons name="key" size={32} color="#e74c3c" />
+                </View>
+                <Text style={styles.pwdModalTitle}>Change Password</Text>
+                <Text style={styles.pwdModalSubtitle}>
+                  Enter your current password and choose a new one
+                </Text>
+              </View>
+
+              <View style={styles.pwdModalInputGroup}>
+                <Text style={styles.pwdModalInputLabel}>CURRENT PASSWORD</Text>
+                <View style={styles.pwdModalInputWrap}>
+                  <Ionicons name="lock-closed" size={18} color="#666" style={styles.pwdModalInputIcon} />
+                  <TextInput
+                    style={styles.pwdModalInput}
+                    value={currentPassword}
+                    onChangeText={(t) => { setCurrentPassword(t); setPasswordError(null); }}
+                    placeholder="Enter current password"
+                    placeholderTextColor="#444"
+                    secureTextEntry={!showCurrentPwd}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity onPress={() => setShowCurrentPwd(!showCurrentPwd)} style={styles.pwdEyeBtn}>
+                    <Ionicons name={showCurrentPwd ? 'eye-off' : 'eye'} size={20} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.pwdModalInputGroup}>
+                <Text style={styles.pwdModalInputLabel}>NEW PASSWORD</Text>
+                <View style={styles.pwdModalInputWrap}>
+                  <Ionicons name="lock-open" size={18} color="#666" style={styles.pwdModalInputIcon} />
+                  <TextInput
+                    style={styles.pwdModalInput}
+                    value={newPassword}
+                    onChangeText={(t) => { setNewPassword(t); setPasswordError(null); }}
+                    placeholder="Enter new password"
+                    placeholderTextColor="#444"
+                    secureTextEntry={!showNewPwd}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity onPress={() => setShowNewPwd(!showNewPwd)} style={styles.pwdEyeBtn}>
+                    <Ionicons name={showNewPwd ? 'eye-off' : 'eye'} size={20} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.pwdModalInputGroup}>
+                <Text style={styles.pwdModalInputLabel}>CONFIRM NEW PASSWORD</Text>
+                <View style={styles.pwdModalInputWrap}>
+                  <Ionicons name="lock-open" size={18} color="#666" style={styles.pwdModalInputIcon} />
+                  <TextInput
+                    style={styles.pwdModalInput}
+                    value={confirmPassword}
+                    onChangeText={(t) => { setConfirmPassword(t); setPasswordError(null); }}
+                    placeholder="Confirm new password"
+                    placeholderTextColor="#444"
+                    secureTextEntry={!showNewPwd}
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              {passwordError && (
+                <View style={styles.pwdErrorBox}>
+                  <Ionicons name="alert-circle" size={16} color="#e74c3c" />
+                  <Text style={styles.pwdErrorText}>{passwordError}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.pwdPrimaryBtn, passwordLoading && styles.pwdBtnDisabled]}
+                onPress={handleChangePassword}
+                disabled={passwordLoading}
+              >
+                {passwordLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done" size={18} color="#fff" />
+                    <Text style={styles.pwdPrimaryBtnText}>Update Password</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.pwdCancelBtn} onPress={closePasswordModal}>
+                <Text style={styles.pwdCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -1372,6 +1549,8 @@ const styles = StyleSheet.create({
   xpBarSmall: { flex: 1, height: 6, backgroundColor: '#222', borderRadius: 3, marginLeft: 8, overflow: 'hidden' },
   xpFillSmall: { height: '100%', borderRadius: 3 },
   xpTextSmall: { color: '#555', fontSize: 10, marginLeft: 6 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  settingsBtn: { padding: 8 },
   logoutBtn: { padding: 8 },
 
   // Tab Bar
@@ -1927,5 +2106,128 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '700',
+  },
+  // Password Modal Styles
+  pwdModalKeyboardView: {
+    width: '100%',
+  },
+  pwdModalSheet: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 12,
+    maxHeight: '90%',
+  },
+  pwdModalCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  pwdModalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  pwdModalIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(231,76,60,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  pwdModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  pwdModalSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 20,
+  },
+  pwdModalInputGroup: {
+    marginBottom: 16,
+  },
+  pwdModalInputLabel: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  pwdModalInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+    paddingHorizontal: 12,
+  },
+  pwdModalInputIcon: {
+    marginRight: 8,
+  },
+  pwdModalInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    paddingVertical: 14,
+  },
+  pwdEyeBtn: {
+    padding: 8,
+  },
+  pwdErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(231,76,60,0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  pwdErrorText: {
+    color: '#e74c3c',
+    fontSize: 13,
+    flex: 1,
+  },
+  pwdPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e74c3c',
+    borderRadius: 12,
+    paddingVertical: 16,
+    gap: 8,
+    marginTop: 8,
+  },
+  pwdPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pwdBtnDisabled: {
+    opacity: 0.7,
+  },
+  pwdCancelBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  pwdCancelBtnText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

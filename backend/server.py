@@ -15,6 +15,13 @@ import random
 import math
 from passlib.context import CryptContext
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import httpx
+import re
+import ipaddress
+from html import escape
+from html.parser import HTMLParser
+from urllib.parse import urlparse
+import secrets
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -29,6 +36,100 @@ STATIC_DIR.mkdir(exist_ok=True)
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+# Email Configuration (Emergent Managed Resend)
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"
+EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "Street Legends")
+EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "hushmusicent419@gmail.com")
+
+# Email safety gate helpers (G2/G3 compliance)
+_SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
+_CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
+             "send us your password", "enter your password below", "confirm your card number")
+_HOSTISH = re.compile(r"\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})", re.I)
+
+def _host_ok(host: str) -> bool:
+    if not host or "xn--" in host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    return not any(host == s or host.endswith("." + s) for s in _SHORTENERS)
+
+def _same_site(shown: str, real: str) -> bool:
+    return shown == real or real.endswith("." + shown) or shown.endswith("." + real)
+
+class _EmailScan(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags, self.urls, self.anchors = set(), [], []
+        self._href, self._text = None, []
+    def handle_starttag(self, tag, attrs):
+        self.tags.add(tag.lower())
+        self.urls += [v for k, v in attrs if k.lower() in ("href", "src") and v]
+        if tag.lower() == "a":
+            self._href = dict((k.lower(), v) for k, v in attrs).get("href")
+            self._text = []
+    def handle_data(self, data):
+        if self._href is not None:
+            self._text.append(data)
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self._href is not None:
+            self.anchors.append((self._href, "".join(self._text)))
+            self._href, self._text = None, []
+
+def _assert_safe_email(subject: str, html: str) -> None:
+    scan = _EmailScan(); scan.feed(html)
+    if scan.tags & {"form", "input", "textarea", "select"}:
+        raise ValueError("No forms or input fields in email (G2)")
+    body = f"{subject}\n{html}".lower()
+    for p in _CRED_ASK:
+        if p in body:
+            raise ValueError(f"Email asks for credentials: {p!r} (G2)")
+    for url in scan.urls:
+        low = url.strip().lower()
+        if low.startswith(("mailto:", "tel:", "cid:", "#")):
+            continue
+        if not low.startswith("https://"):
+            raise ValueError(f"Links must be absolute https: {url!r} (G3)")
+        host = urlparse(low).hostname or ""
+        if not _host_ok(host) or urlparse(low).username is not None:
+            raise ValueError(f"Invalid URL: {url!r} (G3)")
+    for href, text in scan.anchors:
+        real = urlparse(href.strip().lower()).hostname or ""
+        if not real:
+            continue
+        for m in _HOSTISH.finditer(text):
+            if not _same_site(m.group(1).lower(), real):
+                raise ValueError(f"Misleading anchor text (G3)")
+
+async def send_email(*, to: str, subject: str, html: str, reply_to: str | None = None) -> str | None:
+    """Send email via Emergent managed email service"""
+    if not EMAIL_KEY:
+        logger.warning("Email not configured - EMERGENT_EMAIL_KEY missing")
+        return None
+    _assert_safe_email(subject, html)
+    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    if reply_to or EMAIL_REPLY_TO:
+        payload["contact_email"] = reply_to or EMAIL_REPLY_TO
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{EMAIL_BASE_URL}/api/v1/email/send",
+                headers={"X-Email-Key": EMAIL_KEY},
+                json=payload,
+            )
+        resp.raise_for_status()
+        return resp.json().get("id")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Email send failed: {e.response.status_code} {e.response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Email send error: {str(e)}")
+        return None
 
 # Helper function to serialize MongoDB documents
 def serialize_doc(doc):
@@ -1172,6 +1273,7 @@ class AuthRegister(BaseModel):
     password: str
     name: str
     character_class: str
+    email: Optional[str] = None  # Optional but needed for password reset
 
 class AuthLogin(BaseModel):
     username: str
@@ -1383,6 +1485,8 @@ async def register(data: AuthRegister):
     player_dict = player.dict()
     player_dict["username"] = data.username.lower()
     player_dict["password_hash"] = pwd_context.hash(data.password)
+    if data.email:
+        player_dict["email"] = data.email.lower().strip()
     
     await db.players.insert_one(player_dict)
     return player
@@ -1404,6 +1508,190 @@ async def login(data: AuthLogin):
     )
     
     return Player(**player)
+
+# ============== PASSWORD RESET ==============
+class ForgotPasswordRequest(BaseModel):
+    email_or_username: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """
+    Request a password reset link. Sends email if account exists.
+    For security, always returns success to avoid revealing account existence.
+    """
+    identifier = data.email_or_username.strip().lower()
+    
+    # Find player by email or username
+    player = await db.players.find_one({
+        "$or": [
+            {"email": identifier},
+            {"username": identifier}
+        ]
+    })
+    
+    if player and player.get("email"):
+        # Generate secure reset token
+        reset_token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+        
+        # Store token in database
+        await db.password_reset_tokens.delete_many({"player_id": player["id"]})  # Remove old tokens
+        await db.password_reset_tokens.insert_one({
+            "token": reset_token,
+            "player_id": player["id"],
+            "created_at": datetime.utcnow(),
+            "expires_at": expires_at,
+            "used": False
+        })
+        
+        # Create reset URL (web-based for universal access)
+        reset_url = f"https://streetlegends.app/reset-password?token={reset_token}"
+        
+        # Email HTML content
+        email_html = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #1a1a1a; color: #ffffff;">
+            <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #e74c3c;">
+                <h1 style="color: #e74c3c; margin: 0;">STREET LEGENDS</h1>
+                <p style="color: #888; margin: 5px 0;">Password Reset Request</p>
+            </div>
+            <div style="padding: 30px 0;">
+                <p style="color: #ccc; font-size: 16px;">Hey <strong style="color: #fff;">{player.get('name', 'Legend')}</strong>,</p>
+                <p style="color: #ccc; font-size: 14px; line-height: 1.6;">
+                    We received a request to reset your password. Use the code below to reset it in the app:
+                </p>
+                <div style="background: #222; border: 2px solid #e74c3c; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+                    <p style="color: #888; font-size: 12px; margin: 0 0 10px;">YOUR RESET CODE</p>
+                    <p style="color: #e74c3c; font-size: 24px; font-weight: bold; letter-spacing: 2px; margin: 0;">{reset_token[:8].upper()}</p>
+                </div>
+                <p style="color: #888; font-size: 12px; text-align: center;">
+                    This code expires in <strong style="color: #f39c12;">1 hour</strong>.
+                </p>
+                <p style="color: #666; font-size: 12px; margin-top: 30px;">
+                    If you didn't request this, you can safely ignore this email.
+                </p>
+            </div>
+            <div style="border-top: 1px solid #333; padding-top: 20px; text-align: center;">
+                <p style="color: #555; font-size: 11px;">
+                    Street Legends - Rule the Streets
+                </p>
+            </div>
+        </div>
+        """
+        
+        # Send email
+        email_id = await send_email(
+            to=player["email"],
+            subject="Street Legends - Password Reset Code",
+            html=email_html
+        )
+        
+        if email_id:
+            logger.info(f"Password reset email sent to {player['email']} for player {player['id']}")
+        else:
+            logger.warning(f"Failed to send password reset email to {player['email']}")
+    
+    # Always return success for security
+    return {
+        "message": "If an account exists with this email/username, a reset code has been sent.",
+        "success": True
+    }
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """
+    Reset password using a valid token.
+    Token can be the full token or the first 8 characters (uppercase code shown to user).
+    """
+    if len(data.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    
+    # Find token - support both full token and short code
+    token_query = data.token.strip()
+    
+    # Try to find by full token first, then by prefix match (case-insensitive for short code)
+    token_record = await db.password_reset_tokens.find_one({
+        "token": token_query,
+        "used": False
+    })
+    
+    if not token_record:
+        # Try prefix match for short code
+        all_tokens = await db.password_reset_tokens.find({"used": False}).to_list(100)
+        for t in all_tokens:
+            if t["token"][:8].upper() == token_query.upper():
+                token_record = t
+                break
+    
+    if not token_record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+    
+    # Check expiration
+    if token_record["expires_at"] < datetime.utcnow():
+        await db.password_reset_tokens.delete_one({"_id": token_record["_id"]})
+        raise HTTPException(status_code=400, detail="Reset code has expired. Please request a new one.")
+    
+    # Update password
+    player_id = token_record["player_id"]
+    new_hash = pwd_context.hash(data.new_password)
+    
+    result = await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"password_hash": new_hash}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Mark token as used
+    await db.password_reset_tokens.update_one(
+        {"_id": token_record["_id"]},
+        {"$set": {"used": True, "used_at": datetime.utcnow()}}
+    )
+    
+    logger.info(f"Password reset successful for player {player_id}")
+    
+    return {
+        "message": "Password has been reset successfully. You can now login with your new password.",
+        "success": True
+    }
+
+@api_router.post("/auth/change-password/{player_id}")
+async def change_password(player_id: str, data: ChangePasswordRequest):
+    """
+    Change password for a logged-in user. Requires current password verification.
+    """
+    if len(data.new_password) < 4:
+        raise HTTPException(status_code=400, detail="New password must be at least 4 characters")
+    
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    # Verify current password
+    if not pwd_context.verify(data.current_password, player.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    
+    # Update password
+    new_hash = pwd_context.hash(data.new_password)
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"password_hash": new_hash}}
+    )
+    
+    logger.info(f"Password changed for player {player_id}")
+    
+    return {
+        "message": "Password changed successfully",
+        "success": True
+    }
 
 # ============== ACCOUNT DELETION ==============
 class DeleteAccountRequest(BaseModel):
