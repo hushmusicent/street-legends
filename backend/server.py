@@ -901,6 +901,151 @@ LEVEL_WEAPONS = {
 
 ALL_ITEMS.update(LEVEL_WEAPONS)
 
+# ============== LEVEL-BASED ARMOR (20 items across 10 tiers) ==============
+LEVEL_ARMOR = {
+    # --- Tier 1: Level 1-10 (Street Gear) ---
+    "street_hoodie": {
+        "id": "street_hoodie", "name": "Street Hoodie", 
+        "description": "Basic protection that lets you blend into the crowd.",
+        "equipment_type": "armor", "rarity": "common",
+        "stats_bonus": {"defense": 3, "speed": 2}, "level_requirement": 5, "value": 50
+    },
+    "denim_jacket": {
+        "id": "denim_jacket", "name": "Denim Jacket",
+        "description": "Tough denim with hidden pockets. Lucky find.",
+        "equipment_type": "armor", "rarity": "uncommon",
+        "stats_bonus": {"defense": 4, "luck": 1}, "level_requirement": 8, "value": 100
+    },
+    
+    # --- Tier 2: Level 11-20 (Gang Wear) ---
+    "biker_leather": {
+        "id": "biker_leather", "name": "Biker Leather",
+        "description": "Heavy leather jacket with metal studs. Intimidating.",
+        "equipment_type": "armor", "rarity": "uncommon",
+        "stats_bonus": {"defense": 6, "attack": 2}, "level_requirement": 12, "value": 250
+    },
+    "reinforced_jacket": {
+        "id": "reinforced_jacket", "name": "Reinforced Jacket",
+        "description": "Jacket with hidden Kevlar panels. Heavier but safer.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 8, "speed": -1}, "level_requirement": 18, "value": 400
+    },
+    
+    # --- Tier 3: Level 21-30 (Professional Grade) ---
+    "stab_vest": {
+        "id": "stab_vest", "name": "Stab Vest",
+        "description": "Anti-stab protection favored by security personnel.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 10, "attack": 3}, "level_requirement": 22, "value": 700
+    },
+    "combat_fatigues": {
+        "id": "combat_fatigues", "name": "Combat Fatigues",
+        "description": "Military surplus gear. Light and durable.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 12, "speed": 2}, "level_requirement": 28, "value": 900
+    },
+    
+    # --- Tier 4: Level 31-40 (Tactical) ---
+    "swat_armor": {
+        "id": "swat_armor", "name": "SWAT Armor",
+        "description": "Police tactical armor. 'Borrowed' from an evidence locker.",
+        "equipment_type": "armor", "rarity": "rare",
+        "stats_bonus": {"defense": 15, "attack": 4}, "level_requirement": 32, "value": 1500
+    },
+    "ballistic_vest": {
+        "id": "ballistic_vest", "name": "Ballistic Vest",
+        "description": "Heavy-duty protection against firearms. Slows you down.",
+        "equipment_type": "armor", "rarity": "epic",
+        "stats_bonus": {"defense": 18, "speed": -2}, "level_requirement": 38, "value": 2000
+    },
+    
+    # --- Tier 5: Level 41-50 (Military Spec) ---
+    "plate_carrier": {
+        "id": "plate_carrier", "name": "Military Plate Carrier",
+        "description": "Full military-grade ceramic plate system.",
+        "equipment_type": "armor", "rarity": "epic",
+        "stats_bonus": {"defense": 22, "attack": 5}, "level_requirement": 42, "value": 3500
+    },
+    "juggernaut_suit": {
+        "id": "juggernaut_suit", "name": "Juggernaut Suit",
+        "description": "Bomb disposal armor repurposed for combat. Nearly unstoppable.",
+        "equipment_type": "armor", "rarity": "epic",
+        "stats_bonus": {"defense": 28, "speed": -4}, "level_requirement": 48, "value": 5000
+    },
+    
+    # --- Tier 6: Level 51-60 (Elite) ---
+    "ceramic_plate_armor": {
+        "id": "ceramic_plate_armor", "name": "Ceramic Plate Armor",
+        "description": "Advanced ceramic composite. Light yet incredibly strong.",
+        "equipment_type": "armor", "rarity": "epic",
+        "stats_bonus": {"defense": 32, "speed": 3}, "level_requirement": 52, "value": 8000
+    },
+    "black_ops_suit": {
+        "id": "black_ops_suit", "name": "Black Ops Suit",
+        "description": "Covert operations gear. Enhanced with lucky charms.",
+        "equipment_type": "armor", "rarity": "epic",
+        "stats_bonus": {"defense": 35, "luck": 5}, "level_requirement": 58, "value": 10000
+    },
+    
+    # --- Tier 7: Level 61-70 (Experimental) ---
+    "graphene_weave": {
+        "id": "graphene_weave", "name": "Graphene Weave",
+        "description": "Experimental graphene-laced fabric. Incredibly light and tough.",
+        "equipment_type": "armor", "rarity": "legendary",
+        "stats_bonus": {"defense": 40, "speed": 6}, "level_requirement": 62, "value": 18000
+    },
+    "exo_frame": {
+        "id": "exo_frame", "name": "Exo-Frame Armor",
+        "description": "Powered exoskeleton frame. Enhances strength and protection.",
+        "equipment_type": "armor", "rarity": "legendary",
+        "stats_bonus": {"defense": 45, "attack": 8}, "level_requirement": 68, "value": 25000
+    },
+    
+    # --- Tier 8: Level 71-80 (Black Ops) ---
+    "stealth_suit": {
+        "id": "stealth_suit", "name": "Stealth Combat Suit",
+        "description": "Advanced infiltration suit with adaptive camouflage.",
+        "equipment_type": "armor", "rarity": "legendary",
+        "stats_bonus": {"defense": 50, "speed": 8, "luck": 5}, "level_requirement": 72, "value": 40000
+    },
+    "heavy_assault_armor": {
+        "id": "heavy_assault_armor", "name": "Heavy Assault Armor",
+        "description": "Maximum protection for front-line combat. Walk through bullets.",
+        "equipment_type": "armor", "rarity": "legendary",
+        "stats_bonus": {"defense": 60, "attack": 10, "speed": -5}, "level_requirement": 78, "value": 55000
+    },
+    
+    # --- Tier 9: Level 81-90 (Futuristic) ---
+    "nano_fiber_suit": {
+        "id": "nano_fiber_suit", "name": "Nano-Fiber Suit",
+        "description": "Self-repairing nanotech armor. The future of protection.",
+        "equipment_type": "armor", "rarity": "legendary",
+        "stats_bonus": {"defense": 70, "speed": 10, "attack": 5}, "level_requirement": 82, "value": 90000
+    },
+    "titan_armor": {
+        "id": "titan_armor", "name": "Titan Armor",
+        "description": "Massive powered armor suit. You ARE the tank.",
+        "equipment_type": "armor", "rarity": "legendary",
+        "stats_bonus": {"defense": 85, "attack": 15, "speed": -3}, "level_requirement": 88, "value": 120000
+    },
+    
+    # --- Tier 10: Level 91-100 (Mythic) ---
+    "quantum_shield_armor": {
+        "id": "quantum_shield_armor", "name": "Quantum Shield Armor",
+        "description": "Reality-bending protection. Attacks phase through you.",
+        "equipment_type": "armor", "rarity": "mythic",
+        "stats_bonus": {"defense": 100, "speed": 12, "luck": 10}, "level_requirement": 92, "value": 200000
+    },
+    "godplate": {
+        "id": "godplate", "name": "Godplate",
+        "description": "Armor of legends. Said to make the wearer invincible.",
+        "equipment_type": "armor", "rarity": "mythic",
+        "stats_bonus": {"defense": 150, "attack": 20, "speed": 15}, "level_requirement": 98, "value": 500000
+    },
+}
+
+ALL_ITEMS.update(LEVEL_ARMOR)
+
 # ============== CONSUMABLE SHOP ITEMS ==============
 CONSUMABLE_ITEMS = {
     # --- Health Recharges ---

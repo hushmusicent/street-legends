@@ -206,6 +206,48 @@ ITEM_ICON_URLS = {
     "omega_blade": f"{BASE_URL}/6e5it8yp_omega_blade_cutout.png",
     "godslayer": f"{BASE_URL}/uqdvd2sr_godslayer_icon_cutout.png",
     "infinity_gauntlet": f"{BASE_URL}/9lf0mjnm_infinity_gauntlet_final.png",
+    
+    # ============== LEVEL-BASED ARMOR ==============
+    # Note: These need custom icons to be uploaded
+    # Tier 1: Level 1-10 (Street Gear)
+    # "street_hoodie": f"{BASE_URL}/PLACEHOLDER_street_hoodie.png",
+    # "denim_jacket": f"{BASE_URL}/PLACEHOLDER_denim_jacket.png",
+    
+    # Tier 2: Level 11-20 (Gang Wear)
+    # "biker_leather": f"{BASE_URL}/PLACEHOLDER_biker_leather.png",
+    # "reinforced_jacket": f"{BASE_URL}/PLACEHOLDER_reinforced_jacket.png",
+    
+    # Tier 3: Level 21-30 (Professional Grade)
+    # "stab_vest": f"{BASE_URL}/PLACEHOLDER_stab_vest.png",
+    # "combat_fatigues": f"{BASE_URL}/PLACEHOLDER_combat_fatigues.png",
+    
+    # Tier 4: Level 31-40 (Tactical)
+    # "swat_armor": f"{BASE_URL}/PLACEHOLDER_swat_armor.png",
+    # "ballistic_vest": f"{BASE_URL}/PLACEHOLDER_ballistic_vest.png",
+    
+    # Tier 5: Level 41-50 (Military Spec)
+    # "plate_carrier": f"{BASE_URL}/PLACEHOLDER_plate_carrier.png",
+    # "juggernaut_suit": f"{BASE_URL}/PLACEHOLDER_juggernaut_suit.png",
+    
+    # Tier 6: Level 51-60 (Elite)
+    # "ceramic_plate_armor": f"{BASE_URL}/PLACEHOLDER_ceramic_plate_armor.png",
+    # "black_ops_suit": f"{BASE_URL}/PLACEHOLDER_black_ops_suit.png",
+    
+    # Tier 7: Level 61-70 (Experimental)
+    # "graphene_weave": f"{BASE_URL}/PLACEHOLDER_graphene_weave.png",
+    # "exo_frame": f"{BASE_URL}/PLACEHOLDER_exo_frame.png",
+    
+    # Tier 8: Level 71-80 (Black Ops)
+    # "stealth_suit": f"{BASE_URL}/PLACEHOLDER_stealth_suit.png",
+    # "heavy_assault_armor": f"{BASE_URL}/PLACEHOLDER_heavy_assault_armor.png",
+    
+    # Tier 9: Level 81-90 (Futuristic)
+    # "nano_fiber_suit": f"{BASE_URL}/PLACEHOLDER_nano_fiber_suit.png",
+    # "titan_armor": f"{BASE_URL}/PLACEHOLDER_titan_armor.png",
+    
+    # Tier 10: Level 91-100 (Mythic)
+    # "quantum_shield_armor": f"{BASE_URL}/PLACEHOLDER_quantum_shield_armor.png",
+    # "godplate": f"{BASE_URL}/PLACEHOLDER_godplate.png",
 }
 
 # Consumable item icons
