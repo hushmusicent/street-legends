@@ -208,46 +208,45 @@ ITEM_ICON_URLS = {
     "infinity_gauntlet": f"{BASE_URL}/9lf0mjnm_infinity_gauntlet_final.png",
     
     # ============== LEVEL-BASED ARMOR ==============
-    # Note: These need custom icons to be uploaded
     # Tier 1: Level 1-10 (Street Gear)
-    # "street_hoodie": f"{BASE_URL}/PLACEHOLDER_street_hoodie.png",
-    # "denim_jacket": f"{BASE_URL}/PLACEHOLDER_denim_jacket.png",
+    "street_hoodie": f"{BASE_URL}/iky81bzc_street_hoodie_cutout.png",
+    "denim_jacket": f"{BASE_URL}/d23ldvtw_denim_jacket_cutout.png",
     
     # Tier 2: Level 11-20 (Gang Wear)
-    # "biker_leather": f"{BASE_URL}/PLACEHOLDER_biker_leather.png",
-    # "reinforced_jacket": f"{BASE_URL}/PLACEHOLDER_reinforced_jacket.png",
+    "biker_leather": f"{BASE_URL}/373ewsd4_biker_leather_cutout.png",
+    "reinforced_jacket": f"{BASE_URL}/t3owfz4d_reinforced_jacket_cutout.png",
     
     # Tier 3: Level 21-30 (Professional Grade)
-    # "stab_vest": f"{BASE_URL}/PLACEHOLDER_stab_vest.png",
-    # "combat_fatigues": f"{BASE_URL}/PLACEHOLDER_combat_fatigues.png",
+    "stab_vest": f"{BASE_URL}/g1co4r1c_stab_vest_cutout.png",
+    "combat_fatigues": f"{BASE_URL}/waegle1q_combat_fatigues_cutout.png",
     
     # Tier 4: Level 31-40 (Tactical)
-    # "swat_armor": f"{BASE_URL}/PLACEHOLDER_swat_armor.png",
-    # "ballistic_vest": f"{BASE_URL}/PLACEHOLDER_ballistic_vest.png",
+    "swat_armor": f"{BASE_URL}/gormzdl3_swat_armor_cutout.png",
+    "ballistic_vest": f"{BASE_URL}/so6a5xzj_ballistic_vest_cutout.png",
     
     # Tier 5: Level 41-50 (Military Spec)
-    # "plate_carrier": f"{BASE_URL}/PLACEHOLDER_plate_carrier.png",
-    # "juggernaut_suit": f"{BASE_URL}/PLACEHOLDER_juggernaut_suit.png",
+    "plate_carrier": f"{BASE_URL}/h5qbq1xx_military_plate_carrier_cutout.png",
+    "juggernaut_suit": f"{BASE_URL}/hpmj25vs_juggernaut_suit_cutout.png",
     
     # Tier 6: Level 51-60 (Elite)
-    # "ceramic_plate_armor": f"{BASE_URL}/PLACEHOLDER_ceramic_plate_armor.png",
-    # "black_ops_suit": f"{BASE_URL}/PLACEHOLDER_black_ops_suit.png",
+    "ceramic_plate_armor": f"{BASE_URL}/9p3uuch7_ceramic_plate_armor_cutout.png",
+    "black_ops_suit": f"{BASE_URL}/n79bm2kf_black_ops_suit_cutout.png",
     
     # Tier 7: Level 61-70 (Experimental)
-    # "graphene_weave": f"{BASE_URL}/PLACEHOLDER_graphene_weave.png",
-    # "exo_frame": f"{BASE_URL}/PLACEHOLDER_exo_frame.png",
+    "graphene_weave": f"{BASE_URL}/vke7wb4q_graphene_weave_cutout.png",
+    "exo_frame": f"{BASE_URL}/dhj1cekl_exo_frame_armor_cutout.png",
     
     # Tier 8: Level 71-80 (Black Ops)
-    # "stealth_suit": f"{BASE_URL}/PLACEHOLDER_stealth_suit.png",
-    # "heavy_assault_armor": f"{BASE_URL}/PLACEHOLDER_heavy_assault_armor.png",
+    "stealth_suit": f"{BASE_URL}/rumxr8er_stealth_combat_suit_cutout.png",
+    "heavy_assault_armor": f"{BASE_URL}/jhgnh364_heavy_assault_armor_cutout.png",
     
     # Tier 9: Level 81-90 (Futuristic)
-    # "nano_fiber_suit": f"{BASE_URL}/PLACEHOLDER_nano_fiber_suit.png",
-    # "titan_armor": f"{BASE_URL}/PLACEHOLDER_titan_armor.png",
+    "nano_fiber_suit": f"{BASE_URL}/2vjonynk_nano_fiber_suit_cutout.png",
+    "titan_armor": f"{BASE_URL}/cwdg25y9_titan_armor_cutout.png",
     
     # Tier 10: Level 91-100 (Mythic)
-    # "quantum_shield_armor": f"{BASE_URL}/PLACEHOLDER_quantum_shield_armor.png",
-    # "godplate": f"{BASE_URL}/PLACEHOLDER_godplate.png",
+    "quantum_shield_armor": f"{BASE_URL}/6jvceyua_quantum_shield_armor_cutout.png",
+    "godplate": f"{BASE_URL}/32tbrp51_godplate_cutout.png",
 }
 
 # Consumable item icons
