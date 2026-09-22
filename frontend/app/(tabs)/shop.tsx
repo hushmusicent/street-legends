@@ -26,6 +26,7 @@ const RARITY_COLORS: Record<string, string> = {
   rare: '#2196f3',
   epic: '#9c27b0',
   legendary: '#ff9800',
+  mythic: '#e91e63',
 };
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = {

@@ -70,6 +70,7 @@ const RARITY_COLORS: Record<string, string> = {
   rare: '#2196f3',
   epic: '#9c27b0',
   legendary: '#ff9800',
+  mythic: '#e91e63',
 };
 
 const SLOT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -280,7 +281,7 @@ export default function CharacterScreen() {
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
     // Increased repair cost multipliers (75-180% of item value) - 50% higher
-    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8 };
+    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8, mythic: 2.2 };
     const mult = rarityMult[item.rarity] || 1.0;
     const repairCost = Math.max(8, Math.floor(item.value * mult * damagePercent));
     
@@ -318,7 +319,7 @@ export default function CharacterScreen() {
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
     // Increased repair cost multipliers (75-180% of item value) - 50% higher
-    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8 };
+    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8, mythic: 2.2 };
     const mult = rarityMult[item.rarity] || 1.0;
     const repairCost = Math.max(8, Math.floor(item.value * mult * damagePercent));
     
@@ -1018,7 +1019,7 @@ function EquipmentTab({
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
-    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8 };
+    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8, mythic: 2.2 };
     const mult = rarityMult[item.rarity] || 1.0;
     return Math.max(8, Math.floor(item.value * mult * damagePercent));
   };
@@ -1187,8 +1188,8 @@ function ItemsTab({
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
     const damagePercent = (maxDur - curDur) / maxDur;
-    // Increased multipliers: common 0.5, up to legendary 1.2
-    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2 };
+    // Increased multipliers: common 0.5, up to mythic 1.5
+    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2, mythic: 1.5 };
     const mult = rarityMult[item.rarity] || 0.7;
     // Minimum cost is now $5 instead of $1
     return Math.max(5, Math.floor(item.value * mult * damagePercent));

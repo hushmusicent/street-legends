@@ -649,6 +649,132 @@ GUN_SHOP_ITEMS = {
 
 ALL_ITEMS.update(GUN_SHOP_ITEMS)
 
+# ============== 20 LEVEL-BASED VEHICLES ==============
+# 2 vehicles per tier (every 10 levels)
+LEVEL_VEHICLES = {
+    # Level 1-10: Street Level
+    "skateboard": {
+        "id": "skateboard", "name": "Skateboard", "description": "Four wheels and a dream. Kickflip away from trouble.",
+        "equipment_type": "vehicle", "rarity": "common",
+        "stats_bonus": {"speed": 3, "luck": 1}, "level_requirement": 5, "value": 50
+    },
+    "stolen_scooter": {
+        "id": "stolen_scooter", "name": "Stolen Scooter", "description": "Some kid's missing their ride. Your gain.",
+        "equipment_type": "vehicle", "rarity": "uncommon",
+        "stats_bonus": {"speed": 5}, "level_requirement": 8, "value": 120
+    },
+    
+    # Level 11-20: Upgraded Street
+    "dirt_bike": {
+        "id": "dirt_bike", "name": "Dirt Bike", "description": "Off-road beast. Go where cars can't follow.",
+        "equipment_type": "vehicle", "rarity": "uncommon",
+        "stats_bonus": {"speed": 7, "luck": 2}, "level_requirement": 12, "value": 250
+    },
+    "lowrider": {
+        "id": "lowrider", "name": "Lowrider", "description": "Hydraulics bouncing. All eyes on you.",
+        "equipment_type": "vehicle", "rarity": "rare",
+        "stats_bonus": {"speed": 5, "luck": 5, "defense": 2}, "level_requirement": 18, "value": 450
+    },
+    
+    # Level 21-30: Professional Grade
+    "muscle_car": {
+        "id": "muscle_car", "name": "Muscle Car", "description": "American V8 thunder. Raw power on wheels.",
+        "equipment_type": "vehicle", "rarity": "rare",
+        "stats_bonus": {"speed": 9, "attack": 2}, "level_requirement": 22, "value": 650
+    },
+    "street_racer": {
+        "id": "street_racer", "name": "Street Racer", "description": "Tuned for illegal races. Nitrous ready.",
+        "equipment_type": "vehicle", "rarity": "rare",
+        "stats_bonus": {"speed": 11, "luck": 3}, "level_requirement": 28, "value": 850
+    },
+    
+    # Level 31-40: Elite
+    "blacked_out_sedan": {
+        "id": "blacked_out_sedan", "name": "Blacked-Out Sedan", "description": "Government plates. Tinted windows. No questions.",
+        "equipment_type": "vehicle", "rarity": "epic",
+        "stats_bonus": {"speed": 8, "defense": 5, "luck": 3}, "level_requirement": 32, "value": 1100
+    },
+    "custom_chopper": {
+        "id": "custom_chopper", "name": "Custom Chopper", "description": "Chrome and leather. Born to ride.",
+        "equipment_type": "vehicle", "rarity": "epic",
+        "stats_bonus": {"speed": 10, "attack": 3, "luck": 4}, "level_requirement": 38, "value": 1400
+    },
+    
+    # Level 41-50: Military Spec
+    "tactical_humvee": {
+        "id": "tactical_humvee", "name": "Tactical Humvee", "description": "Military surplus. Built for war zones.",
+        "equipment_type": "vehicle", "rarity": "epic",
+        "stats_bonus": {"speed": 7, "defense": 10, "attack": 3}, "level_requirement": 42, "value": 1800
+    },
+    "interceptor": {
+        "id": "interceptor", "name": "Interceptor", "description": "Pursuit vehicle. Nothing outruns this.",
+        "equipment_type": "vehicle", "rarity": "epic",
+        "stats_bonus": {"speed": 14, "luck": 4}, "level_requirement": 48, "value": 2200
+    },
+    
+    # Level 51-60: Advanced
+    "armored_limo": {
+        "id": "armored_limo", "name": "Armored Limo", "description": "VIP protection. Bulletproof luxury.",
+        "equipment_type": "vehicle", "rarity": "legendary",
+        "stats_bonus": {"speed": 8, "defense": 12, "luck": 5}, "level_requirement": 52, "value": 2800
+    },
+    "rally_car": {
+        "id": "rally_car", "name": "Rally Car", "description": "WRC champion. Handles any terrain.",
+        "equipment_type": "vehicle", "rarity": "legendary",
+        "stats_bonus": {"speed": 16, "luck": 5}, "level_requirement": 58, "value": 3400
+    },
+    
+    # Level 61-70: Experimental
+    "stealth_van": {
+        "id": "stealth_van", "name": "Stealth Van", "description": "Mobile operations center. Off the grid.",
+        "equipment_type": "vehicle", "rarity": "legendary",
+        "stats_bonus": {"speed": 10, "defense": 8, "luck": 8, "attack": 5}, "level_requirement": 62, "value": 4200
+    },
+    "hypercar": {
+        "id": "hypercar", "name": "Hypercar", "description": "Million dollar machine. Breaks every speed record.",
+        "equipment_type": "vehicle", "rarity": "legendary",
+        "stats_bonus": {"speed": 20, "luck": 6}, "level_requirement": 68, "value": 5000
+    },
+    
+    # Level 71-80: Black Ops
+    "apc": {
+        "id": "apc", "name": "APC", "description": "Armored Personnel Carrier. Rolling fortress.",
+        "equipment_type": "vehicle", "rarity": "mythic",
+        "stats_bonus": {"speed": 8, "defense": 18, "attack": 8}, "level_requirement": 72, "value": 6500
+    },
+    "attack_helicopter": {
+        "id": "attack_helicopter", "name": "Attack Helicopter", "description": "Apache gunship. Death from above.",
+        "equipment_type": "vehicle", "rarity": "mythic",
+        "stats_bonus": {"speed": 22, "attack": 12, "luck": 5}, "level_requirement": 78, "value": 8000
+    },
+    
+    # Level 81-90: Elite Experimental
+    "hovercraft": {
+        "id": "hovercraft", "name": "Hovercraft", "description": "Amphibious assault. Land or water.",
+        "equipment_type": "vehicle", "rarity": "mythic",
+        "stats_bonus": {"speed": 18, "defense": 10, "luck": 10}, "level_requirement": 82, "value": 10000
+    },
+    "stealth_jet": {
+        "id": "stealth_jet", "name": "Stealth Jet", "description": "F-35 Lightning. Invisible to radar.",
+        "equipment_type": "vehicle", "rarity": "mythic",
+        "stats_bonus": {"speed": 28, "attack": 15, "defense": 5}, "level_requirement": 88, "value": 12500
+    },
+    
+    # Level 91-100: Legendary
+    "flying_car": {
+        "id": "flying_car", "name": "Flying Car", "description": "Anti-gravity prototype. The future is now.",
+        "equipment_type": "vehicle", "rarity": "mythic",
+        "stats_bonus": {"speed": 30, "luck": 12, "defense": 8}, "level_requirement": 92, "value": 15000
+    },
+    "mech_suit": {
+        "id": "mech_suit", "name": "Mech Suit", "description": "Titanium exoskeleton. One-man army.",
+        "equipment_type": "vehicle", "rarity": "mythic",
+        "stats_bonus": {"speed": 20, "attack": 25, "defense": 20, "luck": 10}, "level_requirement": 98, "value": 20000
+    },
+}
+
+ALL_ITEMS.update(LEVEL_VEHICLES)
+
 # ============== 100 LEVEL-BASED WEAPONS ==============
 # Each weapon unlocks at its corresponding level (level 1-100)
 LEVEL_WEAPONS = {
