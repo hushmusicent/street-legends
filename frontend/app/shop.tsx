@@ -8,6 +8,7 @@ import {
   Alert,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,7 +43,41 @@ interface ShopItem {
   stats_bonus: Record<string, number>;
   level_requirement: number;
   value: number;
+  shop_price?: number;
+  icon_url?: string;
 }
+
+// Custom Shop Item Icon Component
+const ShopItemIcon = ({ 
+  item, 
+  size = 24, 
+  color 
+}: { 
+  item: { icon_url?: string; equipment_type: string }; 
+  size?: number; 
+  color: string;
+}) => {
+  const [imageError, setImageError] = React.useState(false);
+  
+  if (item.icon_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: item.icon_url }}
+        style={{ width: size + 6, height: size + 6 }}
+        resizeMode="contain"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  
+  return (
+    <Ionicons 
+      name={SLOT_ICONS[item.equipment_type] || 'cube'} 
+      size={size} 
+      color={color} 
+    />
+  );
+};
 
 export default function ShopScreen() {
   const { player, playerId, setPlayer } = useGameStore();
@@ -190,7 +225,7 @@ export default function ShopScreen() {
           return (
             <View key={item.id} style={[styles.itemCard, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
               <View style={[styles.itemIcon, { backgroundColor: `${rarityColor}15` }]}>
-                <Ionicons name={SLOT_ICONS[item.equipment_type] || 'cube'} size={24} color={rarityColor} />
+                <ShopItemIcon item={item} size={24} color={rarityColor} />
               </View>
 
               <View style={styles.itemInfo}>

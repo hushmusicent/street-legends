@@ -22,6 +22,7 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 import secrets
+from item_icons import ITEM_ICON_URLS, CONSUMABLE_ICON_URLS
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -872,6 +873,18 @@ CONSUMABLE_ITEMS = {
         "effect": {"temp_energy_percent": 1.0}, "price": 1000, "level_requirement": 12,
     },
 }
+
+# Apply icon URLs to all equipment items
+def _apply_item_icons():
+    """Apply icon URLs from item_icons.py to all items"""
+    for item_id, item_data in ALL_ITEMS.items():
+        if item_id in ITEM_ICON_URLS:
+            item_data["icon_url"] = ITEM_ICON_URLS[item_id]
+    for item_id, item_data in CONSUMABLE_ITEMS.items():
+        if item_id in CONSUMABLE_ICON_URLS:
+            item_data["icon_url"] = CONSUMABLE_ICON_URLS[item_id]
+
+_apply_item_icons()
 
 # Shop name templates
 SHOP_NAMES = [

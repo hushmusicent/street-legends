@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,7 +40,40 @@ interface ShopItem {
   level_requirement: number;
   value: number;
   shop_price: number;
+  icon_url?: string;
 }
+
+// Custom Shop Item Icon Component
+const ShopDetailItemIcon = ({ 
+  item, 
+  size = 26, 
+  color 
+}: { 
+  item: { icon_url?: string; equipment_type: string }; 
+  size?: number; 
+  color: string;
+}) => {
+  const [imageError, setImageError] = React.useState(false);
+  
+  if (item.icon_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: item.icon_url }}
+        style={{ width: size + 8, height: size + 8 }}
+        resizeMode="contain"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  
+  return (
+    <Ionicons 
+      name={SLOT_ICONS[item.equipment_type] || 'cube'} 
+      size={size} 
+      color={color} 
+    />
+  );
+};
 
 interface ShopSkill {
   id: string;
@@ -252,7 +286,7 @@ export default function ShopDetailScreen() {
           return (
             <View key={`${item.id}-${idx}`} style={[styles.itemCard, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
               <View style={[styles.itemIcon, { backgroundColor: `${rarityColor}15` }]}>
-                <Ionicons name={SLOT_ICONS[item.equipment_type] || 'cube'} size={24} color={rarityColor} />
+                <ShopDetailItemIcon item={item} size={24} color={rarityColor} />
               </View>
 
               <View style={styles.itemInfo}>

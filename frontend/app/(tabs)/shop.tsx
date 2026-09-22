@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,7 +53,35 @@ interface ConsumableItem {
   effect: Record<string, any>;
   price: number;
   level_requirement: number;
+  icon_url?: string;
 }
+
+// Custom Consumable Icon Component
+const ConsumableIcon = ({ 
+  item, 
+  size = 24, 
+  color 
+}: { 
+  item: { icon_url?: string; icon: string }; 
+  size?: number; 
+  color: string;
+}) => {
+  const [imageError, setImageError] = React.useState(false);
+  
+  if (item.icon_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: item.icon_url }}
+        style={{ width: size + 6, height: size + 6 }}
+        resizeMode="contain"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  
+  const iconName = ITEM_ICONS[item.icon] || 'flask';
+  return <Ionicons name={iconName} size={size} color={color} />;
+};
 
 interface Buff {
   id: string;
@@ -278,8 +307,8 @@ export default function ShopTabScreen() {
             return (
               <View key={item.id} style={[styles.itemCard, { borderLeftColor: catConfig?.color || rarityColor, borderLeftWidth: 3 }]}>
                 <View style={[styles.itemIcon, { backgroundColor: `${catConfig?.color || rarityColor}15` }]}>
-                  <Ionicons
-                    name={ITEM_ICONS[item.icon] || 'cube'}
+                  <ConsumableIcon
+                    item={item}
                     size={24}
                     color={catConfig?.color || rarityColor}
                   />

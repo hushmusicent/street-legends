@@ -99,7 +99,44 @@ interface EquipmentItem {
   max_durability?: number;
   is_broken?: boolean;
   inventory_index?: number;
+  icon_url?: string;
 }
+
+// Custom Item Icon Component - shows custom image if available, fallback to Ionicon
+const ItemIcon = ({ 
+  item, 
+  size = 22, 
+  color 
+}: { 
+  item: { icon_url?: string; equipment_type: string; is_broken?: boolean }; 
+  size?: number; 
+  color: string;
+}) => {
+  const [imageError, setImageError] = React.useState(false);
+  
+  if (item.icon_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: item.icon_url }}
+        style={{ 
+          width: size + 8, 
+          height: size + 8, 
+          opacity: item.is_broken ? 0.5 : 1 
+        }}
+        resizeMode="contain"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  
+  return (
+    <Ionicons 
+      name={SLOT_ICONS[item.equipment_type] || 'cube'} 
+      size={size} 
+      color={item.is_broken ? '#666' : color} 
+    />
+  );
+};
 
 export default function CharacterScreen() {
   const { player, playerId, setPlayer, clearPlayer } = useGameStore();
@@ -1009,7 +1046,11 @@ function EquipmentTab({
         return (
           <View key={slot} style={[styles.equipSlot, { borderLeftColor: rarityColor, borderLeftWidth: 3 }]}>
             <View style={[styles.slotIcon, { backgroundColor: item ? `${rarityColor}20` : '#1a1a1a' }]}>
-              <Ionicons name={SLOT_ICONS[slot]} size={24} color={item ? rarityColor : '#444'} />
+              {item ? (
+                <ItemIcon item={item} size={24} color={rarityColor} />
+              ) : (
+                <Ionicons name={SLOT_ICONS[slot]} size={24} color="#444" />
+              )}
               {item?.is_broken && (
                 <View style={styles.brokenBadge}>
                   <Ionicons name="warning" size={10} color="#e74c3c" />
@@ -1182,7 +1223,7 @@ function ItemsTab({
             ]}
           >
             <View style={[styles.itemIconWrap, { backgroundColor: `${rarityColor}20` }]}>
-              <Ionicons name={SLOT_ICONS[item.equipment_type] || 'cube'} size={22} color={item.is_broken ? '#666' : rarityColor} />
+              <ItemIcon item={item} size={22} color={rarityColor} />
               {item.is_broken && (
                 <View style={styles.brokenBadge}>
                   <Ionicons name="warning" size={12} color="#e74c3c" />
