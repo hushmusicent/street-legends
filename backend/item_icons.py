@@ -188,7 +188,7 @@ CONSUMABLE_ICON_URLS = {
     # Energy Stims
     "neural_booster_mk1": f"{BASE_URL}/h0bvy1nc_energy_stim_mk1.png",
     "neural_booster_mk2": f"{BASE_URL}/ildh7ibh_energy_stim_mk2.png",
-    "neural_booster_mk3": f"{BASE_URL}/578pwmh8_energy_stim_mk3.png",
+    "neural_booster_mk3": f"{BASE_URL}/lk76g29r_energy_stim_mk3.png",
 }
 
 def get_item_icon_url(item_id: str) -> str | None:
