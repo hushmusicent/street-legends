@@ -45,6 +45,47 @@ ITEM_ICON_URLS = {
     "armored_suv": f"{BASE_URL}/jbdqvxqt_bulletproof_suv_cutout.png",
     "sports_car": f"{BASE_URL}/rojql9b4_lambo_cutout.png",
     
+    # ============== LEVEL-BASED VEHICLES ==============
+    # Level 1-10: Street Rides
+    "skateboard": f"{BASE_URL}/wj3a09sn_skateboard_detailed_cutout.png",
+    "stolen_scooter": f"{BASE_URL}/2aucxy9j_scooter_game_detailed.png",
+    
+    # Level 11-20: Basic Transport
+    "dirt_bike": f"{BASE_URL}/jgrgv2sw_dirtbike_cutout.png",
+    "lowrider": f"{BASE_URL}/fliqlqhc_lowrider_car_cutout.png",
+    
+    # Level 21-30: Street Machines
+    "muscle_car": f"{BASE_URL}/dmit7p4e_musclecar_fixed.png",
+    "street_racer": f"{BASE_URL}/7rlem9he_streetracer_cutout.png",
+    
+    # Level 31-40: Pro Rides
+    "blacked_out_sedan": f"{BASE_URL}/z0lmpt2l_blacksedan_detailed.png",
+    "custom_chopper": f"{BASE_URL}/v5mip4om_custom_chopper_cutout.png",
+    
+    # Level 41-50: Tactical Vehicles
+    "tactical_humvee": f"{BASE_URL}/ivk6gngg_tactical_humvee_cutout.png",
+    "interceptor": f"{BASE_URL}/2r3bd9vu_interceptor_cutout.png",
+    
+    # Level 51-60: Heavy Armor
+    "armored_limo": f"{BASE_URL}/ez7c9oi4_armored_limo_clean.png",
+    "rally_car": f"{BASE_URL}/mt5ajpcq_rally_car_cutout_final.png",
+    
+    # Level 61-70: Elite Transport
+    "stealth_van": f"{BASE_URL}/r8vpf8k0_stealth_van_green.png",
+    "hypercar": f"{BASE_URL}/g1twi3gn_hypercar_cutout.png",
+    
+    # Level 71-80: Military Grade
+    "apc": f"{BASE_URL}/nmwsupns_apc_magenta_cutout.png",
+    "attack_helicopter": f"{BASE_URL}/5su0egil_attack_heli_cutout.png",
+    
+    # Level 81-90: Experimental
+    "hovercraft": f"{BASE_URL}/cdlz4yfi_hovercraft_cutout.png",
+    "stealth_jet": f"{BASE_URL}/785qkzpb_stealth_jet_cutout.png",
+    
+    # Level 91-100: Legendary Machines
+    "flying_car": f"{BASE_URL}/xzua6crv_flying_car_cutout.png",
+    "mech_suit": f"{BASE_URL}/o4fdsled_mech_suit_green.png",
+    
     # ============== LEVEL-BASED WEAPONS ==============
     # Level 1-10: Street Weapons
     "broken_bottle": f"{BASE_URL}/7es957h5_broken_bottle_bottom_cutout.png",
