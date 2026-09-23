@@ -22,7 +22,7 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 import secrets
-from item_icons import ITEM_ICON_URLS, CONSUMABLE_ICON_URLS
+from item_icons import ITEM_ICON_URLS, CONSUMABLE_ICON_URLS, SKILL_ICON_URLS
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -1453,6 +1453,11 @@ SKILLS = {
     # Level 99
     "godslayer": {"name": "Godslayer", "damage_mult": 10.0, "ignore_defense": True, "lifesteal": 0.5, "cost": 120, "unlock_level": 99, "value": 18000, "description": "Ultimate skill: 10x dmg, ignore def, 50% steal."},
 }
+
+# Apply icons to skills
+for skill_id, skill_data in SKILLS.items():
+    if skill_id in SKILL_ICON_URLS:
+        skill_data["icon_url"] = SKILL_ICON_URLS[skill_id]
 
 # ============== TERRITORY SYSTEM ==============
 # Generate 1000+ unique territory names from combinations

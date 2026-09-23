@@ -249,6 +249,82 @@ ITEM_ICON_URLS = {
     "godplate": f"{BASE_URL}/32tbrp51_godplate_cutout.png",
 }
 
+# ============== SKILL ICON URLS ==============
+SKILL_ICON_URLS = {
+    # Starter Skills (Level 1)
+    "heavy_strike": f"{BASE_URL}/kifz4gqy_heavy_strike_cutout.png",
+    "quick_shot": f"{BASE_URL}/ie334nfz_quick_shot_cutout.png",
+    
+    # Level 3-9
+    "defensive_stance": f"{BASE_URL}/mllpafqp_defensive_stance_final_green.png",
+    "critical_aim": f"{BASE_URL}/p6q8vyj6_critical_aim_cutout.png",
+    "heal": f"{BASE_URL}/nc54rzyi_street_medicine_cutout.png",
+    "rage": f"{BASE_URL}/eozvfe25_rage_mode_cutout.png",
+    
+    # Level 11-19
+    "counter_strike": f"{BASE_URL}/mru1z3jw_counter_strike_cutout.png",
+    "blinding_flash": f"{BASE_URL}/d6o89gj5_blinding_flash_cutout_v2.png",
+    "execute": f"{BASE_URL}/8aksw3h3_execute_cutout.png",
+    "iron_skin": f"{BASE_URL}/tyreue8z_iron_skin_cutout.png",
+    "adrenaline_rush": f"{BASE_URL}/r99upnip_adrenaline_rush_cutout.png",
+    
+    # Level 21-29
+    "double_tap": f"{BASE_URL}/y819ftvh_double_tap_cutout.png",
+    "smoke_bomb": f"{BASE_URL}/alxke3fu_smoke_bomb_cutout.png",
+    "berserker": f"{BASE_URL}/i99qecf8_berserker_cutout.png",
+    "tactical_reload": f"{BASE_URL}/yc6117zy_tactical_reload_cutout.png",
+    "armor_pierce": f"{BASE_URL}/ot1jll2g_armor_pierce_cutout.png",
+    
+    # Level 31-39
+    "venomous_strike": f"{BASE_URL}/ke9011gy_venomous_strike_cutout.png",
+    "battle_cry": f"{BASE_URL}/rmr58vsd_battle_cry_cutout.png",
+    "headshot": f"{BASE_URL}/nh97w6nd_headshot_detailed_v2.png",
+    "fortress": f"{BASE_URL}/yj6li52p_fortress_cutout.png",
+    "lifesteal": f"{BASE_URL}/7n1m52jx_lifesteal_detailed.png",
+    
+    # Level 41-49
+    "chain_attack": f"{BASE_URL}/difpd97p_chain_attack_detailed.png",
+    "medic": f"{BASE_URL}/klp2jpmf_combat_medic_cutout.png",
+    "rampage": f"{BASE_URL}/7lem4cn0_rampage_cutout.png",
+    "evasion": f"{BASE_URL}/qe0xcstq_evasion_detailed.png",
+    "assassinate": f"{BASE_URL}/za33h749_assassinate_detailed.png",
+    
+    # Level 51-59
+    "blood_pact": f"{BASE_URL}/l6h9ougz_Blood%20Pact.png",
+    "titanium_shell": f"{BASE_URL}/4vmncy8s_titanium_shell_cutout.png",
+    "obliterate": f"{BASE_URL}/nsn410ll_obliterate_clean.png",
+    "regenerate": f"{BASE_URL}/gb7oa5ri_regenerate_detailed.png",
+    "phantom_strike": f"{BASE_URL}/841ld5jt_phantom_strike_detailed.png",
+    
+    # Level 61-69
+    "war_machine": f"{BASE_URL}/7wb80840_war_machine_final_v2.png",
+    "drain_life": f"{BASE_URL}/c7jxlr3u_drain_life_detailed.png",
+    "massacre": f"{BASE_URL}/qzdzmzme_massacre_detailed.png",
+    "diamond_armor": f"{BASE_URL}/oss4r86u_diamond_armor_cutout.png",
+    "phoenix_heal": f"{BASE_URL}/6l5lrnru_phoenix_heal_final.png",
+    
+    # Level 71-79
+    "annihilate": f"{BASE_URL}/poj2zt20_annihilate_cutout.png",
+    "vampire": f"{BASE_URL}/8ovorsto_vampire_cutout.png",
+    "juggernaut": f"{BASE_URL}/ppdrnh2a_juggernaut_final.png",
+    "omega_heal": f"{BASE_URL}/y0fj8n20_omega_heal_final2.png",
+    "death_blow": f"{BASE_URL}/8tx5815z_death_blow_clean.png",
+    
+    # Level 81-89
+    "eternal_guard": f"{BASE_URL}/9871qx3x_eternal_guard_final.png",
+    "soul_reaper": f"{BASE_URL}/u3rhlrxh_soul_reaper_final.png",
+    "armageddon": f"{BASE_URL}/560rjosn_armageddon_final.png",
+    "immortal": f"{BASE_URL}/8g9fxzat_immortal_cutout.png",
+    "extinction": f"{BASE_URL}/zhzudwg9_extinction_final.png",
+    
+    # Level 91-99 (Endgame)
+    "divine_shield": f"{BASE_URL}/sv39yyql_divine_shield_final.png",
+    "apocalypse": f"{BASE_URL}/axf6ut95_Apocalypse.png",
+    "titan_soul": f"{BASE_URL}/wv0eu7b3_titan_soul_final.png",
+    "rebirth": f"{BASE_URL}/mx344cc7_rebirth_final2.png",
+    "godslayer": f"{BASE_URL}/u81441b5_godslayer_final.png",
+}
+
 # Consumable item icons
 CONSUMABLE_ICON_URLS = {
     # Health Recharges
@@ -275,7 +351,11 @@ CONSUMABLE_ICON_URLS = {
 
 def get_item_icon_url(item_id: str) -> str | None:
     """Get the icon URL for an item by its ID."""
-    return ITEM_ICON_URLS.get(item_id) or CONSUMABLE_ICON_URLS.get(item_id)
+    return ITEM_ICON_URLS.get(item_id) or CONSUMABLE_ICON_URLS.get(item_id) or SKILL_ICON_URLS.get(item_id)
+
+def get_skill_icon_url(skill_id: str) -> str | None:
+    """Get the icon URL for a skill by its ID."""
+    return SKILL_ICON_URLS.get(skill_id)
 
 def apply_icons_to_items(items_dict: dict) -> dict:
     """Apply icon URLs to all items in a dictionary."""
