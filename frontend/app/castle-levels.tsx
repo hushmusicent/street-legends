@@ -19,6 +19,7 @@ import { API_URL, startRandomCastleGame, completeCastleGame } from '../services/
 import { useGameStore } from '../stores/gameStore';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
+import { SFX } from '../hooks/useSoundEffects';
 import {
   PHYSICS_CONSTANTS,
   Block,
@@ -174,6 +175,7 @@ export default function CastleLevelsScreen() {
   const enemiesRef = useRef<Enemy[]>([]);
   const structureHitRef = useRef(false); // Track if any block has been hit
   const tntExplosionsRef = useRef<{ x: number; y: number }[]>([]); // Track TNT explosions for enemy damage
+  const bricksSoundPlayedRef = useRef(false); // Track if bricks falling sound has been played this shot
 
   // Load progress on mount
   useEffect(() => {
@@ -265,6 +267,7 @@ export default function CastleLevelsScreen() {
     setShowTrajectory(true);
     structureHitRef.current = false; // Reset - no blocks hit yet
     tntExplosionsRef.current = []; // Reset TNT explosions
+    bricksSoundPlayedRef.current = false; // Reset bricks sound flag
   }, []);
 
   const startLevel = (level: number) => {
@@ -379,7 +382,14 @@ export default function CastleLevelsScreen() {
         ballActive,
         ball,
         structureHitRef.current,
-        () => { structureHitRef.current = true; },
+        () => { 
+          structureHitRef.current = true;
+          // Play bricks falling sound when structure is first hit
+          if (!bricksSoundPlayedRef.current) {
+            bricksSoundPlayedRef.current = true;
+            SFX.bricksFalling();
+          }
+        },
         // TNT explosion callback - track for enemy damage
         (x: number, y: number) => {
           tntExplosionsRef.current.push({ x, y });
@@ -441,6 +451,9 @@ export default function CastleLevelsScreen() {
         const eliminatedCount = enemies.length - remainingEnemies;
         
         if (remainingEnemies === 0) {
+          // Play victory sound when player wins!
+          SFX.castleVictory();
+          
           setWon(true);
           setGameOver(true);
           saveProgress(currentLevel);
@@ -511,9 +524,13 @@ export default function CastleLevelsScreen() {
   const fireCannon = () => {
     if (firing || shotsRemaining <= 0 || gameOver) return;
     
+    // Play cannon fire sound
+    SFX.cannonFire();
+    
     setFiring(true);
     setShowTrajectory(false);
     setShotsRemaining(prev => prev - 1);
+    bricksSoundPlayedRef.current = false; // Reset bricks sound flag for new shot
     
     const angleRad = (angle * Math.PI) / 180;
     const velocity = INITIAL_VELOCITY * (power / 100);

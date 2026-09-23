@@ -19,6 +19,10 @@ const SOUND_URLS = {
   bankMission: 'https://customer-assets.emergentagent.com/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/q19r3g3d_Bank_missions.mp3',
   // Background/Ambient music
   mobTies: 'https://customer-assets.emergentagent.com/job_05f5dabc-ec66-4212-831d-f130db9c1387/artifacts/Mob_Ties.mp3',
+  // Castle Assault sounds
+  cannonFire: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/fpxr5y5r_CANNON%20SOUND%20EFFECT.mp3',
+  bricksFalling: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/36x6dml9_bricks%20falling.mp3',
+  castleVictory: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/zkwrz766_VICTORY%20SOUND%20EFFECT.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -106,6 +110,11 @@ export const SFX = {
   
   // Item purchase
   purchase: () => playSound('attack', 0.4), // Quick confirmation sound
+  
+  // Castle Assault sounds
+  cannonFire: () => playSound('cannonFire', 0.6),
+  bricksFalling: () => playSound('bricksFalling', 0.5),
+  castleVictory: () => playSound('castleVictory', 0.7),
 };
 
 export default useSoundEffects;
