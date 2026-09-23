@@ -1046,6 +1046,151 @@ LEVEL_ARMOR = {
 
 ALL_ITEMS.update(LEVEL_ARMOR)
 
+# ============== LEVEL-BASED ACCESSORIES (20 items across 10 tiers) ==============
+LEVEL_ACCESSORIES = {
+    # --- Tier 1: Level 1-10 (Street Bling) ---
+    "bandana": {
+        "id": "bandana", "name": "Street Bandana",
+        "description": "Gang colors that boost your rep on the streets.",
+        "equipment_type": "accessory", "rarity": "common",
+        "stats_bonus": {"luck": 2, "speed": 1}, "level_requirement": 5, "value": 75
+    },
+    "dog_tags": {
+        "id": "dog_tags", "name": "Dog Tags",
+        "description": "Military surplus tags. A reminder of tougher times.",
+        "equipment_type": "accessory", "rarity": "uncommon",
+        "stats_bonus": {"attack": 2, "defense": 1, "luck": 1}, "level_requirement": 8, "value": 150
+    },
+    
+    # --- Tier 2: Level 11-20 (Street Cred) ---
+    "silver_chain": {
+        "id": "silver_chain", "name": "Silver Chain",
+        "description": "Heavy silver links. Shows you're moving up.",
+        "equipment_type": "accessory", "rarity": "uncommon",
+        "stats_bonus": {"luck": 4, "defense": 2}, "level_requirement": 12, "value": 300
+    },
+    "brass_knuckle_rings": {
+        "id": "brass_knuckle_rings", "name": "Brass Knuckle Rings",
+        "description": "Stylish rings that double as weapons.",
+        "equipment_type": "accessory", "rarity": "rare",
+        "stats_bonus": {"attack": 5, "luck": 2}, "level_requirement": 18, "value": 500
+    },
+    
+    # --- Tier 3: Level 21-30 (Hustler Gear) ---
+    "diamond_earring": {
+        "id": "diamond_earring", "name": "Diamond Earring",
+        "description": "Single diamond stud. Ice cold flex.",
+        "equipment_type": "accessory", "rarity": "rare",
+        "stats_bonus": {"luck": 6, "speed": 2}, "level_requirement": 22, "value": 800
+    },
+    "tactical_gloves": {
+        "id": "tactical_gloves", "name": "Tactical Gloves",
+        "description": "Kevlar-lined combat gloves. Better grip, harder hits.",
+        "equipment_type": "accessory", "rarity": "rare",
+        "stats_bonus": {"attack": 6, "defense": 3, "luck": 2}, "level_requirement": 28, "value": 1100
+    },
+    
+    # --- Tier 4: Level 31-40 (Boss Accessories) ---
+    "platinum_watch": {
+        "id": "platinum_watch", "name": "Platinum Watch",
+        "description": "Swiss timepiece worth more than most cars.",
+        "equipment_type": "accessory", "rarity": "rare",
+        "stats_bonus": {"luck": 8, "defense": 3, "speed": 2}, "level_requirement": 32, "value": 1800
+    },
+    "combat_earpiece": {
+        "id": "combat_earpiece", "name": "Combat Earpiece",
+        "description": "Military-grade communication device. Stay connected.",
+        "equipment_type": "accessory", "rarity": "epic",
+        "stats_bonus": {"attack": 8, "speed": 4, "luck": 3}, "level_requirement": 38, "value": 2500
+    },
+    
+    # --- Tier 5: Level 41-50 (Elite Bling) ---
+    "diamond_grillz": {
+        "id": "diamond_grillz", "name": "Diamond Grillz",
+        "description": "Full set of diamond teeth. Intimidating smile.",
+        "equipment_type": "accessory", "rarity": "epic",
+        "stats_bonus": {"luck": 12, "attack": 5}, "level_requirement": 42, "value": 4000
+    },
+    "tactical_belt": {
+        "id": "tactical_belt", "name": "Tactical Belt",
+        "description": "Military utility belt with hidden compartments.",
+        "equipment_type": "accessory", "rarity": "epic",
+        "stats_bonus": {"defense": 8, "speed": 5, "luck": 4}, "level_requirement": 48, "value": 5500
+    },
+    
+    # --- Tier 6: Level 51-60 (Crime Lord) ---
+    "ruby_pendant": {
+        "id": "ruby_pendant", "name": "Blood Ruby Pendant",
+        "description": "Deep red ruby said to be cursed. Grants power at a price.",
+        "equipment_type": "accessory", "rarity": "epic",
+        "stats_bonus": {"attack": 12, "luck": 8}, "level_requirement": 52, "value": 9000
+    },
+    "titanium_bracelet": {
+        "id": "titanium_bracelet", "name": "Titanium Bracelet",
+        "description": "Aerospace-grade titanium. Light and nearly indestructible.",
+        "equipment_type": "accessory", "rarity": "epic",
+        "stats_bonus": {"defense": 10, "speed": 6, "luck": 6}, "level_requirement": 58, "value": 12000
+    },
+    
+    # --- Tier 7: Level 61-70 (Kingpin) ---
+    "emerald_ring": {
+        "id": "emerald_ring", "name": "Emerald Signet Ring",
+        "description": "Cartel boss signature. Opens doors and closes caskets.",
+        "equipment_type": "accessory", "rarity": "legendary",
+        "stats_bonus": {"attack": 15, "luck": 12, "defense": 5}, "level_requirement": 62, "value": 20000
+    },
+    "exo_gloves": {
+        "id": "exo_gloves", "name": "Exoskeleton Gloves",
+        "description": "Powered gloves that enhance strength tenfold.",
+        "equipment_type": "accessory", "rarity": "legendary",
+        "stats_bonus": {"attack": 18, "speed": 8, "luck": 6}, "level_requirement": 68, "value": 28000
+    },
+    
+    # --- Tier 8: Level 71-80 (Underworld Elite) ---
+    "obsidian_amulet": {
+        "id": "obsidian_amulet", "name": "Obsidian Amulet",
+        "description": "Ancient volcanic glass. Said to absorb enemy attacks.",
+        "equipment_type": "accessory", "rarity": "legendary",
+        "stats_bonus": {"defense": 15, "luck": 15, "attack": 8}, "level_requirement": 72, "value": 45000
+    },
+    "neural_interface": {
+        "id": "neural_interface", "name": "Neural Interface",
+        "description": "Direct brain-computer link. Think faster, react faster.",
+        "equipment_type": "accessory", "rarity": "legendary",
+        "stats_bonus": {"speed": 15, "attack": 12, "luck": 10}, "level_requirement": 78, "value": 60000
+    },
+    
+    # --- Tier 9: Level 81-90 (Shadow Council) ---
+    "void_crystal": {
+        "id": "void_crystal", "name": "Void Crystal Pendant",
+        "description": "Crystal from another dimension. Reality bends around it.",
+        "equipment_type": "accessory", "rarity": "legendary",
+        "stats_bonus": {"luck": 20, "attack": 15, "defense": 10}, "level_requirement": 82, "value": 100000
+    },
+    "quantum_watch": {
+        "id": "quantum_watch", "name": "Quantum Watch",
+        "description": "Experimental timepiece. Lets you see moments ahead.",
+        "equipment_type": "accessory", "rarity": "legendary",
+        "stats_bonus": {"speed": 20, "luck": 18, "defense": 8}, "level_requirement": 88, "value": 140000
+    },
+    
+    # --- Tier 10: Level 91-100 (Mythic) ---
+    "crown_of_shadows": {
+        "id": "crown_of_shadows", "name": "Crown of Shadows",
+        "description": "Worn by the king of the underworld. Absolute authority.",
+        "equipment_type": "accessory", "rarity": "mythic",
+        "stats_bonus": {"luck": 25, "attack": 20, "defense": 15, "speed": 10}, "level_requirement": 92, "value": 250000
+    },
+    "infinity_band": {
+        "id": "infinity_band", "name": "Infinity Band",
+        "description": "A ring containing infinite power. The ultimate accessory.",
+        "equipment_type": "accessory", "rarity": "mythic",
+        "stats_bonus": {"attack": 30, "defense": 20, "speed": 15, "luck": 30}, "level_requirement": 98, "value": 500000
+    },
+}
+
+ALL_ITEMS.update(LEVEL_ACCESSORIES)
+
 # ============== CONSUMABLE SHOP ITEMS ==============
 CONSUMABLE_ITEMS = {
     # --- Health Recharges ---
