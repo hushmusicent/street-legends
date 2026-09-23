@@ -147,11 +147,12 @@ interface LevelConfig {
 const getLevelConfig = (level: number): LevelConfig => {
   const clampedLevel = Math.min(20, Math.max(1, level));
   
-  // Level 1: Most time (60s), faster spawns, shorter visible duration
-  // Level 20: Least time (25s), very fast spawns, very short visible duration
-  const timeLimit = Math.max(25, 60 - (clampedLevel - 1) * 1.85);
-  const spawnInterval = Math.max(250, 800 - (clampedLevel - 1) * 30); // Faster spawns (was 1500-400)
-  const visibleDuration = Math.max(600, 1800 - (clampedLevel - 1) * 60); // Shorter duration (was 2500-800)
+  // INTENSIFIED SETTINGS:
+  // Level 1: 30s (was 60s), faster spawns, shorter visible duration
+  // Level 20: 15s (was 25s), very fast spawns, very short visible duration
+  const timeLimit = Math.max(15, 30 - (clampedLevel - 1) * 0.8); // 30s -> 15s (was 60s -> 25s)
+  const spawnInterval = Math.max(180, 600 - (clampedLevel - 1) * 22); // Faster spawns (180-600ms, was 250-800ms)
+  const visibleDuration = Math.max(400, 1200 - (clampedLevel - 1) * 40); // Much shorter visibility (400-1200ms, was 600-1800ms)
   const maxSimultaneous = Math.min(6, 3 + Math.floor(clampedLevel / 4)); // More simultaneous targets
   const hitReward = 5 + clampedLevel * 2;
   const xpPerHit = 2 + Math.floor(clampedLevel / 2);
@@ -270,9 +271,9 @@ export default function ShootoutSimulatorScreen() {
       const spriteKeys = Object.keys(CHARACTER_SPRITES) as (keyof typeof CHARACTER_SPRITES)[];
       const spriteKey = spriteKeys[Math.floor(Math.random() * spriteKeys.length)];
 
-      // Movement range based on spot type
-      const moveRangeX = spot.type === 'street' ? 40 : (spot.type === 'car' ? 30 : 25);
-      const moveRangeY = spot.type === 'rooftop' ? 20 : (spot.type === 'window' ? 15 : 25);
+      // Movement range based on spot type - INCREASED for harder gameplay
+      const moveRangeX = spot.type === 'street' ? 55 : (spot.type === 'car' ? 45 : 35); // Increased from 40/30/25
+      const moveRangeY = spot.type === 'rooftop' ? 30 : (spot.type === 'window' ? 25 : 35); // Increased from 20/15/25
 
       const newPopup: GangMemberPopup = {
         id: ++popupIdRef.current,
@@ -301,7 +302,7 @@ export default function ShootoutSimulatorScreen() {
       ]).start();
 
       // Create continuous side-to-side and up-down movement
-      const movementDuration = 300 + Math.random() * 200; // Fast movement (300-500ms per cycle)
+      const movementDuration = 150 + Math.random() * 100; // MUCH faster movement (150-250ms per cycle, was 300-500ms)
       const randomStartX = Math.random() > 0.5 ? moveRangeX : -moveRangeX;
       const randomStartY = Math.random() > 0.5 ? moveRangeY : -moveRangeY;
       
