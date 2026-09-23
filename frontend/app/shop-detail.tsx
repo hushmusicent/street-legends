@@ -88,7 +88,34 @@ interface ShopSkill {
   heal_percent?: number;
   defense_buff?: number;
   item_type: string;
+  icon_url?: string;
 }
+
+// Custom Skill Icon Component
+const SkillIcon = ({ 
+  skill, 
+  size = 26, 
+  color 
+}: { 
+  skill: { icon_url?: string }; 
+  size?: number; 
+  color: string;
+}) => {
+  const [imageError, setImageError] = React.useState(false);
+  
+  if (skill.icon_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: skill.icon_url }}
+        style={{ width: size + 8, height: size + 8 }}
+        resizeMode="contain"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  
+  return <Ionicons name="flash" size={size} color={color} />;
+};
 
 export default function ShopDetailScreen() {
   const { shopData } = useLocalSearchParams<{ shopData: string }>();
@@ -227,7 +254,7 @@ export default function ShopDetailScreen() {
               return (
                 <View key={`skill-${skill.id}-${idx}`} style={[styles.itemCard, { borderLeftColor: '#9c27b0', borderLeftWidth: 3 }]}>
                   <View style={[styles.itemIcon, { backgroundColor: 'rgba(156,39,176,0.15)' }]}>
-                    <Ionicons name="flash" size={24} color="#9c27b0" />
+                    <SkillIcon skill={skill} size={24} color="#9c27b0" />
                   </View>
 
                   <View style={styles.itemInfo}>

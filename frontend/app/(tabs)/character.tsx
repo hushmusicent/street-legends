@@ -139,6 +139,32 @@ const ItemIcon = ({
   );
 };
 
+// Skill Icon Component - uses icon_url from API
+const SkillIcon = ({ 
+  skill, 
+  size = 22, 
+  color 
+}: { 
+  skill: { icon_url?: string; id?: string }; 
+  size?: number; 
+  color: string;
+}) => {
+  const [imageError, setImageError] = React.useState(false);
+  
+  if (skill.icon_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: skill.icon_url }}
+        style={{ width: size + 8, height: size + 8 }}
+        resizeMode="contain"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  
+  return <Ionicons name="flash" size={size} color={color} />;
+};
+
 export default function CharacterScreen() {
   const { player, playerId, setPlayer, clearPlayer } = useGameStore();
   const setGlobalProfilePic = useGameStore(s => s.setProfilePic);
@@ -1443,11 +1469,7 @@ function SkillsTab({
       {equippedList.map((skill: any) => (
         <View key={skill.id} style={[styles.skillRow, { borderLeftColor: classColor, borderLeftWidth: 3 }]}>
           <View style={[styles.skillIconWrap, { backgroundColor: `${classColor}20` }]}>
-            <Ionicons
-              name={SKILL_ICONS[skill.id] || 'flash'}
-              size={24}
-              color={classColor}
-            />
+            <SkillIcon skill={skill} size={24} color={classColor} />
           </View>
           <View style={styles.skillInfo}>
             <Text style={styles.skillName}>{skill.name}</Text>
@@ -1483,11 +1505,7 @@ function SkillsTab({
           {ownedNotEquipped.map((skill: any) => (
             <View key={skill.id} style={[styles.skillRow, { borderLeftColor: '#4caf50', borderLeftWidth: 3 }]}>
               <View style={[styles.skillIconWrap, { backgroundColor: 'rgba(76,175,80,0.2)' }]}>
-                <Ionicons
-                  name={SKILL_ICONS[skill.id] || 'flash'}
-                  size={24}
-                  color="#4caf50"
-                />
+                <SkillIcon skill={skill} size={24} color="#4caf50" />
               </View>
               <View style={styles.skillInfo}>
                 <Text style={styles.skillName}>{skill.name}</Text>
