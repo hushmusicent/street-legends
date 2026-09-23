@@ -22,7 +22,7 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 import secrets
-from item_icons import ITEM_ICON_URLS, CONSUMABLE_ICON_URLS, SKILL_ICON_URLS
+from item_icons import ITEM_ICON_URLS, CONSUMABLE_ICON_URLS, SKILL_ICON_URLS, ACCESSORY_ICON_URLS
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -1190,6 +1190,14 @@ LEVEL_ACCESSORIES = {
 }
 
 ALL_ITEMS.update(LEVEL_ACCESSORIES)
+
+# Apply icons to accessories
+for acc_id, acc_data in LEVEL_ACCESSORIES.items():
+    if acc_id in ACCESSORY_ICON_URLS:
+        acc_data["icon_url"] = ACCESSORY_ICON_URLS[acc_id]
+        # Also update ALL_ITEMS
+        if acc_id in ALL_ITEMS:
+            ALL_ITEMS[acc_id]["icon_url"] = ACCESSORY_ICON_URLS[acc_id]
 
 # ============== CONSUMABLE SHOP ITEMS ==============
 CONSUMABLE_ITEMS = {

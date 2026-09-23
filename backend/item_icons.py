@@ -249,6 +249,49 @@ ITEM_ICON_URLS = {
     "godplate": f"{BASE_URL}/32tbrp51_godplate_cutout.png",
 }
 
+# ============== ACCESSORY ICON URLS ==============
+ACCESSORY_ICON_URLS = {
+    # Tier 1: Level 1-10 (Street Bling)
+    "bandana": f"{BASE_URL}/khifgmv0_street_bandana_detailed.png",
+    "dog_tags": f"{BASE_URL}/euhh776n_dog_tags_cutout.png",
+    
+    # Tier 2: Level 11-20 (Street Cred)
+    "silver_chain": f"{BASE_URL}/ae9kba7i_silver_chain_cutout.png",
+    "brass_knuckle_rings": f"{BASE_URL}/jbtc3oaq_brass_knuckle_rings_cutout.png",
+    
+    # Tier 3: Level 21-30 (Hustler Gear)
+    "diamond_earring": f"{BASE_URL}/oi9w9ihq_diamond_earring_cutout.png",
+    "tactical_gloves": f"{BASE_URL}/xrvgk6h1_tactical_gloves_cutout.png",
+    
+    # Tier 4: Level 31-40 (Boss Accessories)
+    "platinum_watch": f"{BASE_URL}/pgk26j0v_platinum_watch_cutout.png",
+    "combat_earpiece": f"{BASE_URL}/pv5cgiqb_combat_earpiece_cutout.png",
+    
+    # Tier 5: Level 41-50 (Elite Bling)
+    "diamond_grillz": f"{BASE_URL}/w2d5bl6v_diamond_grillz_cutout.png",
+    "tactical_belt": f"{BASE_URL}/uujpaikv_tactical_belt_cutout.png",
+    
+    # Tier 6: Level 51-60 (Crime Lord)
+    # "ruby_pendant": - needs icon upload
+    "titanium_bracelet": f"{BASE_URL}/lpt4y6yo_titanium_bracelet_cutout.png",
+    
+    # Tier 7: Level 61-70 (Kingpin)
+    "emerald_ring": f"{BASE_URL}/eim3hsh9_emerald_signet_ring_cutout.png",
+    "exo_gloves": f"{BASE_URL}/1o49aaje_exoskeleton_gloves_cutout.png",
+    
+    # Tier 8: Level 71-80 (Underworld Elite)
+    "obsidian_amulet": f"{BASE_URL}/n3kdm49k_obsidian_amulet_cutout.png",
+    "neural_interface": f"{BASE_URL}/fop2cnco_neural_interface_cutout.png",
+    
+    # Tier 9: Level 81-90 (Shadow Council)
+    "void_crystal": f"{BASE_URL}/w4ergqop_void_crystal_pendant_cutout.png",
+    "quantum_watch": f"{BASE_URL}/wentv1z0_quantum_watch_cutout.png",
+    
+    # Tier 10: Level 91-100 (Mythic)
+    "crown_of_shadows": f"{BASE_URL}/rmd07u6n_crown_of_shadows_cutout.png",
+    "infinity_band": f"{BASE_URL}/vsr2yo47_infinity_band_exciting_cutout.png",
+}
+
 # ============== SKILL ICON URLS ==============
 SKILL_ICON_URLS = {
     # Starter Skills (Level 1)
@@ -351,11 +394,15 @@ CONSUMABLE_ICON_URLS = {
 
 def get_item_icon_url(item_id: str) -> str | None:
     """Get the icon URL for an item by its ID."""
-    return ITEM_ICON_URLS.get(item_id) or CONSUMABLE_ICON_URLS.get(item_id) or SKILL_ICON_URLS.get(item_id)
+    return ITEM_ICON_URLS.get(item_id) or CONSUMABLE_ICON_URLS.get(item_id) or SKILL_ICON_URLS.get(item_id) or ACCESSORY_ICON_URLS.get(item_id)
 
 def get_skill_icon_url(skill_id: str) -> str | None:
     """Get the icon URL for a skill by its ID."""
     return SKILL_ICON_URLS.get(skill_id)
+
+def get_accessory_icon_url(accessory_id: str) -> str | None:
+    """Get the icon URL for an accessory by its ID."""
+    return ACCESSORY_ICON_URLS.get(accessory_id)
 
 def apply_icons_to_items(items_dict: dict) -> dict:
     """Apply icon URLs to all items in a dictionary."""
