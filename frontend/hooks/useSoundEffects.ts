@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 import { useGameStore } from '../stores/gameStore';
-import { createAudioPlayer } from 'expo-audio';
+import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 
 // Sound effect URLs - All custom uploaded sounds
 const SOUND_URLS = {
@@ -32,7 +32,65 @@ const SOUND_URLS = {
 
 export type SoundEffect = keyof typeof SOUND_URLS;
 
-// Global sound player function (works on web and native)
+// Sound management - track active players to prevent overlapping
+const activePlayers: Map<string, AudioPlayer> = new Map();
+const activeWebAudio: Map<string, HTMLAudioElement> = new Map();
+const lastPlayTime: Map<string, number> = new Map();
+const MIN_REPLAY_INTERVAL = 500; // Minimum ms between same sound plays
+
+// Stop a specific sound if it's playing
+const stopSound = (key: string) => {
+  // Stop native player
+  const player = activePlayers.get(key);
+  if (player) {
+    try {
+      player.pause();
+      player.release();
+    } catch {
+      // Ignore errors
+    }
+    activePlayers.delete(key);
+  }
+  
+  // Stop web audio
+  const webAudio = activeWebAudio.get(key);
+  if (webAudio) {
+    try {
+      webAudio.pause();
+      webAudio.currentTime = 0;
+    } catch {
+      // Ignore errors
+    }
+    activeWebAudio.delete(key);
+  }
+};
+
+// Stop all currently playing sounds
+export const stopAllSounds = () => {
+  // Stop all native players
+  activePlayers.forEach((player, key) => {
+    try {
+      player.pause();
+      player.release();
+    } catch {
+      // Ignore errors
+    }
+  });
+  activePlayers.clear();
+  
+  // Stop all web audio
+  activeWebAudio.forEach((audio, key) => {
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // Ignore errors
+    }
+  });
+  activeWebAudio.clear();
+};
+
+// Global sound player function (works on web and native) - with overlap prevention
 export const playSound = async (key: SoundEffect, volume: number = 0.5) => {
   const url = SOUND_URLS[key];
   if (!url) {
@@ -40,37 +98,61 @@ export const playSound = async (key: SoundEffect, volume: number = 0.5) => {
     return;
   }
 
+  // Prevent rapid-fire duplicate plays of the same sound
+  const now = Date.now();
+  const lastTime = lastPlayTime.get(key) || 0;
+  if (now - lastTime < MIN_REPLAY_INTERVAL) {
+    return; // Skip - too soon to replay this sound
+  }
+  lastPlayTime.set(key, now);
+
+  // Stop any currently playing instance of this sound
+  stopSound(key);
+
   if (Platform.OS === 'web') {
     // Use Web Audio API for web
     try {
       const audio = new window.Audio(url);
       audio.volume = volume;
+      activeWebAudio.set(key, audio);
+      
+      // Clean up when done
+      audio.onended = () => {
+        activeWebAudio.delete(key);
+      };
+      
       await audio.play();
     } catch (err) {
       console.log(`Web audio failed for ${key}:`, err);
+      activeWebAudio.delete(key);
     }
     return;
   }
   
   // For native, use expo-audio's createAudioPlayer
   try {
-    // Create a new player for each sound effect (short sounds)
     const player = createAudioPlayer({ uri: url });
     player.volume = volume;
+    activePlayers.set(key, player);
     
     // Play the sound
     player.play();
     
-    // Clean up after playback completes (estimate based on short SFX duration)
+    // Clean up after playback completes
     setTimeout(() => {
       try {
-        player.release();
+        const currentPlayer = activePlayers.get(key);
+        if (currentPlayer === player) {
+          player.release();
+          activePlayers.delete(key);
+        }
       } catch {
         // Ignore cleanup errors
       }
     }, 5000);
   } catch (err) {
     console.log(`Failed to play sound ${key}:`, err);
+    activePlayers.delete(key);
   }
 };
 

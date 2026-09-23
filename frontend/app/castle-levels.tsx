@@ -176,6 +176,7 @@ export default function CastleLevelsScreen() {
   const structureHitRef = useRef(false); // Track if any block has been hit
   const tntExplosionsRef = useRef<{ x: number; y: number }[]>([]); // Track TNT explosions for enemy damage
   const bricksSoundPlayedRef = useRef(false); // Track if bricks falling sound has been played this shot
+  const gameEndSoundPlayedRef = useRef(false); // Track if victory/defeat sound has been played
 
   // Load progress on mount
   useEffect(() => {
@@ -268,6 +269,7 @@ export default function CastleLevelsScreen() {
     structureHitRef.current = false; // Reset - no blocks hit yet
     tntExplosionsRef.current = []; // Reset TNT explosions
     bricksSoundPlayedRef.current = false; // Reset bricks sound flag
+    gameEndSoundPlayedRef.current = false; // Reset game end sound flag
   }, []);
 
   const startLevel = (level: number) => {
@@ -451,8 +453,11 @@ export default function CastleLevelsScreen() {
         const eliminatedCount = enemies.length - remainingEnemies;
         
         if (remainingEnemies === 0) {
-          // Play victory sound when player wins!
-          SFX.castleVictory();
+          // Play victory sound only once when player wins!
+          if (!gameEndSoundPlayedRef.current) {
+            gameEndSoundPlayedRef.current = true;
+            SFX.castleVictory();
+          }
           
           setWon(true);
           setGameOver(true);
@@ -465,8 +470,11 @@ export default function CastleLevelsScreen() {
             setShowResults(true);
           }
         } else if (shotsRemaining <= 0) {
-          // Play defeat sound when player loses
-          SFX.castleDefeat();
+          // Play defeat sound only once when player loses
+          if (!gameEndSoundPlayedRef.current) {
+            gameEndSoundPlayedRef.current = true;
+            SFX.castleDefeat();
+          }
           
           setWon(false);
           setGameOver(true);
