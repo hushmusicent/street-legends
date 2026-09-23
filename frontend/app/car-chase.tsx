@@ -16,6 +16,7 @@ import { useGameStore } from '../stores/gameStore';
 import { startCarChase, completeCarChase } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
+import { SFX } from '../hooks/useSoundEffects';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -358,6 +359,11 @@ export default function CarChaseGame() {
   }, [gameState.isGameOver]);
 
   const handleGameOver = async () => {
+    // Play crash sound if player lost (crashed)
+    if (!gameState.won) {
+      SFX.carCrash();
+    }
+    
     // Calculate time played
     const timePlayedSeconds = (Date.now() - gameStartTimeRef.current) / 1000;
     
@@ -429,6 +435,9 @@ export default function CarChaseGame() {
 
   const changeLane = useCallback((direction: 'left' | 'right') => {
     if (gameState.isGameOver) return;
+    
+    // Play lane change sound
+    SFX.carLaneChange();
     
     setGameState(prev => {
       const newLane = direction === 'left' 

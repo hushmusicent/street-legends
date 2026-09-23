@@ -24,6 +24,9 @@ const SOUND_URLS = {
   bricksFalling: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/36x6dml9_bricks%20falling.mp3',
   castleVictory: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/zkwrz766_VICTORY%20SOUND%20EFFECT.mp3',
   castleDefeat: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/0mth4hdh_Losing%20Horn.mp3',
+  // Car Chase sounds
+  carLaneChange: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/veedg69g_CAR%20DRIVE%20WOOSH.mp3',
+  carCrash: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/jg87kb0f_Loud%20Crash.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -117,6 +120,10 @@ export const SFX = {
   bricksFalling: () => playSound('bricksFalling', 0.5),
   castleVictory: () => playSound('castleVictory', 0.7),
   castleDefeat: () => playSound('castleDefeat', 0.6),
+  
+  // Car Chase sounds
+  carLaneChange: () => playSound('carLaneChange', 0.5),
+  carCrash: () => playSound('carCrash', 0.7),
 };
 
 export default useSoundEffects;
