@@ -27,6 +27,7 @@ const SOUND_URLS = {
   // Car Chase sounds
   carLaneChange: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/veedg69g_CAR%20DRIVE%20WOOSH.mp3',
   carCrash: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/jg87kb0f_Loud%20Crash.mp3',
+  carChaseWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/sua27nmi_car%20chase%20win.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -124,6 +125,7 @@ export const SFX = {
   // Car Chase sounds
   carLaneChange: () => playSound('carLaneChange', 0.5),
   carCrash: () => playSound('carCrash', 0.7),
+  carChaseWin: () => playSound('carChaseWin', 0.7),
 };
 
 export default useSoundEffects;

@@ -359,8 +359,10 @@ export default function CarChaseGame() {
   }, [gameState.isGameOver]);
 
   const handleGameOver = async () => {
-    // Play crash sound if player lost (crashed)
-    if (!gameState.won) {
+    // Play appropriate sound based on win/loss
+    if (gameState.won) {
+      SFX.carChaseWin();
+    } else {
       SFX.carCrash();
     }
     
