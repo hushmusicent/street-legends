@@ -23,6 +23,7 @@ const SOUND_URLS = {
   cannonFire: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/fpxr5y5r_CANNON%20SOUND%20EFFECT.mp3',
   bricksFalling: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/36x6dml9_bricks%20falling.mp3',
   castleVictory: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/zkwrz766_VICTORY%20SOUND%20EFFECT.mp3',
+  castleDefeat: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/0mth4hdh_Losing%20Horn.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -115,6 +116,7 @@ export const SFX = {
   cannonFire: () => playSound('cannonFire', 0.6),
   bricksFalling: () => playSound('bricksFalling', 0.5),
   castleVictory: () => playSound('castleVictory', 0.7),
+  castleDefeat: () => playSound('castleDefeat', 0.6),
 };
 
 export default useSoundEffects;

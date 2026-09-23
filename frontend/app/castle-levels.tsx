@@ -465,6 +465,9 @@ export default function CastleLevelsScreen() {
             setShowResults(true);
           }
         } else if (shotsRemaining <= 0) {
+          // Play defeat sound when player loses
+          SFX.castleDefeat();
+          
           setWon(false);
           setGameOver(true);
           
