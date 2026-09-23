@@ -96,6 +96,13 @@ export default function BattleScreen() {
       }
 
       if (result.status !== 'active') {
+        // Play victory or defeat sound
+        if (result.status === 'won') {
+          SFX.victory();
+        } else if (result.status === 'lost') {
+          SFX.defeat();
+        }
+        
         if (playerId) {
           const playerData = await getPlayer(playerId);
           setPlayer(playerData);
@@ -123,7 +130,7 @@ export default function BattleScreen() {
         }
       }
     } catch (error: any) {
-      SFX.error();
+      SFX.miss(); // Play miss sound on error
       Alert.alert('Error', error?.response?.data?.detail || 'Action failed');
     } finally {
       setActionLoading(false);

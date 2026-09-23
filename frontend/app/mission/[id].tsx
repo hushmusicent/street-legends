@@ -16,6 +16,7 @@ import { completeMission, getPlayer, getActiveMissions } from '../../services/ap
 import api from '../../services/api';
 import { GameButton } from '../../components/GameButton';
 import { Mission } from '../../types/game';
+import { SFX } from '../../hooks/useSoundEffects';
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   easy: '#27ae60',
@@ -49,6 +50,13 @@ export default function MissionScreen() {
         setTarget(found.goal_target || 0);
         setAccepted(!!found.accepted_by);
         setLoading(false);
+        
+        // Play mission type sound when opening mission
+        if (found.mission_type === 'bounty') {
+          SFX.bountyMission();
+        } else {
+          SFX.phoneMission();
+        }
         return;
       }
 
@@ -63,6 +71,13 @@ export default function MissionScreen() {
             setProgress(active.goal_progress || 0);
             setTarget(active.goal_target || 0);
             setAccepted(!!active.accepted_by);
+            
+            // Play mission type sound
+            if (active.mission_type === 'bounty') {
+              SFX.bountyMission();
+            } else {
+              SFX.phoneMission();
+            }
           }
         } catch (err) {
           console.error('Failed to fetch active missions:', err);
@@ -95,6 +110,10 @@ export default function MissionScreen() {
       setRewards(result.rewards);
       setLevelUp(result.level_up);
       setCompleted(true);
+      
+      // Play mission complete sound
+      SFX.missionComplete();
+      
       const updatedPlayer = await getPlayer(playerId);
       setPlayer(updatedPlayer);
     } catch (err: any) {

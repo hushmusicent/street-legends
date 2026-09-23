@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { buyFromShop, getPlayer, buySkill } from '../services/api';
+import { SFX } from '../hooks/useSoundEffects';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -133,6 +134,20 @@ export default function ShopDetailScreen() {
   const stock: ShopItem[] = shop.stock || [];
   const skillsForSale: ShopSkill[] = shop.skills_for_sale || [];
 
+  // Play shop ambient sound when entering based on shop type
+  useEffect(() => {
+    if (!shop?.name) return;
+    
+    const shopNameLower = (shop.name || '').toLowerCase();
+    if (shopNameLower.includes('gun') || shopNameLower.includes('weapon') || shopNameLower.includes('armory')) {
+      SFX.gunShop();
+    } else if (shopNameLower.includes('club') || shopNameLower.includes('bar') || shopNameLower.includes('lounge')) {
+      SFX.nightclub();
+    } else if (shopNameLower.includes('restaurant') || shopNameLower.includes('diner') || shopNameLower.includes('food')) {
+      SFX.restaurant();
+    }
+  }, [shop?.name]);
+
   const handleBuy = async (item: ShopItem) => {
     if (!playerId || !player) return;
 
@@ -151,6 +166,7 @@ export default function ShopDetailScreen() {
             await buyFromShop(playerId, item.id, item.shop_price);
             const p = await getPlayer(playerId);
             setPlayer(p);
+            SFX.purchase(); // Play purchase sound
             Alert.alert('Purchased!', `${item.name} added to your inventory!`);
           } catch (error: any) {
             Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
@@ -180,6 +196,7 @@ export default function ShopDetailScreen() {
             await buySkill(playerId, skill.id);
             const p = await getPlayer(playerId);
             setPlayer(p);
+            SFX.purchase(); // Play purchase sound
             Alert.alert('Skill Purchased!', `${skill.name} learned! Go to Character > Skills to equip it.`);
           } catch (error: any) {
             Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
