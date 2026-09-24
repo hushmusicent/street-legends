@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SFX } from '../hooks/useSoundEffects';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -207,6 +208,9 @@ export default function CasinoScreen() {
     setSlotSpinning(true);
     setSlotResult(null);
 
+    // Play slot machine spin sound
+    SFX.slotSpin();
+
     // Start spinning animation - use shorter interval
     spinIntervalRef.current = setInterval(() => {
       setSlotReels([getRandomSymbol(), getRandomSymbol(), getRandomSymbol()]);
@@ -248,6 +252,12 @@ export default function CasinoScreen() {
         setSlotReels(finalReels);
         setSlotResult(data);
         setSlotSpinning(false);
+        
+        // Play win sound if player won money
+        if (data.win && data.win > 0) {
+          SFX.slotWin();
+        }
+        
         refreshPlayer();
       }, 1500);
 

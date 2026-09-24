@@ -39,6 +39,9 @@ const SOUND_URLS = {
   // Shootout sounds
   shootoutHit: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/uchk7hjg_M4%20l%20SOUND%20EFFECT.mp3',
   shootoutWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/krpktg9r_Gun%20Reload%20Sound%20Effect-%28HD%29.mp3',
+  // Slot Machine sounds
+  slotSpin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/uk0c38gw_Slot%20Machine%20Mechanism.mp3',
+  slotWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/ymt98bd2_MONEY%20%28KA%20CHING%29%20%F0%9F%A4%91%20SOUND%20EFFECT%20HD%20%28NO%20COPYRIGHT%29.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -233,6 +236,10 @@ export const SFX = {
   // Shootout sounds
   shootoutHit: () => playSound('shootoutHit', 0.5),
   shootoutWin: () => playSound('shootoutWin', 0.6),
+  
+  // Slot Machine sounds
+  slotSpin: () => playSound('slotSpin', 0.5),
+  slotWin: () => playSound('slotWin', 0.6),
 };
 
 export default useSoundEffects;
