@@ -28,6 +28,10 @@ const SOUND_URLS = {
   carLaneChange: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/veedg69g_CAR%20DRIVE%20WOOSH.mp3',
   carCrash: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/jg87kb0f_Loud%20Crash.mp3',
   carChaseWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/sua27nmi_car%20chase%20win.mp3',
+  // Runaway Simulator sounds
+  runawayJump: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/5l89uxw4_jumping%20sound%20effect.mp3',
+  runawayWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/4etbuc6c_Winning%20Cartoon%20Running.mp3',
+  runawayLose: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/0vm7i396_Police%20Radio%20Beep.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -208,6 +212,11 @@ export const SFX = {
   carLaneChange: () => playSound('carLaneChange', 0.5),
   carCrash: () => playSound('carCrash', 0.7),
   carChaseWin: () => playSound('carChaseWin', 0.7),
+  
+  // Runaway Simulator sounds
+  runawayJump: () => playSound('runawayJump', 0.5),
+  runawayWin: () => playSound('runawayWin', 0.7),
+  runawayLose: () => playSound('runawayLose', 0.6),
 };
 
 export default useSoundEffects;

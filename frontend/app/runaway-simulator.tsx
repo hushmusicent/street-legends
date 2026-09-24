@@ -15,6 +15,7 @@ import { useGameStore } from '../stores/gameStore';
 import { startRunaway, completeRunaway } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
+import { SFX } from '../hooks/useSoundEffects';
 import {
   useRunawayGame,
   GAME_WIDTH,
@@ -90,7 +91,13 @@ export default function RunawaySimulator() {
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [gameRewards, setGameRewards] = useState<GameRewards | null>(null);
   
-  const { gameState, levelConfig, startGame, jump, duck, stopDucking, progressPercent } = useRunawayGame(difficulty);
+  const { gameState, levelConfig, startGame, jump: originalJump, duck, stopDucking, progressPercent } = useRunawayGame(difficulty);
+  
+  // Wrapper for jump that plays sound
+  const jump = () => {
+    SFX.runawayJump();
+    originalJump();
+  };
   
   const rewardAnimValues = useRef({
     cash: new Animated.Value(0),
@@ -151,6 +158,13 @@ export default function RunawaySimulator() {
   }, [gameState.isGameOver]);
   
   const handleGameOver = async () => {
+    // Play win or lose sound
+    if (gameState.won) {
+      SFX.runawayWin();
+    } else {
+      SFX.runawayLose();
+    }
+    
     const rewards = calculateRewards(difficulty, gameState.won);
     setGameRewards(rewards);
     setShowResultsModal(true);
