@@ -46,6 +46,10 @@ const SOUND_URLS = {
   bjDeal: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/m66xz0xw_Card%20shuffle%20sound%20effect.mp3',
   bjHitStand: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/1ljc7aua_Card%20Game%20-%20Sound%20Effect%20for%20editing.mp3',
   bjWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/ymjbwj6h_Black%20jack%20win.mp3',
+  // Roulette sounds
+  rouletteSpin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/1p0t0toq_Game%20Wheel%20Spin%20Sound%20Effect.mp3',
+  rouletteChip: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/zjeoj8lo_poker%20chips%20x2%20drop%20onto%20pile%20on%20wooden%20felt%20table%20sound%20effect.mp3',
+  rouletteWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/30i73h0n_WIN%20sound%20effect%20no%20copyright.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -249,6 +253,11 @@ export const SFX = {
   bjDeal: () => playSound('bjDeal', 0.5),
   bjHitStand: () => playSound('bjHitStand', 0.5),
   bjWin: () => playSound('bjWin', 0.6),
+  
+  // Roulette sounds
+  rouletteSpin: () => playSound('rouletteSpin', 0.5),
+  rouletteChip: () => playSound('rouletteChip', 0.4),
+  rouletteWin: () => playSound('rouletteWin', 0.6),
 };
 
 export default useSoundEffects;

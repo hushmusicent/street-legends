@@ -132,6 +132,10 @@ export default function CasinoScreen() {
       Alert.alert('Not Enough Cash', `You need $${totalAfterBet} total. You have $${player?.cash || 0}`);
       return;
     }
+    
+    // Play chip drop sound when placing bet
+    SFX.rouletteChip();
+    
     setPlacedBets(prev => ({
       ...prev,
       [betType]: (prev[betType] || 0) + selectedChip
@@ -433,6 +437,9 @@ export default function CasinoScreen() {
     setRouletteSpinning(true);
     setRouletteResult(null);
 
+    // Play wheel spin sound
+    SFX.rouletteSpin();
+
     // Start wheel animation
     let rotation = wheelRotation;
     let speed = 30;
@@ -476,6 +483,11 @@ export default function CasinoScreen() {
         setRouletteResult(data);
         setRouletteSpinning(false);
         refreshPlayer();
+        
+        // Play win sound if player won money
+        if (data.winnings && data.winnings > 0) {
+          SFX.rouletteWin();
+        }
         
         // Clear bets after showing result
         setTimeout(() => {
