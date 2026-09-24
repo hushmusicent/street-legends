@@ -32,6 +32,13 @@ const SOUND_URLS = {
   runawayJump: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/5l89uxw4_jumping%20sound%20effect.mp3',
   runawayWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/4etbuc6c_Winning%20Cartoon%20Running.mp3',
   runawayLose: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/0vm7i396_Police%20Radio%20Beep.mp3',
+  // Package Grab sounds
+  packageCollect: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/ct1enn2u_Mario%20Coin%20Sound%20-%20Sound%20Effect%20%28HD%29.mp3',
+  packageWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/uvboqgsi_Semi-Truck%20Horn%20Passing%20By%20Sound%20Effect.mp3',
+  packageLose: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/7xmlnw6n_Police%20-%20Sound%20Effect%20%28HD%29.mp3',
+  // Shootout sounds
+  shootoutHit: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/uchk7hjg_M4%20l%20SOUND%20EFFECT.mp3',
+  shootoutWin: 'https://customer-assets-jt897jd0.emergentagent.net/job_2c85d534-e12b-4e94-a416-c23d686f8184/artifacts/krpktg9r_Gun%20Reload%20Sound%20Effect-%28HD%29.mp3',
 };
 
 export type SoundEffect = keyof typeof SOUND_URLS;
@@ -217,6 +224,15 @@ export const SFX = {
   runawayJump: () => playSound('runawayJump', 0.5),
   runawayWin: () => playSound('runawayWin', 0.7),
   runawayLose: () => playSound('runawayLose', 0.6),
+  
+  // Package Grab sounds
+  packageCollect: () => playSound('packageCollect', 0.5),
+  packageWin: () => playSound('packageWin', 0.7),
+  packageLose: () => playSound('packageLose', 0.6),
+  
+  // Shootout sounds
+  shootoutHit: () => playSound('shootoutHit', 0.5),
+  shootoutWin: () => playSound('shootoutWin', 0.6),
 };
 
 export default useSoundEffects;

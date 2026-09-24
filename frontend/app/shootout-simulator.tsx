@@ -17,6 +17,7 @@ import { useGameStore } from '../stores/gameStore';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
 import { startShootout as apiStartShootout, completeShootout as apiCompleteShootout, getPlayer } from '../services/api';
+import { SFX } from '../hooks/useSoundEffects';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -421,6 +422,9 @@ export default function ShootoutSimulatorScreen() {
   const handleTap = useCallback((popup: GangMemberPopup, spot: HideSpot) => {
     if (popup.isHit || gameOver) return;
 
+    // Play M4 gunshot sound on hit
+    SFX.shootoutHit();
+
     // Stop movement animation immediately
     if (popup.movementAnimation) {
       popup.movementAnimation.stop();
@@ -561,6 +565,11 @@ export default function ShootoutSimulatorScreen() {
 
     // Use ref value to get current hits (avoids stale closure issue)
     const currentHits = hitsRef.current;
+    
+    // Play win sound if player got any hits
+    if (currentHits > 0) {
+      SFX.shootoutWin();
+    }
     
     // Calculate rewards locally for display
     const gameRewards = calculateRewards(currentHits, level);

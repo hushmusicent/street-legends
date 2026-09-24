@@ -15,6 +15,7 @@ import { useGameStore } from '../stores/gameStore';
 import { startPackageGrab, completePackageGrab } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
+import { SFX } from '../hooks/useSoundEffects';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -356,6 +357,7 @@ export default function PackageGrabGame() {
               // Collect box!
               item.collected = true;
               newBoxesCollected++;
+              SFX.packageCollect(); // Play coin sound when collecting package
             }
           }
         }
@@ -397,6 +399,13 @@ export default function PackageGrabGame() {
   }, [gameState.isGameOver]);
 
   const handleGameOver = async () => {
+    // Play win or lose sound
+    if (gameState.won) {
+      SFX.packageWin();
+    } else {
+      SFX.packageLose();
+    }
+    
     const rewards = calculateRewards(
       gameState.boxesCollected,
       difficulty,
