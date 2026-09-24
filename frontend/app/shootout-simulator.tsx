@@ -235,9 +235,15 @@ export default function ShootoutSimulatorScreen() {
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const popupIdRef = useRef(0);
   const hitEffectIdRef = useRef(0);
+  const hitsRef = useRef(0); // Track current hits for use in callbacks
 
   // Background colors for current level
   const bgColors = CITY_BACKGROUNDS[level] || CITY_BACKGROUNDS[1];
+
+  // Keep hitsRef in sync with hits state
+  useEffect(() => {
+    hitsRef.current = hits;
+  }, [hits]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -553,14 +559,17 @@ export default function ShootoutSimulatorScreen() {
       if (popup.hideTimeout) clearTimeout(popup.hideTimeout);
     });
 
+    // Use ref value to get current hits (avoids stale closure issue)
+    const currentHits = hitsRef.current;
+    
     // Calculate rewards locally for display
-    const gameRewards = calculateRewards(hits, level);
+    const gameRewards = calculateRewards(currentHits, level);
     setRewards(gameRewards);
 
     // Complete on backend and get real rewards
     if (gameId && playerId) {
       try {
-        const result = await apiCompleteShootout(gameId, hits, isStandalone);
+        const result = await apiCompleteShootout(gameId, currentHits, isStandalone);
         
         // Update rewards from backend response if available
         if (result.rewards) {
@@ -597,7 +606,7 @@ export default function ShootoutSimulatorScreen() {
     setTimeout(() => {
       setShowResults(true);
     }, 500);
-  }, [hits, level, isStandalone, playerId, gameId, setPlayer, invalidateMapQueries, activePopups]);
+  }, [level, isStandalone, playerId, gameId, setPlayer, invalidateMapQueries, activePopups]);
 
   // Manual end game (for timer reaching 0)
   useEffect(() => {
