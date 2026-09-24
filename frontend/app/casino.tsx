@@ -285,6 +285,9 @@ export default function CasinoScreen() {
     setBjShowResult(false);
     setBjFinalResult(null);
     
+    // Play card shuffle sound when dealing
+    SFX.bjDeal();
+    
     try {
       const response = await fetch(`${API_URL}/api/casinos/blackjack/start?player_id=${playerId}&bet_amount=${bjBet}`, {
         method: 'POST',
@@ -298,6 +301,10 @@ export default function CasinoScreen() {
       setBjGame(data);
       if (data.status !== 'playing') {
         refreshPlayer();
+        // Play win sound if player won on deal (natural blackjack)
+        if (data.status === 'player_wins' || data.status === 'player_blackjack') {
+          SFX.bjWin();
+        }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -308,6 +315,9 @@ export default function CasinoScreen() {
 
   const blackjackAction = async (action: string) => {
     if (!bjGame || bjLoading || bjDealerRevealing) return;
+
+    // Play card game sound for hit/stand/double
+    SFX.bjHitStand();
 
     setBjLoading(true);
     try {
@@ -341,6 +351,11 @@ export default function CasinoScreen() {
           setBjDealerRevealing(false);
           setBjShowResult(true);
           refreshPlayer();
+          
+          // Play win sound if player won
+          if (data.status === 'player_wins' || data.status === 'player_blackjack') {
+            SFX.bjWin();
+          }
           
           // Reset after showing result
           setTimeout(() => {
