@@ -724,9 +724,11 @@ export default function CarChaseGame() {
                   <Text style={styles.collectButtonText}>COLLECT REWARDS</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.playAgainButton} onPress={startGame}>
-                  <Text style={styles.playAgainText}>Play Again</Text>
-                </TouchableOpacity>
+                {isStandalone && (
+                  <TouchableOpacity style={styles.playAgainButton} onPress={startGame}>
+                    <Text style={styles.playAgainText}>Play Again</Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               // LOSE SCREEN - No rewards
@@ -762,14 +764,22 @@ export default function CarChaseGame() {
                   </Text>
                 </View>
 
-                <TouchableOpacity style={styles.retryButtonLarge} onPress={startGame}>
-                  <Ionicons name="refresh" size={24} color="#fff" />
-                  <Text style={styles.retryButtonLargeText}>TRY AGAIN</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
-                  <Text style={styles.exitButtonLargeText}>Exit</Text>
-                </TouchableOpacity>
+                {isStandalone ? (
+                  <>
+                    <TouchableOpacity style={styles.retryButtonLarge} onPress={startGame}>
+                      <Ionicons name="refresh" size={24} color="#fff" />
+                      <Text style={styles.retryButtonLargeText}>TRY AGAIN</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
+                      <Text style={styles.exitButtonLargeText}>Exit</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
+                    <Text style={styles.exitButtonLargeText}>Return to Map</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>

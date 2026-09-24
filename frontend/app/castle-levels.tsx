@@ -949,31 +949,18 @@ export default function CastleLevelsScreen() {
                 </TouchableOpacity>
               )}
               
-              {/* In random/map mode, allow playing another random level */}
-              {isFromMap && (
+              {/* Replay option only available in non-map mode */}
+              {!isFromMap && (
                 <TouchableOpacity
-                  style={[styles.resultBtn, { backgroundColor: '#4ade80' }]}
+                  style={[styles.resultBtn, { backgroundColor: won ? '#666' : '#f39c12' }]}
                   onPress={() => {
                     setShowResults(false);
-                    // Pick a new random level
-                    const newRandomLevel = Math.floor(Math.random() * 10) + 1;
-                    setCurrentLevel(newRandomLevel);
-                    generateLevel(newRandomLevel);
+                    startLevel(currentLevel);
                   }}
                 >
-                  <Text style={styles.resultBtnText}>🎲 RANDOM LEVEL</Text>
+                  <Text style={styles.resultBtnText}>{won ? 'REPLAY' : 'TRY AGAIN'}</Text>
                 </TouchableOpacity>
               )}
-              
-              <TouchableOpacity
-                style={[styles.resultBtn, { backgroundColor: won ? '#666' : '#f39c12' }]}
-                onPress={() => {
-                  setShowResults(false);
-                  startLevel(currentLevel);
-                }}
-              >
-                <Text style={styles.resultBtnText}>{won ? 'REPLAY' : 'TRY AGAIN'}</Text>
-              </TouchableOpacity>
               
               <TouchableOpacity
                 style={[styles.resultBtn, { backgroundColor: '#333' }]}
@@ -988,7 +975,7 @@ export default function CastleLevelsScreen() {
                   }
                 }}
               >
-                <Text style={styles.resultBtnText}>{isFromMap ? 'EXIT TO MAP' : 'LEVEL SELECT'}</Text>
+                <Text style={styles.resultBtnText}>{isFromMap ? 'RETURN TO MAP' : 'LEVEL SELECT'}</Text>
               </TouchableOpacity>
             </View>
           </View>

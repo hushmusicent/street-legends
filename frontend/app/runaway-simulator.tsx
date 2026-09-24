@@ -619,9 +619,11 @@ export default function RunawaySimulator() {
                   <Text style={styles.collectButtonText}>COLLECT REWARDS</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.playAgainButton} onPress={handleStartGame}>
-                  <Text style={styles.playAgainText}>Play Again</Text>
-                </TouchableOpacity>
+                {isStandalone && (
+                  <TouchableOpacity style={styles.playAgainButton} onPress={handleStartGame}>
+                    <Text style={styles.playAgainText}>Play Again</Text>
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               // LOSE SCREEN
@@ -649,14 +651,22 @@ export default function RunawaySimulator() {
                   <Text style={styles.noRewardsSubtext}>Reach the hideout to earn rewards!</Text>
                 </View>
                 
-                <TouchableOpacity style={styles.retryButtonLarge} onPress={handleStartGame}>
-                  <Ionicons name="refresh" size={24} color="#fff" />
-                  <Text style={styles.retryButtonLargeText}>TRY AGAIN</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
-                  <Text style={styles.exitButtonLargeText}>Exit</Text>
-                </TouchableOpacity>
+                {isStandalone ? (
+                  <>
+                    <TouchableOpacity style={styles.retryButtonLarge} onPress={handleStartGame}>
+                      <Ionicons name="refresh" size={24} color="#fff" />
+                      <Text style={styles.retryButtonLargeText}>TRY AGAIN</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
+                      <Text style={styles.exitButtonLargeText}>Exit</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity style={styles.exitButtonLarge} onPress={handleGoBack}>
+                    <Text style={styles.exitButtonLargeText}>Return to Map</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
