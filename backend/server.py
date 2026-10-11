@@ -9093,6 +9093,108 @@ async def get_privacy_policy():
     }
 
 
+# =============================================================================
+# ADMIN ENDPOINTS (Protected with secret key)
+# =============================================================================
+
+ADMIN_SECRET_KEY = os.environ.get("ADMIN_SECRET_KEY", "")
+
+@api_router.delete("/admin/delete-players-by-name")
+async def admin_delete_players_by_name(
+    name: str = Query(..., description="Name to search for (case-insensitive)"),
+    admin_key: str = Query(..., description="Admin secret key for authorization")
+):
+    """
+    Admin endpoint to delete player accounts by name and free their territories.
+    Requires admin_key for authorization.
+    """
+    # Verify admin key
+    if not ADMIN_SECRET_KEY or admin_key != ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    # Find players matching the name (case-insensitive)
+    players = await db.players.find({
+        "$or": [
+            {"name": {"$regex": name, "$options": "i"}},
+            {"username": {"$regex": name, "$options": "i"}}
+        ]
+    }).to_list(length=100)
+    
+    if not players:
+        return {"message": f"No players found matching '{name}'", "deleted": 0, "territories_freed": 0}
+    
+    player_ids = [p['id'] for p in players]
+    player_names = [f"{p.get('name', 'Unknown')} ({p.get('username', 'no-username')})" for p in players]
+    
+    # Free up territories owned by these players
+    territory_result = await db.territories.update_many(
+        {"owner_id": {"$in": player_ids}},
+        {"$set": {"owner_id": None, "owner_name": None, "captured_at": None}}
+    )
+    
+    # Delete the player accounts
+    delete_result = await db.players.delete_many({"id": {"$in": player_ids}})
+    
+    # Clean up related game data
+    cleanup_collections = ['battles', 'missions', 'car_chases', 'shootouts', 'runaways', 'package_grabs', 'castle_games']
+    for collection in cleanup_collections:
+        try:
+            await db[collection].delete_many({"player_id": {"$in": player_ids}})
+        except:
+            pass
+    
+    return {
+        "message": f"Successfully deleted {delete_result.deleted_count} player(s) matching '{name}'",
+        "deleted_players": player_names,
+        "deleted_count": delete_result.deleted_count,
+        "territories_freed": territory_result.modified_count
+    }
+
+@api_router.delete("/admin/reset-all-data")
+async def admin_reset_all_data(
+    admin_key: str = Query(..., description="Admin secret key for authorization"),
+    confirm: str = Query(..., description="Type 'CONFIRM_RESET' to proceed")
+):
+    """
+    Admin endpoint to reset ALL game data (players, territories, game sessions).
+    Use with extreme caution - this cannot be undone!
+    """
+    # Verify admin key
+    if not ADMIN_SECRET_KEY or admin_key != ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    # Require confirmation
+    if confirm != "CONFIRM_RESET":
+        raise HTTPException(status_code=400, detail="You must set confirm='CONFIRM_RESET' to proceed")
+    
+    results = {}
+    
+    # Delete all players
+    player_result = await db.players.delete_many({})
+    results["players_deleted"] = player_result.deleted_count
+    
+    # Free all territories
+    territory_result = await db.territories.update_many(
+        {},
+        {"$set": {"owner_id": None, "owner_name": None, "captured_at": None}}
+    )
+    results["territories_freed"] = territory_result.modified_count
+    
+    # Clear game sessions
+    cleanup_collections = ['battles', 'missions', 'shops', 'casino_games', 'car_chases', 'shootouts', 'runaways', 'package_grabs', 'castle_games']
+    for collection in cleanup_collections:
+        try:
+            r = await db[collection].delete_many({})
+            results[f"{collection}_cleared"] = r.deleted_count
+        except:
+            pass
+    
+    return {
+        "message": "Database reset complete!",
+        "results": results
+    }
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
