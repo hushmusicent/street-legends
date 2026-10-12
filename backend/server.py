@@ -2228,6 +2228,35 @@ async def delete_player_account(player_id: str):
         for guild in player_guilds:
             # Delete the guild if no other members
             if len(guild.get("members", [])) == 0:
+                await db.guilds.delete_one({"id": guild["id"]})
+            else:
+                # Transfer to first available member
+                new_leader = guild["members"][0]
+                await db.guilds.update_one(
+                    {"id": guild["id"]},
+                    {"$set": {"leader_id": new_leader["id"], "leader_name": new_leader.get("name", "Unknown")}}
+                )
+        
+        # Log the deletion for records
+        deletion_log = {
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "player_name": player_name,
+            "deleted_at": datetime.utcnow(),
+            "deletion_type": "user_initiated"
+        }
+        await db.deletion_logs.insert_one(deletion_log)
+        
+        logger.info(f"Account permanently deleted for player: {player_id} ({player_name})")
+        
+        return {
+            "status": "success",
+            "message": "Your account and all associated data have been permanently deleted."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting account for player {player_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete account. Please try again.")
 
 
 @api_router.post("/players/{player_id}/logout")
@@ -2272,35 +2301,6 @@ async def login_player(player_id: str):
     )
     
     return {"message": "Logged in successfully", "player_id": player_id}
-                await db.guilds.delete_one({"id": guild["id"]})
-            else:
-                # Transfer to first available member
-                new_leader = guild["members"][0]
-                await db.guilds.update_one(
-                    {"id": guild["id"]},
-                    {"$set": {"leader_id": new_leader["id"], "leader_name": new_leader.get("name", "Unknown")}}
-                )
-        
-        # Log the deletion for records
-        deletion_log = {
-            "id": str(uuid.uuid4()),
-            "player_id": player_id,
-            "player_name": player_name,
-            "deleted_at": datetime.utcnow(),
-            "deletion_type": "user_initiated"
-        }
-        await db.deletion_logs.insert_one(deletion_log)
-        
-        logger.info(f"Account permanently deleted for player: {player_id} ({player_name})")
-        
-        return {
-            "status": "success",
-            "message": "Your account and all associated data have been permanently deleted."
-        }
-        
-    except Exception as e:
-        logger.error(f"Error deleting account for player {player_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete account. Please try again.")
 
 
 # ============== PLAYER ENDPOINTS ==============
