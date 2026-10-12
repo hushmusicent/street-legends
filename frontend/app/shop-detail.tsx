@@ -56,15 +56,28 @@ const ShopDetailItemIcon = ({
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
+  const [imageLoading, setImageLoading] = React.useState(true);
   
   if (item.icon_url && !imageError) {
     return (
-      <Image
-        source={{ uri: item.icon_url }}
-        style={{ width: size + 8, height: size + 8 }}
-        resizeMode="contain"
-        onError={() => setImageError(true)}
-      />
+      <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
+        <Image
+          source={{ uri: item.icon_url, cache: 'force-cache' }}
+          style={{ width: size + 8, height: size + 8, position: 'absolute' }}
+          resizeMode="contain"
+          onError={() => setImageError(true)}
+          onLoadStart={() => setImageLoading(true)}
+          onLoadEnd={() => setImageLoading(false)}
+        />
+        {imageLoading && (
+          <Ionicons 
+            name={SLOT_ICONS[item.equipment_type] || 'cube'} 
+            size={size} 
+            color={color} 
+            style={{ opacity: 0.3 }}
+          />
+        )}
+      </View>
     );
   }
   
@@ -103,15 +116,23 @@ const SkillIcon = ({
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
+  const [imageLoading, setImageLoading] = React.useState(true);
   
   if (skill.icon_url && !imageError) {
     return (
-      <Image
-        source={{ uri: skill.icon_url }}
-        style={{ width: size + 8, height: size + 8 }}
-        resizeMode="contain"
-        onError={() => setImageError(true)}
-      />
+      <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
+        <Image
+          source={{ uri: skill.icon_url, cache: 'force-cache' }}
+          style={{ width: size + 8, height: size + 8, position: 'absolute' }}
+          resizeMode="contain"
+          onError={() => setImageError(true)}
+          onLoadStart={() => setImageLoading(true)}
+          onLoadEnd={() => setImageLoading(false)}
+        />
+        {imageLoading && (
+          <Ionicons name="flash" size={size} color={color} style={{ opacity: 0.3 }} />
+        )}
+      </View>
     );
   }
   
@@ -166,7 +187,7 @@ export default function ShopDetailScreen() {
             await buyFromShop(playerId, item.id, item.shop_price);
             const p = await getPlayer(playerId);
             setPlayer(p);
-            SFX.purchase(); // Play purchase sound
+            // Silent purchase - no sound
             Alert.alert('Purchased!', `${item.name} added to your inventory!`);
           } catch (error: any) {
             Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');
@@ -196,7 +217,7 @@ export default function ShopDetailScreen() {
             await buySkill(playerId, skill.id);
             const p = await getPlayer(playerId);
             setPlayer(p);
-            SFX.purchase(); // Play purchase sound
+            // Silent purchase - no sound
             Alert.alert('Skill Purchased!', `${skill.name} learned! Go to Character > Skills to equip it.`);
           } catch (error: any) {
             Alert.alert('Error', error.response?.data?.detail || 'Purchase failed');

@@ -910,4 +910,17 @@ export const getImageUrl = (path: string): string => {
   return `${API_URL}/api/images/${path}`;
 };
 
+// Player logout - removes character from game world
+export const logoutPlayer = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/logout`);
+  return response.data;
+};
+
+// Player login - makes character visible in game world
+export const loginPlayer = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/login`);
+  return response.data;
+};
+
+
 export default api;

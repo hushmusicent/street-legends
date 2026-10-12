@@ -41,6 +41,7 @@ import {
   repairEquippedItem,
   getSocialStats,
   changePassword,
+  default as api,
 } from '../../services/api';
 import { HealthBar } from '../../components/HealthBar';
 import { StatBar } from '../../components/StatBar';
@@ -114,19 +115,33 @@ const ItemIcon = ({
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
+  const [imageLoading, setImageLoading] = React.useState(true);
   
   if (item.icon_url && !imageError) {
     return (
-      <Image
-        source={{ uri: item.icon_url }}
-        style={{ 
-          width: size + 8, 
-          height: size + 8, 
-          opacity: item.is_broken ? 0.5 : 1 
-        }}
-        resizeMode="contain"
-        onError={() => setImageError(true)}
-      />
+      <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
+        <Image
+          source={{ uri: item.icon_url, cache: 'force-cache' }}
+          style={{ 
+            width: size + 8, 
+            height: size + 8, 
+            opacity: item.is_broken ? 0.5 : 1,
+            position: 'absolute'
+          }}
+          resizeMode="contain"
+          onError={() => setImageError(true)}
+          onLoadStart={() => setImageLoading(true)}
+          onLoadEnd={() => setImageLoading(false)}
+        />
+        {imageLoading && (
+          <Ionicons 
+            name={SLOT_ICONS[item.equipment_type] || 'cube'} 
+            size={size} 
+            color={item.is_broken ? '#666' : color}
+            style={{ opacity: 0.3 }}
+          />
+        )}
+      </View>
     );
   }
   
@@ -150,15 +165,23 @@ const SkillIcon = ({
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
+  const [imageLoading, setImageLoading] = React.useState(true);
   
   if (skill.icon_url && !imageError) {
     return (
-      <Image
-        source={{ uri: skill.icon_url }}
-        style={{ width: size + 8, height: size + 8 }}
-        resizeMode="contain"
-        onError={() => setImageError(true)}
-      />
+      <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
+        <Image
+          source={{ uri: skill.icon_url, cache: 'force-cache' }}
+          style={{ width: size + 8, height: size + 8, position: 'absolute' }}
+          resizeMode="contain"
+          onError={() => setImageError(true)}
+          onLoadStart={() => setImageLoading(true)}
+          onLoadEnd={() => setImageLoading(false)}
+        />
+        {imageLoading && (
+          <Ionicons name="flash" size={size} color={color} style={{ opacity: 0.3 }} />
+        )}
+      </View>
     );
   }
   
@@ -382,6 +405,15 @@ export default function CharacterScreen() {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
+          // Call backend to remove character from game world
+          if (playerId) {
+            try {
+              await api.post(`/players/${playerId}/logout`);
+            } catch (e) {
+              // Continue logout even if API fails
+              console.log('Logout API error:', e);
+            }
+          }
           await AsyncStorage.removeItem('playerId');
           clearPlayer();
           router.replace('/');

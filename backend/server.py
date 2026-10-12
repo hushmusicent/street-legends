@@ -2228,6 +2228,50 @@ async def delete_player_account(player_id: str):
         for guild in player_guilds:
             # Delete the guild if no other members
             if len(guild.get("members", [])) == 0:
+
+
+@api_router.post("/players/{player_id}/logout")
+async def logout_player(player_id: str):
+    """
+    Log out a player - removes their character from the game world.
+    Sets is_logged_out=True and clears their visible position.
+    """
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {
+            "is_logged_out": True,
+            "logged_out_at": datetime.utcnow(),
+            "visible_on_map": False,
+        }}
+    )
+    
+    return {"message": "Logged out successfully", "player_id": player_id}
+
+
+@api_router.post("/players/{player_id}/login")
+async def login_player(player_id: str):
+    """
+    Log in a player - makes their character visible in the game world.
+    """
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {
+            "is_logged_out": False,
+            "logged_out_at": None,
+            "visible_on_map": True,
+            "last_active": datetime.utcnow(),
+        }}
+    )
+    
+    return {"message": "Logged in successfully", "player_id": player_id}
                 await db.guilds.delete_one({"id": guild["id"]})
             else:
                 # Transfer to first available member
@@ -2487,14 +2531,27 @@ async def debug_territory_sync(player_id: str):
 
 @api_router.get("/players/nearby/{player_id}")
 async def get_nearby_players(player_id: str, radius: float = 500):
-    """Get players within radius (meters)"""
+    """Get players within radius (meters) - excludes logged out and inactive (30+ min) players"""
     player = await db.players.find_one({"id": player_id})
     if not player or not player.get("position"):
         raise HTTPException(status_code=404, detail="Player not found or no position")
     
+    # 30 minute inactivity threshold
+    inactivity_threshold = datetime.utcnow() - timedelta(minutes=30)
+    
     player_pos = Position(**player["position"])
     all_players = await db.players.find(
-        {"id": {"$ne": player_id}, "position": {"$exists": True}},
+        {
+            "id": {"$ne": player_id}, 
+            "position": {"$exists": True},
+            # Exclude logged out players
+            "$or": [
+                {"is_logged_out": {"$ne": True}},
+                {"is_logged_out": {"$exists": False}}
+            ],
+            # Must have been active in last 30 minutes
+            "last_active": {"$gte": inactivity_threshold}
+        },
         {"id": 1, "name": 1, "level": 1, "character_class": 1, "position": 1, "guild_id": 1, "profile_pic": 1}
     ).to_list(100)
     
@@ -3348,8 +3405,8 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
         if player_id:
             pp = m.get("player_progress", {})
             if player_id in pp:
-                doc["accepted_by"] = player_id
-                doc["goal_progress"] = pp[player_id].get("progress", 0)
+                # This player has accepted this mission - HIDE it from map (only show in tracker)
+                continue  # Skip accepted missions - they shouldn't appear on map
             else:
                 doc["accepted_by"] = None
                 doc["goal_progress"] = 0
@@ -8842,7 +8899,7 @@ async def collect_single_territory_income(territory_id: str, player_id: str):
 @api_router.get("/territories/owned/{player_id}")
 async def get_owned_territories(player_id: str):
     """Get all territories owned by a player"""
-    territories = await db.territories.find({"owner_id": player_id}).to_list(length=50)
+    territories = await db.territories.find({"owner_id": player_id}).to_list(length=None)  # No limit - unlimited territories
     return [serialize_doc(t) for t in territories]
 
 # ============== FITNESS TRACKER ==============

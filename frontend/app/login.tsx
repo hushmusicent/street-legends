@@ -18,7 +18,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../stores/gameStore';
-import { loginAccount, forgotPassword, resetPassword } from '../services/api';
+import { loginAccount, forgotPassword, resetPassword, default as api } from '../services/api';
 import { GameButton } from '../components/GameButton';
 
 type ForgotPasswordStep = 'email' | 'code' | 'newPassword';
@@ -57,6 +57,15 @@ export default function LoginScreen() {
       setLoading(true);
       setError(null);
       const player = await loginAccount(username.trim(), password);
+      
+      // Mark player as logged in (visible in game world)
+      try {
+        await api.post(`/players/${player.id}/login`);
+      } catch (e) {
+        // Continue even if this fails
+        console.log('Login visibility API error:', e);
+      }
+      
       await savePlayerId(player.id);
       setPlayer(player);
       router.replace('/(tabs)');
