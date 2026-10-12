@@ -94,6 +94,8 @@ export default function MissionScreen() {
     try {
       await api.post(`/missions/${id}/accept?player_id=${playerId}`);
       setAccepted(true);
+      // Immediately remove mission from map once accepted
+      removeMission(id);
       Alert.alert('Mission Accepted!', 'Track your progress in the Missions tab!');
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.detail || 'Failed to accept mission');
@@ -124,9 +126,6 @@ export default function MissionScreen() {
   };
 
   const handleExit = () => {
-    if (completed && id) {
-      removeMission(id);
-    }
     setCurrentMission(null);
     router.back();
   };

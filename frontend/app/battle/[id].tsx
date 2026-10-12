@@ -99,6 +99,10 @@ export default function BattleScreen() {
         // Play victory or defeat sound
         if (result.status === 'won') {
           SFX.victory();
+          // Immediately remove enemy from map when battle is won
+          if (result.enemy_id) {
+            removeMonster(result.enemy_id);
+          }
         } else if (result.status === 'lost') {
           SFX.defeat();
         }
