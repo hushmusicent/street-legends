@@ -15,13 +15,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Pedometer } from 'expo-sensors';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGameStore } from '../../stores/gameStore';
-import { getFitnessData, updateSteps, claimStepGoal } from '../../services/api';
+import { getFitnessData, updateSteps, claimStepGoal, syncTravelDistance } from '../../services/api';
 import { showGameToast } from '../../components/GameToast';
 
 const GOAL_COLORS = ['#3498db', '#f39c12', '#e74c3c'];
 const GOAL_ICONS: Array<'walk' | 'bicycle' | 'rocket'> = ['walk', 'bicycle', 'rocket'];
 const METERS_PER_STEP = 0.762; // average step length
+const UNSYNCED_DISTANCE_KEY = 'fitness_unsynced_distance';
 
 // Haversine distance in meters
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -34,6 +36,14 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Format distance: meters when under 1km, km otherwise
+function formatDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)}m`;
+  }
+  return `${(meters / 1000).toFixed(2)}km`;
+}
+
 export default function FitnessScreen() {
   const { playerId } = useGameStore();
   const triggerMissionRefresh = useGameStore((s) => s.triggerMissionRefresh);
@@ -41,14 +51,44 @@ export default function FitnessScreen() {
   const [fitnessData, setFitnessData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [claiming, setClaiming] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const [pedometerAvailable, setPedometerAvailable] = useState(false);
   const [trackingMode, setTrackingMode] = useState<'pedometer' | 'gps' | 'none'>('none');
   const [permStatus, setPermStatus] = useState<string>('checking');
+  const [unsyncedDistance, setUnsyncedDistance] = useState(0); // in meters
   const subscriptionRef = useRef<any>(null);
   const baseStepsRef = useRef(0);
+  const lastStepsRef = useRef(0); // Track steps at last sync to calculate delta
   const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const gpsStepsRef = useRef(0);
   const locationSubRef = useRef<any>(null);
+
+  // Load unsynced distance from storage on mount
+  useEffect(() => {
+    const loadUnsyncedDistance = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(UNSYNCED_DISTANCE_KEY);
+        if (stored) {
+          setUnsyncedDistance(parseInt(stored, 10) || 0);
+        }
+      } catch (e) {
+        console.log('Error loading unsynced distance:', e);
+      }
+    };
+    loadUnsyncedDistance();
+  }, []);
+
+  // Save unsynced distance when it changes
+  useEffect(() => {
+    const saveUnsyncedDistance = async () => {
+      try {
+        await AsyncStorage.setItem(UNSYNCED_DISTANCE_KEY, unsyncedDistance.toString());
+      } catch (e) {
+        console.log('Error saving unsynced distance:', e);
+      }
+    };
+    saveUnsyncedDistance();
+  }, [unsyncedDistance]);
 
   const loadFitnessData = useCallback(async () => {
     if (!playerId) return;
@@ -108,14 +148,19 @@ export default function FitnessScreen() {
 
         pedSub = Pedometer.watchStepCount(async (result) => {
           const newSteps = baseStepsRef.current + result.steps;
+          const stepDelta = newSteps - lastStepsRef.current;
+          
+          // Accumulate unsynced distance (step delta * meters per step)
+          if (stepDelta > 0) {
+            const distanceDelta = Math.round(stepDelta * METERS_PER_STEP);
+            setUnsyncedDistance(prev => prev + distanceDelta);
+            lastStepsRef.current = newSteps;
+          }
+          
           setSteps(newSteps);
           if (playerId) {
             try {
               await updateSteps(playerId, newSteps);
-              // Small delay to ensure backend has updated mission progress
-              setTimeout(() => {
-                triggerMissionRefresh();
-              }, 300);
             } catch (e) {
               console.log('Failed to sync steps:', e);
             }
@@ -157,13 +202,13 @@ export default function FitnessScreen() {
                 const newStepsDelta = Math.round(dist / METERS_PER_STEP);
                 gpsStepsRef.current += newStepsDelta;
                 setSteps(gpsStepsRef.current);
+                
+                // Accumulate unsynced distance
+                setUnsyncedDistance(prev => prev + Math.round(dist));
+                
                 if (playerId) {
                   try {
                     await updateSteps(playerId, gpsStepsRef.current);
-                    // Small delay to ensure backend has updated mission progress
-                    setTimeout(() => {
-                      triggerMissionRefresh();
-                    }, 300);
                   } catch (e) {
                     console.log('Failed to sync steps:', e);
                   }
@@ -214,6 +259,53 @@ export default function FitnessScreen() {
       Alert.alert('Error', err?.response?.data?.detail || 'Failed to claim reward');
     } finally {
       setClaiming(null);
+    }
+  };
+
+  // Handle syncing distance to travel missions and applying vehicle wear
+  const handleSyncToMissions = async () => {
+    if (!playerId || syncing || unsyncedDistance === 0) return;
+    setSyncing(true);
+    
+    try {
+      const result = await syncTravelDistance(playerId, unsyncedDistance);
+      
+      // Build summary message
+      let message = '';
+      
+      if (result.missions_updated && result.missions_updated.length > 0) {
+        const missionSummary = result.missions_updated.map((m: any) => {
+          const progressStr = formatDistance(m.new_progress);
+          const targetStr = formatDistance(m.target);
+          return `• ${m.title}: ${progressStr} / ${targetStr}${m.completed ? ' ✓' : ''}`;
+        }).join('\n');
+        message += `Travel Missions Updated:\n${missionSummary}`;
+      } else {
+        message += 'No travel missions to update.';
+      }
+      
+      if (result.vehicle_damage > 0) {
+        message += `\n\nVehicle Wear: -${result.vehicle_damage} durability`;
+        if (result.vehicle_new_durability !== null) {
+          message += ` (${result.vehicle_new_durability} remaining)`;
+        }
+      }
+      
+      // Reset unsynced distance ONLY after successful sync
+      setUnsyncedDistance(0);
+      
+      // Trigger mission refresh to update UI elsewhere
+      triggerMissionRefresh();
+      
+      Alert.alert(
+        `Synced ${formatDistance(result.synced_distance)}!`,
+        message
+      );
+      
+    } catch (err: any) {
+      Alert.alert('Sync Failed', err?.response?.data?.detail || 'Could not sync distance. Try again.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -274,25 +366,32 @@ export default function FitnessScreen() {
             </View>
           )}
           
-          {/* Manual sync button */}
+          {/* Unsynced Distance Display */}
+          <View style={styles.unsyncedContainer}>
+            <Text style={styles.unsyncedLabel}>UNSYNCED DISTANCE</Text>
+            <Text style={styles.unsyncedValue}>{formatDistance(unsyncedDistance)}</Text>
+            <Text style={styles.unsyncedHint}>Walk to accumulate, then sync to missions</Text>
+          </View>
+          
+          {/* Sync to Missions button */}
           <TouchableOpacity 
-            style={styles.syncButton}
-            onPress={async () => {
-              if (!playerId || steps === 0) return;
-              try {
-                await updateSteps(playerId, steps);
-                setTimeout(() => {
-                  triggerMissionRefresh();
-                }, 300);
-                Alert.alert('Steps Synced!', `${steps.toLocaleString()} steps synced to your active missions.`);
-              } catch (e) {
-                Alert.alert('Sync Failed', 'Could not sync steps. Try again.');
-              }
-            }}
+            style={[
+              styles.syncButton, 
+              (syncing || unsyncedDistance === 0) && styles.syncButtonDisabled
+            ]}
+            onPress={handleSyncToMissions}
+            disabled={syncing || unsyncedDistance === 0}
           >
-            <Ionicons name="sync" size={16} color="#fff" />
-            <Text style={styles.syncButtonText}>SYNC TO MISSIONS</Text>
+            {syncing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="sync" size={16} color="#fff" />
+            )}
+            <Text style={styles.syncButtonText}>
+              {syncing ? 'SYNCING...' : `SYNC TO MISSIONS (${formatDistance(unsyncedDistance)})`}
+            </Text>
           </TouchableOpacity>
+          
           {Platform.OS === 'web' && (
             <View style={styles.pedWarning}>
               <Ionicons name="phone-portrait" size={14} color="#3498db" />
@@ -575,10 +674,40 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 16,
   },
+  syncButtonDisabled: {
+    backgroundColor: '#555',
+    opacity: 0.7,
+  },
   syncButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  unsyncedContainer: {
+    backgroundColor: '#1a2e1a',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a4a2a',
+  },
+  unsyncedLabel: {
+    color: '#4caf50',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  unsyncedValue: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  unsyncedHint: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 4,
   },
 });

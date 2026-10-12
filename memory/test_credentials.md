@@ -1,5 +1,11 @@
 # Test Credentials for Street Legends
 
+## Test Account for Fitness/Mission Sync Testing
+- Username: testfitness123
+- Password: testpass123
+- Player ID: b58ba7af-d3af-4524-b4d1-365cbafc7107
+- Vehicle equipped: Beat-up Bike (durability tested)
+
 ## Testing Password Reset Flow
 To test the password reset flow:
 1. Create a new account with an email address

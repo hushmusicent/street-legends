@@ -662,6 +662,11 @@ export const claimStepGoal = async (playerId: string, goalSteps: number) => {
   return response.data;
 };
 
+export const syncTravelDistance = async (playerId: string, distanceMeters: number) => {
+  const response = await api.post(`/fitness/${playerId}/sync-distance?distance_meters=${distanceMeters}`);
+  return response.data;
+};
+
 // ============== RESTAURANTS ==============
 export const spawnRestaurants = async (latitude: number, longitude: number, playerLevel: number = 1) => {
   const response = await api.get(`/restaurants/spawn?latitude=${latitude}&longitude=${longitude}&player_level=${playerLevel}`);

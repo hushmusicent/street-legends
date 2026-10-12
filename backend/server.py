@@ -9045,6 +9045,92 @@ async def claim_step_goal(player_id: str, goal_steps: int):
     return {"message": reward_msg, "goal": goal_steps, "reward_type": goal["reward_type"]}
 
 
+@api_router.post("/fitness/{player_id}/sync-distance")
+async def sync_travel_distance(player_id: str, distance_meters: int):
+    """
+    Sync traveled distance to all active travel_distance missions.
+    Also applies vehicle durability loss (10 per full km).
+    Returns updated mission progresses and vehicle durability.
+    """
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    if distance_meters <= 0:
+        return {"synced_distance": 0, "missions_updated": [], "vehicle_damage": 0}
+    
+    # Get all active travel_distance missions for this player
+    active_ids = player.get("active_missions", [])
+    missions_updated = []
+    
+    if active_ids:
+        missions = await db.missions.find({
+            "id": {"$in": active_ids}, 
+            "mission_type": "travel_distance"
+        }).to_list(50)
+        
+        for m in missions:
+            pp = m.get("player_progress", {})
+            player_data = pp.get(player_id, {"progress": 0})
+            old_progress = player_data.get("progress", 0)
+            new_progress = min(old_progress + distance_meters, m.get("goal_target", 999999))
+            
+            player_data["progress"] = new_progress
+            pp[player_id] = player_data
+            
+            await db.missions.update_one(
+                {"id": m["id"]},
+                {"$set": {"player_progress": pp}}
+            )
+            
+            missions_updated.append({
+                "mission_id": m["id"],
+                "title": m.get("title", "Unknown"),
+                "old_progress": old_progress,
+                "new_progress": new_progress,
+                "target": m.get("goal_target", 0),
+                "completed": new_progress >= m.get("goal_target", 0)
+            })
+    
+    # Apply vehicle durability loss: 10 durability per full km
+    full_km = distance_meters // 1000
+    vehicle_damage = 0
+    vehicle_new_durability = None
+    
+    if full_km > 0:
+        equipment = player.get("equipment", {})
+        vehicle_id = equipment.get("vehicle")
+        
+        if vehicle_id:
+            # Use equipment_durability dict (same as battle durability system)
+            equipment_durability = player.get("equipment_durability", {})
+            
+            # Initialize vehicle durability if not present
+            if "vehicle" not in equipment_durability:
+                max_dur = get_max_durability(vehicle_id)
+                equipment_durability["vehicle"] = max_dur
+            
+            current_dur = equipment_durability.get("vehicle", 100)
+            
+            # 10 durability loss per km
+            vehicle_damage = full_km * 10
+            new_dur = max(0, current_dur - vehicle_damage)
+            equipment_durability["vehicle"] = new_dur
+            vehicle_new_durability = new_dur
+            
+            await db.players.update_one(
+                {"id": player_id},
+                {"$set": {"equipment_durability": equipment_durability}}
+            )
+    
+    return {
+        "synced_distance": distance_meters,
+        "missions_updated": missions_updated,
+        "vehicle_damage": vehicle_damage,
+        "vehicle_new_durability": vehicle_new_durability
+    }
+
+
 # Background removal endpoint for shootout character sprites
 @api_router.get("/sprites/remove-bg")
 async def remove_background_from_sprite(url: str):
@@ -9197,7 +9283,7 @@ async def admin_delete_players_by_name(
     for collection in cleanup_collections:
         try:
             await db[collection].delete_many({"player_id": {"$in": player_ids}})
-        except:
+        except Exception:
             pass
     
     return {
@@ -9243,7 +9329,7 @@ async def admin_reset_all_data(
         try:
             r = await db[collection].delete_many({})
             results[f"{collection}_cleared"] = r.deleted_count
-        except:
+        except Exception:
             pass
     
     return {
