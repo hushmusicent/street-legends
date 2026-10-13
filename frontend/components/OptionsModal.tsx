@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -55,6 +56,8 @@ type ModalScreen = 'main' | 'credits';
 export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit = true }: OptionsModalProps) {
   const { clearPlayer, playerId, runawayLevel, setRunawayLevel, saveRunawayLevel, loadRunawayLevel, packageGrabLevel, setPackageGrabLevel, savePackageGrabLevel, loadPackageGrabLevel, shootoutLevel, setShootoutLevel, saveShootoutLevel, loadShootoutLevel } = useGameStore();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
   const [showMiniGames, setShowMiniGames] = useState(false);
   const [showRunawayLevels, setShowRunawayLevels] = useState(false);
   const [showPackageGrabLevels, setShowPackageGrabLevels] = useState(false);
@@ -142,6 +145,10 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
   };
 
   const handleDeleteAccount = () => {
+    setShowPasswordConfirm(true);
+  };
+
+  const handleDeleteAccountAlerts = () => {
     Alert.alert(
       '⚠️ Delete Account',
       'Are you sure you want to permanently delete your account?\n\nThis action CANNOT be undone and will delete:\n\n• All character stats and progress\n• Your territories and income\n• Skills and inventory\n• Battle history\n• Fitness data\n• Guild memberships',
@@ -168,7 +175,7 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
                     
                     setIsDeleting(true);
                     try {
-                      await deletePlayerAccount(playerId);
+                      await deletePlayerAccount(playerId, deletePassword);
                       
                       // Restore Android navigation bar
                       if (Platform.OS === 'android') {
@@ -794,6 +801,39 @@ export function OptionsModal({ visible, onClose, onToggleMute, isMuted, showQuit
           {isDeleting ? 'DELETING...' : 'DELETE ACCOUNT'}
         </Text>
       </TouchableOpacity>
+
+      {/* Password confirmation for account deletion */}
+      {showPasswordConfirm && (
+        <View style={styles.passwordConfirmBox}>
+          <Text style={styles.passwordConfirmTitle}>Enter your password to confirm deletion</Text>
+          <TextInput
+            style={styles.passwordInput}
+            value={deletePassword}
+            onChangeText={setDeletePassword}
+            placeholder="Account password"
+            placeholderTextColor="#6b7280"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <View style={styles.passwordConfirmButtons}>
+            <TouchableOpacity
+              style={styles.passwordCancelButton}
+              onPress={() => { setShowPasswordConfirm(false); setDeletePassword(''); }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.passwordCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.passwordDeleteButton, !deletePassword && styles.passwordDeleteButtonDisabled]}
+              onPress={() => { setShowPasswordConfirm(false); handleDeleteAccountAlerts(); }}
+              activeOpacity={0.7}
+              disabled={!deletePassword}
+            >
+              <Text style={styles.passwordDeleteText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </>
   );
 
@@ -1143,6 +1183,65 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(220, 38, 38, 0.3)',
     marginTop: 8,
+  },
+
+  passwordConfirmBox: {
+    backgroundColor: '#1f2937',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#dc2626',
+  },
+  passwordConfirmTitle: {
+    color: '#fca5a5',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  passwordInput: {
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    padding: 12,
+    color: '#fff',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#374151',
+    marginBottom: 12,
+  },
+  passwordConfirmButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  passwordCancelButton: {
+    flex: 1,
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  passwordCancelText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  passwordDeleteButton: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  passwordDeleteButtonDisabled: {
+    backgroundColor: '#7f1d1d',
+    opacity: 0.5,
+  },
+  passwordDeleteText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   deleteText: {
     color: '#dc2626',

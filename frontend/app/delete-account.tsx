@@ -19,12 +19,13 @@ import api from '../services/api';
 export default function DeleteAccountScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmText, setConfirmText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
 
-  const isFormValid = username.trim().length > 0 && confirmText === 'DELETE';
+  const isFormValid = username.trim().length > 0 && password.length > 0 && confirmText === 'DELETE';
 
   const handleSubmit = async () => {
     if (!isFormValid) return;
@@ -36,6 +37,7 @@ export default function DeleteAccountScreen() {
       // Submit deletion request to backend
       await api.post('/api/account/delete-request', {
         username: username.trim(),
+        password: password,
       });
       setIsSubmitted(true);
     } catch (err: any) {
@@ -168,6 +170,20 @@ export default function DeleteAccountScreen() {
                 onChangeText={setUsername}
                 placeholder="Enter your username"
                 placeholderTextColor="#666"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Account Password</Text>
+              <TextInput
+                style={styles.textInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                placeholderTextColor="#666"
+                secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
               />
