@@ -148,7 +148,7 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
     }
     try {
       setBuying(sku);
-      await requestPurchase({ sku });
+      await requestPurchase({ request: { google: { skus: [sku] } }, type: 'in-app' });
       // Result arrives via purchaseUpdatedListener.
     } catch (e: any) {
       setBuying(null);
