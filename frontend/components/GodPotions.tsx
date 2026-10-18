@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   initConnection,
   endConnection,
-  getProducts,
+  fetchProducts,
   requestPurchase,
   finishTransaction,
   purchaseUpdatedListener,
@@ -85,7 +85,7 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
       try {
         const ok = await initConnection();
         if (!ok) throw new Error('Billing unavailable');
-        const prods = await getProducts({ skus: SKUS });
+        const prods = await fetchProducts({ skus: SKUS });
         if (mounted) setProducts(prods || []);
         await refreshGodmode();
       } catch (e) {
@@ -158,8 +158,8 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
   };
 
   const priceFor = (sku: string) => {
-    const p = products.find((x: any) => x.productId === sku);
-    return p?.localizedPrice || '$1.00';
+    const p = products.find((x: any) => (x.id ?? x.productId) === sku);
+    return p?.displayPrice || p?.localizedPrice || '$1.00';
   };
 
   return (
