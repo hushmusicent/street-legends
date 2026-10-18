@@ -9,16 +9,31 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  initConnection,
-  endConnection,
-  fetchProducts,
-  requestPurchase,
-  finishTransaction,
-  purchaseUpdatedListener,
-  purchaseErrorListener,
-} from 'react-native-iap';
 import api from '../services/api';
+
+// IAP only works on native platforms, not web
+let initConnection: any = () => Promise.resolve();
+let endConnection: any = () => Promise.resolve();
+let fetchProducts: any = () => Promise.resolve([]);
+let requestPurchase: any = () => Promise.resolve();
+let finishTransaction: any = () => Promise.resolve();
+let purchaseUpdatedListener: any = () => ({ remove: () => {} });
+let purchaseErrorListener: any = () => ({ remove: () => {} });
+
+if (Platform.OS !== 'web') {
+  try {
+    const iap = require('react-native-iap');
+    initConnection = iap.initConnection;
+    endConnection = iap.endConnection;
+    fetchProducts = iap.fetchProducts;
+    requestPurchase = iap.requestPurchase;
+    finishTransaction = iap.finishTransaction;
+    purchaseUpdatedListener = iap.purchaseUpdatedListener;
+    purchaseErrorListener = iap.purchaseErrorListener;
+  } catch (e) {
+    console.log('IAP not available:', e);
+  }
+}
 
 const SKUS = ['god_potion_health_1h', 'god_potion_energy_1h'];
 

@@ -214,7 +214,7 @@ export default function MissionScreen() {
             </View>
           </View>
 
-          <Text style={styles.dialogue}>"{mission.dialogue}"</Text>
+          <Text style={styles.dialogue}>&quot;{mission.dialogue}&quot;</Text>
 
           {/* Objective */}
           <View style={styles.objectiveBox}>

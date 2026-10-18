@@ -17,8 +17,8 @@ export default function TabLayout() {
     if (Platform.OS === 'android') {
       try {
         NavigationBar.setVisibilityAsync('hidden').catch(() => {});
-        NavigationBar.setBehaviorAsync('inset-swipe').catch(() => {});
-      } catch (e) {
+        // setBehaviorAsync removed in expo-navigation-bar 57.0+
+      } catch {
         // Ignore navigation bar errors
       }
     }

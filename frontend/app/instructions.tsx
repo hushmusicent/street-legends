@@ -184,10 +184,10 @@ export default function InstructionsScreen() {
             <Text style={styles.upgradeTitle}>🧠 Neural Implants</Text>
             <Text style={styles.upgradeDesc}>
               Permanent stat increases that boost your base attributes. Once installed, 
-              they're part of you forever!
+              they&apos;re part of you forever!
             </Text>
             <Text style={styles.upgradeExample}>
-              Example: "Cortex Enhancer" - +5% Attack permanently
+              Example: &quot;Cortex Enhancer&quot; - +5% Attack permanently
             </Text>
           </View>
           
@@ -198,7 +198,7 @@ export default function InstructionsScreen() {
               Stack them for maximum effect!
             </Text>
             <Text style={styles.upgradeExample}>
-              Example: "Adrenaline Surge" - +10% Speed permanently
+              Example: &quot;Adrenaline Surge&quot; - +10% Speed permanently
             </Text>
           </View>
 
