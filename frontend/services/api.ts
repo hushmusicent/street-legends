@@ -731,8 +731,8 @@ export const completeCastleGame = async (gameId: string, membersEliminated: numb
 };
 
 // Account Management APIs
-export const deletePlayerAccount = async (playerId: string): Promise<{ status: string; message: string }> => {
-  const response = await api.delete(`/players/${playerId}/account`);
+export const deletePlayerAccount = async (playerId: string, password: string): Promise<{ status: string; message: string }> => {
+  const response = await api.delete(`/players/${playerId}/account`, { data: { password } });
   return response.data;
 };
 

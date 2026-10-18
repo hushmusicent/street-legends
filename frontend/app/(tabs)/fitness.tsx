@@ -23,7 +23,8 @@ import { showGameToast } from '../../components/GameToast';
 const GOAL_COLORS = ['#3498db', '#f39c12', '#e74c3c'];
 const GOAL_ICONS: Array<'walk' | 'bicycle' | 'rocket'> = ['walk', 'bicycle', 'rocket'];
 const METERS_PER_STEP = 0.762; // average step length
-const UNSYNCED_DISTANCE_KEY = 'fitness_unsynced_distance';
+const LAST_SYNCED_STEPS_KEY = 'fitness_last_synced_steps';
+const LAST_SYNCED_DATE_KEY = 'fitness_last_synced_date';
 
 // Haversine distance in meters
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -55,40 +56,36 @@ export default function FitnessScreen() {
   const [pedometerAvailable, setPedometerAvailable] = useState(false);
   const [trackingMode, setTrackingMode] = useState<'pedometer' | 'gps' | 'none'>('none');
   const [permStatus, setPermStatus] = useState<string>('checking');
-  const [unsyncedDistance, setUnsyncedDistance] = useState(0); // in meters
+  const [lastSyncedSteps, setLastSyncedSteps] = useState(0);
   const subscriptionRef = useRef<any>(null);
   const baseStepsRef = useRef(0);
-  const lastStepsRef = useRef(0); // Track steps at last sync to calculate delta
+
+  // Derived: meters walked since last sync. Replaces the old accumulator so
+  // steps recorded before the app opened (OS history) count too, and nothing
+  // is ever double-counted.
+  const unsyncedDistance = Math.max(0, Math.round((steps - lastSyncedSteps) * METERS_PER_STEP));
   const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const gpsStepsRef = useRef(0);
   const locationSubRef = useRef<any>(null);
 
-  // Load unsynced distance from storage on mount
+  // Load last-synced step count on mount; reset on a new day
   useEffect(() => {
-    const loadUnsyncedDistance = async () => {
+    const loadSyncState = async () => {
       try {
-        const stored = await AsyncStorage.getItem(UNSYNCED_DISTANCE_KEY);
-        if (stored) {
-          setUnsyncedDistance(parseInt(stored, 10) || 0);
+        const today = new Date().toDateString();
+        const storedDate = await AsyncStorage.getItem(LAST_SYNCED_DATE_KEY);
+        const storedSteps = await AsyncStorage.getItem(LAST_SYNCED_STEPS_KEY);
+        if (storedDate === today && storedSteps) {
+          setLastSyncedSteps(parseInt(storedSteps, 10) || 0);
+        } else {
+          setLastSyncedSteps(0);
         }
       } catch (e) {
-        console.log('Error loading unsynced distance:', e);
+        console.log('Error loading sync state:', e);
       }
     };
-    loadUnsyncedDistance();
+    loadSyncState();
   }, []);
-
-  // Save unsynced distance when it changes
-  useEffect(() => {
-    const saveUnsyncedDistance = async () => {
-      try {
-        await AsyncStorage.setItem(UNSYNCED_DISTANCE_KEY, unsyncedDistance.toString());
-      } catch (e) {
-        console.log('Error saving unsynced distance:', e);
-      }
-    };
-    saveUnsyncedDistance();
-  }, [unsyncedDistance]);
 
   const loadFitnessData = useCallback(async () => {
     if (!playerId) return;
@@ -148,15 +145,6 @@ export default function FitnessScreen() {
 
         pedSub = Pedometer.watchStepCount(async (result) => {
           const newSteps = baseStepsRef.current + result.steps;
-          const stepDelta = newSteps - lastStepsRef.current;
-          
-          // Accumulate unsynced distance (step delta * meters per step)
-          if (stepDelta > 0) {
-            const distanceDelta = Math.round(stepDelta * METERS_PER_STEP);
-            setUnsyncedDistance(prev => prev + distanceDelta);
-            lastStepsRef.current = newSteps;
-          }
-          
           setSteps(newSteps);
           if (playerId) {
             try {
@@ -202,9 +190,6 @@ export default function FitnessScreen() {
                 const newStepsDelta = Math.round(dist / METERS_PER_STEP);
                 gpsStepsRef.current += newStepsDelta;
                 setSteps(gpsStepsRef.current);
-                
-                // Accumulate unsynced distance
-                setUnsyncedDistance(prev => prev + Math.round(dist));
                 
                 if (playerId) {
                   try {
@@ -291,8 +276,14 @@ export default function FitnessScreen() {
         }
       }
       
-      // Reset unsynced distance ONLY after successful sync
-      setUnsyncedDistance(0);
+      // Mark current steps as synced (persisted with today's date) ONLY after successful sync
+      setLastSyncedSteps(steps);
+      try {
+        await AsyncStorage.setItem(LAST_SYNCED_STEPS_KEY, steps.toString());
+        await AsyncStorage.setItem(LAST_SYNCED_DATE_KEY, new Date().toDateString());
+      } catch (e) {
+        console.log('Error saving sync state:', e);
+      }
       
       // Trigger mission refresh to update UI elsewhere
       triggerMissionRefresh();

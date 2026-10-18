@@ -15,6 +15,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { buyFromShop, getPlayer, buySkill } from '../services/api';
 import { SFX } from '../hooks/useSoundEffects';
+import { getBundledIcon } from '../assets/icons/iconMap';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -51,13 +52,25 @@ const ShopDetailItemIcon = ({
   size = 26, 
   color 
 }: { 
-  item: { icon_url?: string; equipment_type: string }; 
+  item: { id?: string; icon_url?: string; equipment_type: string }; 
   size?: number; 
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
   const [imageLoading, setImageLoading] = React.useState(true);
   
+  // Bundled icon ships with the app: instant, works offline
+  const bundledIcon = getBundledIcon(item.id);
+  if (bundledIcon) {
+    return (
+      <Image
+        source={bundledIcon}
+        style={{ width: size + 8, height: size + 8 }}
+        resizeMode="contain"
+      />
+    );
+  }
+
   if (item.icon_url && !imageError) {
     return (
       <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
@@ -111,13 +124,25 @@ const SkillIcon = ({
   size = 26, 
   color 
 }: { 
-  skill: { icon_url?: string }; 
+  skill: { id?: string; icon_url?: string }; 
   size?: number; 
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
   const [imageLoading, setImageLoading] = React.useState(true);
   
+  // Bundled icon ships with the app: instant, works offline
+  const bundledSkillIcon = getBundledIcon(skill.id);
+  if (bundledSkillIcon) {
+    return (
+      <Image
+        source={bundledSkillIcon}
+        style={{ width: size + 8, height: size + 8 }}
+        resizeMode="contain"
+      />
+    );
+  }
+
   if (skill.icon_url && !imageError) {
     return (
       <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>

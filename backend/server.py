@@ -315,8 +315,8 @@ def calculate_repair_cost(item_id: str, current_durability: int) -> int:
     base_value = item.get("value", 10)
     multiplier = REPAIR_COST_MULTIPLIER.get(rarity, 1.0)
     
-    # Minimum repair cost is $8 (increased from $5)
-    return max(8, int(base_value * multiplier * damage_percent))
+    # Repair cost is a flat 25% of the item's price
+    return int(base_value * 0.25)
 
 def is_item_broken(inventory_item: dict) -> bool:
     """Check if an inventory item is broken (0 durability)"""
@@ -327,6 +327,12 @@ def is_item_broken(inventory_item: dict) -> bool:
 async def get_effective_stats(player: dict) -> dict:
     """
     Calculate effective stats based on equipment condition.
+    Each equipped item contributes its stats_bonus scaled by its
+    durability condition (durability / max_durability):
+      - Full durability -> full bonus (e.g. +10 attack)
+      - Damaged         -> proportionally reduced bonus (e.g. 50% -> +5)
+      - Broken (0 dura) -> no bonus, plus harsh penalties below
+    Broken-item penalties:
     - Broken weapon: attack = 2
     - Broken armor: defense = 0
     - Broken accessory: luck = 0
@@ -336,38 +342,65 @@ async def get_effective_stats(player: dict) -> dict:
     base_stats = dict(player.get("stats", {}))
     equipment = player.get("equipment", {})
     equipment_durability = player.get("equipment_durability", {})
-    
+
+    # Scale each equipped item's stats_bonus by its condition
+    for slot in ("weapon", "armor", "accessory", "vehicle"):
+        item_id = equipment.get(slot)
+        if not item_id:
+            continue
+        item = STARTER_ITEMS.get(item_id)
+        if not item and 'ALL_ITEMS' in globals():
+            item = ALL_ITEMS.get(item_id)
+        if not item:
+            continue
+        max_dur = get_max_durability(item_id)
+        dur = equipment_durability.get(slot, max_dur)
+        condition = max(0.0, min(1.0, dur / max_dur)) if max_dur > 0 else 0.0
+        for stat, bonus in item.get("stats_bonus", {}).items():
+            # int() truncates toward zero, so penalties shrink with damage too
+            scaled = int(bonus * condition)
+            base_stats[stat] = base_stats.get(stat, 0) + scaled
+
+    # Apply temporary attack buffs (e.g. fitness step-goal reward)
+    attack_buff = sum(
+        b.get("amount", 0) for b in player.get("active_buffs", [])
+        if b.get("type") == "attack"
+    )
+    if attack_buff:
+        base_stats["attack"] = base_stats.get("attack", 0) + attack_buff
+
     # Check each slot for broken items
     weapon_id = equipment.get("weapon")
     armor_id = equipment.get("armor")
     accessory_id = equipment.get("accessory")
     vehicle_id = equipment.get("vehicle")
-    
+
     # Check weapon - if broken, attack = 2
     if weapon_id:
         dur = equipment_durability.get("weapon", 100)
         if dur <= 0:
             base_stats["attack"] = 2
-    
+
     # Check armor - if broken, defense = 0
     if armor_id:
         dur = equipment_durability.get("armor", 100)
         if dur <= 0:
             base_stats["defense"] = 0
-    
+
     # Check accessory - if broken, luck = 0
     if accessory_id:
         dur = equipment_durability.get("accessory", 100)
         if dur <= 0:
             base_stats["luck"] = 0
-    
+
     # Check vehicle - if broken, speed = 1
     if vehicle_id:
         dur = equipment_durability.get("vehicle", 100)
         if dur <= 0:
             base_stats["speed"] = 1
-    
+
     return base_stats
+
 
 def get_speed_advantage(player_speed: int, enemy_speed: int) -> dict:
     """
@@ -1447,11 +1480,11 @@ def get_eligible_enemies(player_level: int):
 
 def calculate_enemy_stats(enemy_level: int, is_boss: bool) -> dict:
     """Calculate enemy stats based on level and boss status"""
-    # Base stats scale with level, bosses get a smaller multiplier (easier)
-    boss_mult = 1.3 if is_boss else 1.0
-    health = int((80 + enemy_level * 18) * boss_mult)
-    attack = int((8 + enemy_level * 3.2) * boss_mult)
-    defense = int((5 + enemy_level * 1.8) * boss_mult)
+    # Base stats scale with level; bosses hit harder and soak more damage
+    boss_mult = 1.4 if is_boss else 1.0
+    health = int((90 + enemy_level * 22) * boss_mult)
+    attack = int((10 + enemy_level * 3.8) * boss_mult)
+    defense = int((6 + enemy_level * 2.2) * boss_mult)
     return {"health": health, "max_health": health, "attack": attack, "defense": defense}
 
 SKILLS = {
@@ -2138,6 +2171,7 @@ async def change_password(player_id: str, data: ChangePasswordRequest):
 # ============== ACCOUNT DELETION ==============
 class DeleteAccountRequest(BaseModel):
     username: str
+    password: str
 
 @api_router.post("/account/delete-request")
 async def request_account_deletion(data: DeleteAccountRequest):
@@ -2157,6 +2191,10 @@ async def request_account_deletion(data: DeleteAccountRequest):
     
     if player:
         player_id = player.get("id")
+
+        # Verify password to confirm account ownership (don't reveal failures)
+        if not pwd_context.verify(data.password, player.get("password_hash", "")):
+            return {"status": "success", "message": "If an account exists with this username, it will be deleted within 30 days."}
         
         # Store deletion request for processing
         deletion_request = {
@@ -2188,16 +2226,24 @@ async def request_account_deletion(data: DeleteAccountRequest):
     return {"status": "success", "message": "If an account exists with this username, it will be deleted within 30 days."}
 
 
+class DeleteAccountConfirm(BaseModel):
+    password: str
+
+
 @api_router.delete("/players/{player_id}/account")
-async def delete_player_account(player_id: str):
+async def delete_player_account(player_id: str, data: DeleteAccountConfirm):
     """
     Permanently delete a player's account and all associated data.
-    This is for logged-in users who want to delete their own account.
+    Requires the account password to confirm ownership.
     """
     # Find the player
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Verify password to confirm account ownership
+    if not pwd_context.verify(data.password, player.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Incorrect password. Account deletion cancelled.")
     
     player_name = player.get("name", "Unknown")
     
@@ -3086,7 +3132,7 @@ async def battle_action(battle_id: str, action: BattleAction):
         enemy = await db.players.find_one({"id": battle["enemy_id"]})
         if not enemy:
             raise HTTPException(status_code=404, detail="Enemy player not found")
-        enemy_stats = enemy["stats"]
+        enemy_stats = await get_effective_stats(enemy)
     
     # Get effective stats based on equipment condition
     player_stats = await get_effective_stats(player)
@@ -3095,6 +3141,13 @@ async def battle_action(battle_id: str, action: BattleAction):
     player_health = battle["player_health"]
     enemy_health = battle["enemy_health"]
     player_energy = battle["player_energy"]
+    # GOD_POTION: infinite health/energy check
+    _god_inf_health = _godmode_active(player, "infinite_health")
+    _god_inf_energy = _godmode_active(player, "infinite_energy")
+    if _god_inf_health:
+        player_health = battle.get("player_max_health", player_health)
+    if _god_inf_energy:
+        player_energy = battle.get("player_max_energy", player_energy)
     
     # Check for speed advantage (double attacks)
     speed_adv = get_speed_advantage(player_stats.get("speed", 5), enemy_stats.get("speed", 5))
@@ -3144,10 +3197,13 @@ async def battle_action(battle_id: str, action: BattleAction):
         if action.skill_id not in equipped_skills:
             raise HTTPException(status_code=400, detail="Skill not equipped. Equip it first to use in battle.")
         
-        if skill["cost"] > player_energy:
+        if skill["cost"] > player_energy and not _god_inf_energy:
             raise HTTPException(status_code=400, detail="Not enough energy")
         
-        player_energy -= skill["cost"]
+        if not _god_inf_energy:
+            player_energy -= skill["cost"]
+        else:
+            player_energy = battle.get("player_max_energy", player_energy)
         
         if "damage_mult" in skill:
             # Skills have lower miss chance (5%)
@@ -3171,7 +3227,11 @@ async def battle_action(battle_id: str, action: BattleAction):
             
     elif action.action == "defend":
         combat_log.append("You take a defensive stance!")
-        player_energy = min(100, player_energy + 10)
+        max_energy = player_stats.get("max_energy", 100) + sum(
+            b.get("amount", 0) for b in player.get("active_buffs", [])
+            if b.get("type") == "max_energy"
+        )
+        player_energy = min(max_energy, player_energy + 10)
         
     elif action.action == "flee":
         if random.random() < 0.5:
@@ -3243,9 +3303,9 @@ async def battle_action(battle_id: str, action: BattleAction):
                 new_level = player["level"] + 1
                 update_data["level"] = new_level
                 update_data["xp_to_next"] = calculate_xp_to_level(new_level)
-                update_data["stats.max_health"] = int(player_stats["max_health"] * 1.1)
-                update_data["stats.attack"] = int(player_stats["attack"] * 1.05)
-                update_data["stats.defense"] = int(player_stats["defense"] * 1.05)
+                update_data["stats.max_health"] = int(player["stats"]["max_health"] * 1.1)
+                update_data["stats.attack"] = int(player["stats"]["attack"] * 1.05)
+                update_data["stats.defense"] = int(player["stats"]["defense"] * 1.05)
                 combat_log.append(f"LEVEL UP! You are now level {new_level}!")
             
             await db.players.update_one({"id": player["id"]}, {"$set": update_data})
@@ -3333,7 +3393,10 @@ async def battle_action(battle_id: str, action: BattleAction):
                 else:
                     combat_log.append(f"{battle['enemy_name']} attacks for {enemy_damage} damage!")
             
-            player_health -= enemy_damage
+            if _god_inf_health:
+                combat_log.append("🛡️ God Potion absorbs the damage! (Infinite Health)")
+            else:
+                player_health -= enemy_damage
     
     # Check if player defeated
     if player_health <= 0:
@@ -3619,7 +3682,14 @@ async def accept_mission(mission_id: str, player_id: str):
         raise HTTPException(status_code=400, detail="You already accepted this mission")
     
     # Add this player's progress entry to the mission
-    pp[player_id] = {"progress": 0, "accepted_at": datetime.utcnow().isoformat()}
+    entry = {"progress": 0, "accepted_at": datetime.utcnow().isoformat()}
+    if mission.get("mission_type") == "walk_steps":
+        # Baseline: only steps walked AFTER accepting count toward the goal
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        fit = await db.fitness.find_one({"player_id": player_id, "date": today})
+        entry["last_steps"] = fit.get("steps", 0) if fit else 0
+        entry["last_date"] = today
+    pp[player_id] = entry
     await db.missions.update_one(
         {"id": mission_id},
         {"$set": {
@@ -3658,31 +3728,6 @@ async def cancel_mission(mission_id: str, player_id: str):
             await db.missions.update_one({"id": mission_id}, {"$set": {"player_progress": pp}})
     
     return {"message": "Mission cancelled"}
-
-@api_router.put("/missions/{mission_id}/progress")
-async def update_mission_progress(mission_id: str, player_id: str, progress: int):
-    """Update progress on a mission goal for a specific player"""
-    mission = await db.missions.find_one({"id": mission_id})
-    if not mission:
-        raise HTTPException(status_code=404, detail="Mission not found")
-    
-    pp = mission.get("player_progress", {})
-    if player_id not in pp:
-        # Backward compat: check old accepted_by field
-        if mission.get("accepted_by") != player_id:
-            raise HTTPException(status_code=400, detail="Mission not accepted by this player")
-    
-    new_progress = min(progress, mission.get("goal_target", 999))
-    pp[player_id] = pp.get(player_id, {})
-    pp[player_id]["progress"] = new_progress
-    
-    await db.missions.update_one(
-        {"id": mission_id},
-        {"$set": {"player_progress": pp}}
-    )
-    
-    completed = new_progress >= mission.get("goal_target", 999)
-    return {"progress": new_progress, "target": mission.get("goal_target"), "completed": completed}
 
 @api_router.post("/missions/{mission_id}/complete")
 async def complete_mission(mission_id: str, player_id: str):
@@ -5408,7 +5453,15 @@ async def buy_from_shop(player_id: str, item_id: str, shop_price: int):
     item = ALL_ITEMS.get(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
+    # Validate the client-provided price against the legitimate shop range.
+    # Shops spawn with a 0.8x-1.5x price multiplier (see spawn_shops), so any
+    # price outside that range is an exploit attempt.
+    min_price = max(5, int(item["value"] * 0.8))
+    max_price = max(5, int(item["value"] * 1.5))
+    if shop_price < min_price or shop_price > max_price:
+        raise HTTPException(status_code=400, detail="Invalid shop price")
+
     if player.get("cash", 0) < shop_price:
         raise HTTPException(status_code=400, detail="Not enough cash")
     
@@ -7380,7 +7433,10 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
         raise HTTPException(status_code=404, detail="Player not found")
     
     grab_id = game["grab_id"]
-    
+
+    # Cap reported boxes at a plausible maximum (blocks reward exploits)
+    boxes_collected = max(0, min(boxes_collected, 150))
+
     # Update game status
     await db.packagegrab_games.update_one(
         {"id": game_id},
@@ -7597,7 +7653,10 @@ async def complete_shootout(game_id: str, hits: int, standalone: bool = False):
         raise HTTPException(status_code=404, detail="Player not found")
     
     shootout_id = game["shootout_id"]
-    
+
+    # Cap reported hits at a plausible maximum (blocks reward exploits)
+    hits = max(0, min(hits, 100))
+
     # Update game status
     await db.shootout_games.update_one(
         {"id": game_id},
@@ -8534,15 +8593,22 @@ async def get_nearby_territories(latitude: float, longitude: float, player_level
     """Get or create territories near a location as a tiled grid of equal squares"""
     import math
     LAT_M = 111000.0
-    LNG_M = math.cos(math.radians(latitude)) * 111000.0
-    
+    # Snap the reference latitude to 0.5-degree bands (~55km) so the longitude
+    # grid stays fixed while the player moves locally. Using the live latitude
+    # made the whole grid slide with every step (anchored at lng 0, amplified
+    # by the column index), spawning overlapping territories.
+    ref_lat = round(latitude * 2) / 2
+    LNG_M = math.cos(math.radians(ref_lat)) * 111000.0
+
     cell_lat = TERRITORY_CELL_SIZE_M / LAT_M
     cell_lng = TERRITORY_CELL_SIZE_M / LNG_M
-    
+
     # Find the grid cell the player is in
     center_row = int(latitude / cell_lat)
     center_col = int(longitude / cell_lng)
-    # Handle negative coordinates
+    # Handle negative coordinates (int() truncates toward zero)
+    if latitude < 0:
+        center_row -= 1
     if longitude < 0:
         center_col -= 1
     
@@ -8575,7 +8641,40 @@ async def get_nearby_territories(latitude: float, longitude: float, player_level
     
     # Fetch all territories for this area
     all_terrs = await db.territories.find({"id": {"$in": territory_ids}}).to_list(length=25)
-    
+
+    # Heal drifted bounds: each territory id encodes its grid cell, so snap any
+    # bounds that no longer match the current grid back into place. This removes
+    # overlaps from territories generated under older grid alignments or sizes.
+    # Owner, boss, and rewards are preserved.
+    for terr in all_terrs:
+        try:
+            _, row_s, col_s = terr["id"].split("_")
+            t_row, t_col = int(row_s), int(col_s)
+        except (ValueError, AttributeError):
+            continue
+        expected_bounds = {
+            "south": round(t_row * cell_lat, 6),
+            "north": round((t_row + 1) * cell_lat, 6),
+            "west": round(t_col * cell_lng, 6),
+            "east": round((t_col + 1) * cell_lng, 6),
+        }
+        if terr.get("bounds") != expected_bounds:
+            new_center = {
+                "latitude": round((expected_bounds["south"] + expected_bounds["north"]) / 2, 6),
+                "longitude": round((expected_bounds["west"] + expected_bounds["east"]) / 2, 6),
+            }
+            await db.territories.update_one(
+                {"id": terr["id"]},
+                {"$set": {
+                    "bounds": expected_bounds,
+                    "location": new_center,
+                    "size": TERRITORY_CELL_SIZE_M,
+                }},
+            )
+            terr["bounds"] = expected_bounds
+            terr["location"] = new_center
+            terr["size"] = TERRITORY_CELL_SIZE_M
+
     # Sync owner_pic for territories that have owners but missing pic
     for terr in all_terrs:
         if terr.get("owner_id") and not terr.get("owner_pic"):
@@ -8701,7 +8800,7 @@ async def capture_territory(territory_id: str, player_id: str):
     
     # Fight the boss (NPC)
     boss = territory["boss"]
-    p_stats = player["stats"]
+    p_stats = await get_effective_stats(player)
     
     # Apply active buffs
     buff_atk = sum(b["amount"] for b in player.get("active_buffs", []) if b["type"] == "max_health")
@@ -8794,8 +8893,8 @@ async def challenge_territory_owner(territory: dict, challenger: dict):
         )
         raise HTTPException(status_code=400, detail="Territory owner not found. Territory has been reset.")
     
-    c_stats = challenger["stats"]
-    o_stats = owner["stats"]
+    c_stats = await get_effective_stats(challenger)
+    o_stats = await get_effective_stats(owner)
     
     challenger_hp = c_stats["health"]
     owner_hp = o_stats["health"]
@@ -8952,15 +9051,27 @@ async def update_steps(player_id: str, steps: int):
             for m in missions:
                 pp = m.get("player_progress", {})
                 player_data = pp.get(player_id, {})
-                old_progress = player_data.get("progress", 0)
-                # Steps are absolute (total today), so set progress directly
-                if steps > old_progress:
-                    player_data["progress"] = steps
-                    pp[player_id] = player_data
-                    await db.missions.update_one(
-                        {"id": m["id"]},
-                        {"$set": {"player_progress": pp}}
-                    )
+                if player_data.get("last_date") != today:
+                    # First sync (legacy missions) or day rollover: start fresh
+                    # from the current count; already-counted progress is kept
+                    # on rollover, reset for legacy entries that predate baselines
+                    if player_data.get("last_date") is None:
+                        player_data["progress"] = 0
+                    player_data["last_steps"] = steps
+                    player_data["last_date"] = today
+                else:
+                    # Same day: count only new steps since the last sync
+                    new_steps = max(0, steps - player_data.get("last_steps", 0))
+                    player_data["progress"] = player_data.get("progress", 0) + new_steps
+                    player_data["last_steps"] = steps
+                player_data["progress"] = min(
+                    player_data["progress"], m.get("goal_target", 999999)
+                )
+                pp[player_id] = player_data
+                await db.missions.update_one(
+                    {"id": m["id"]},
+                    {"$set": {"player_progress": pp}}
+                )
     
     return {"steps": steps}
 
@@ -9000,8 +9111,8 @@ async def claim_step_goal(player_id: str, goal_steps: int):
     elif goal["reward_type"] == "xp_and_buff":
         updates["$inc"] = {"xp": goal["reward_value"]}
         # Add a temporary attack buff (5 battles)
-        buff = {"type": "attack", "value": 10, "remaining": 5}
-        updates["$push"] = {"buffs": buff}
+        buff = {"type": "attack", "amount": 10, "battles_remaining": 5}
+        updates["$push"] = {"active_buffs": buff}
         reward_msg = f"+{goal['reward_value']} XP and +10 Attack for 5 battles!"
     
     if updates:
@@ -9011,12 +9122,12 @@ async def claim_step_goal(player_id: str, goal_steps: int):
     player = await db.players.find_one({"id": player_id})
     current_xp = player.get("xp", 0)
     current_level = player.get("level", 1)
-    xp_needed = current_level * 100
+    xp_needed = calculate_xp_to_level(current_level)
     leveled_up = False
     while current_xp >= xp_needed:
         current_level += 1
         current_xp -= xp_needed
-        xp_needed = current_level * 100
+        xp_needed = calculate_xp_to_level(current_level)
         leveled_up = True
     if leveled_up:
         stat_boost = 2
@@ -9025,6 +9136,7 @@ async def claim_step_goal(player_id: str, goal_steps: int):
             {"$set": {
                 "level": current_level,
                 "xp": current_xp,
+                "xp_to_next": calculate_xp_to_level(current_level),
             }, "$inc": {
                 "stats.max_health": stat_boost * 5,
                 "stats.health": stat_boost * 5,
@@ -9339,6 +9451,116 @@ async def admin_reset_all_data(
 
 
 # Include the router in the main app
+
+# === GOD_POTION_IAP_v2 ===
+# Two separate potions - 1 hour each - $1 real money each (via Play Billing)
+#   god_potion_health_1h -> infinite health
+#   god_potion_energy_1h -> infinite energy
+GOD_POTION_HEALTH_PRODUCT_ID = "god_potion_health_1h"
+GOD_POTION_ENERGY_PRODUCT_ID = "god_potion_energy_1h"
+GOD_POTION_PRODUCTS = {
+    GOD_POTION_HEALTH_PRODUCT_ID: "infinite_health",
+    GOD_POTION_ENERGY_PRODUCT_ID: "infinite_energy",
+}
+GOD_POTION_DURATION_SECONDS = 3600
+GOD_POTION_PRICE_USD = 1.00
+
+class GodPotionGrant(BaseModel):
+    player_id: str
+    product_id: str
+    purchase_token: Optional[str] = None
+
+def _godmode_active(player: dict, kind: str) -> bool:
+    """kind: 'infinite_health' or 'infinite_energy' - checks expiry."""
+    try:
+        god = player.get("godmode", {}) or {}
+        until_str = god.get(kind + "_until")
+        if not until_str:
+            return False
+        until = datetime.fromisoformat(until_str)
+        return datetime.utcnow() < until
+    except Exception:
+        return False
+
+def _godmode_remaining(player: dict) -> dict:
+    """Returns remaining seconds for each godmode buff."""
+    out = {"infinite_health": 0, "infinite_energy": 0}
+    try:
+        god = player.get("godmode", {}) or {}
+        now = datetime.utcnow()
+        for kind in ("infinite_health", "infinite_energy"):
+            until_str = god.get(kind + "_until")
+            if until_str:
+                until = datetime.fromisoformat(until_str)
+                rem = int((until - now).total_seconds())
+                out[kind] = max(0, rem)
+    except Exception:
+        pass
+    return out
+
+@api_router.post("/iap/grant-godmode")
+async def iap_grant_godmode(data: GodPotionGrant):
+    """Grant 1-hour infinite health OR infinite energy after a $1 Play Billing purchase.
+
+    Frontend flow:
+      1. Launch Google Play Billing for "god_potion_health_1h" or
+         "god_potion_energy_1h" ($1.00 each).
+      2. On success, POST here with player_id, product_id, purchase_token.
+    TODO (production): verify purchase_token with Google Play Developer API
+    (purchases.products.get) before granting. Do NOT grant on product_id alone
+    in production - this endpoint currently trusts the caller for testing.
+    """
+    buff_kind = GOD_POTION_PRODUCTS.get(data.product_id)
+    if not buff_kind:
+        raise HTTPException(status_code=400, detail=f"Unknown product: {data.product_id}")
+    player = await db.players.find_one({"id": data.player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    # TODO: verify data.purchase_token with Play Developer API here.
+    # For now we log it for audit.
+    now = datetime.utcnow()
+    until = now + timedelta(seconds=GOD_POTION_DURATION_SECONDS)
+    until_str = until.isoformat()
+    await db.players.update_one(
+        {"id": data.player_id},
+        {"$set": {
+            f"godmode.{buff_kind}_until": until_str,
+            "godmode.last_product_id": data.product_id,
+            "godmode.last_purchase_token": data.purchase_token,
+            "godmode.granted_at": now.isoformat(),
+        }}
+    )
+    updated = await db.players.find_one({"id": data.player_id})
+    remaining = _godmode_remaining(updated)
+    return {
+        "message": f"Potion activated! Infinite {buff_kind.replace('_', ' ').title()} for 1 hour.",
+        "product_id": data.product_id,
+        "buff_kind": buff_kind,
+        "price_usd": GOD_POTION_PRICE_USD,
+        "duration_seconds": GOD_POTION_DURATION_SECONDS,
+        "expires_at": until_str,
+        "remaining": remaining,
+    }
+
+@api_router.get("/players/{player_id}/godmode")
+async def get_godmode_status(player_id: str):
+    """Check if infinite health/energy potions are active."""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    remaining = _godmode_remaining(player)
+    return {
+        "infinite_health_active": remaining["infinite_health"] > 0,
+        "infinite_energy_active": remaining["infinite_energy"] > 0,
+        "remaining_seconds": remaining,
+        "products": {
+            "infinite_health": GOD_POTION_HEALTH_PRODUCT_ID,
+            "infinite_energy": GOD_POTION_ENERGY_PRODUCT_ID,
+        },
+        "price_usd": GOD_POTION_PRICE_USD,
+    }
+# === END GOD_POTION_IAP_v2 ===
+
 app.include_router(api_router)
 
 # Mount static files directory for serving sprites and other assets

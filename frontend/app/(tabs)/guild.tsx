@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useGameStore } from '../../stores/gameStore';
 import { GameButton } from '../../components/GameButton';
 import {
@@ -80,6 +81,7 @@ export default function GuildScreen() {
   
   // Guild icon upload state
   const [uploadingIcon, setUploadingIcon] = useState(false);
+  const [iconLoadFailed, setIconLoadFailed] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -371,11 +373,21 @@ export default function GuildScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       
       const asset = result.assets[0];
-      const fileName = asset.fileName || `guild_icon_${Date.now()}.jpg`;
-      
+
       setUploadingIcon(true);
-      
-      await uploadGuildIcon(playerGuild.id, playerId, asset.uri, fileName);
+
+      // Normalize to a real JPEG first (same as profile pictures): the raw
+      // picker file's format doesn't always match its filename, which came
+      // back as a black icon after upload.
+      const normalized = await manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 512, height: 512 } }],
+        { compress: 0.85, format: SaveFormat.JPEG }
+      );
+      const fileName = `guild_icon_${Date.now()}.jpg`;
+
+      await uploadGuildIcon(playerGuild.id, playerId, normalized.uri, fileName);
+      setIconLoadFailed(false);
       
       // Refresh guild data to get the new icon
       await handleRefresh();
@@ -675,10 +687,11 @@ export default function GuildScreen() {
                       <View style={styles.guildIcon}>
                         <ActivityIndicator size="small" color="#e74c3c" />
                       </View>
-                    ) : playerGuild.icon_path ? (
-                      <Image 
+                    ) : playerGuild.icon_path && !iconLoadFailed ? (
+                      <Image
                         source={{ uri: getImageUrl(playerGuild.icon_path) }}
                         style={styles.guildIconImage}
+                        onError={() => setIconLoadFailed(true)}
                       />
                     ) : (
                       <View style={styles.guildIcon}>

@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { getAllItems, getPlayer, equipItem } from '../services/api';
 import api from '../services/api';
+import { getBundledIcon } from '../assets/icons/iconMap';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -54,12 +55,24 @@ const ShopItemIcon = ({
   size = 24, 
   color 
 }: { 
-  item: { icon_url?: string; equipment_type: string }; 
+  item: { id?: string; icon_url?: string; equipment_type: string }; 
   size?: number; 
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
   
+  // Bundled icon ships with the app: instant, works offline
+  const bundledIcon = getBundledIcon(item.id);
+  if (bundledIcon) {
+    return (
+      <Image
+        source={bundledIcon}
+        style={{ width: size + 6, height: size + 6 }}
+        resizeMode="contain"
+      />
+    );
+  }
+
   if (item.icon_url && !imageError) {
     return (
       <Image

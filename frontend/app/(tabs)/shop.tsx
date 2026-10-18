@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
 import { getConsumableShop, buyConsumable, getPlayer } from '../../services/api';
 import api from '../../services/api';
+import { GodPotions } from '../../components/GodPotions';
+import { getBundledIcon } from '../../assets/icons/iconMap';
 
 type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable';
 
@@ -63,12 +65,24 @@ const ConsumableIcon = ({
   size = 24, 
   color 
 }: { 
-  item: { icon_url?: string; icon: string }; 
+  item: { id?: string; icon_url?: string; icon: string }; 
   size?: number; 
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
   
+  // Bundled icon ships with the app: instant, works offline
+  const bundledIcon = getBundledIcon(item.id);
+  if (bundledIcon) {
+    return (
+      <Image
+        source={bundledIcon}
+        style={{ width: size + 6, height: size + 6 }}
+        resizeMode="contain"
+      />
+    );
+  }
+
   if (item.icon_url && !imageError) {
     return (
       <Image
@@ -268,6 +282,8 @@ export default function ShopTabScreen() {
           </ScrollView>
         </View>
       )}
+
+      <GodPotions playerId={playerId} />
 
       {/* Filter Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>

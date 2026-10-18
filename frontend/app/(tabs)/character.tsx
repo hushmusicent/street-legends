@@ -48,6 +48,7 @@ import { StatBar } from '../../components/StatBar';
 import { Skill, SocialStats } from '../../types/game';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showGameToast } from '../../components/GameToast';
+import { getBundledIcon } from '../../assets/icons/iconMap';
 
 type TabType = 'status' | 'equipment' | 'items' | 'skills';
 
@@ -110,26 +111,65 @@ const ItemIcon = ({
   size = 22, 
   color 
 }: { 
-  item: { icon_url?: string; equipment_type: string; is_broken?: boolean }; 
+  item: { id?: string; icon_url?: string; equipment_type: string; is_broken?: boolean }; 
   size?: number; 
   color: string;
 }) => {
   const [imageError, setImageError] = React.useState(false);
   const [imageLoading, setImageLoading] = React.useState(true);
-  
+  const [retryKey, setRetryKey] = React.useState(0);
+  const retryTimer = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, []);
+
+  const handleImageError = () => {
+    // Retry a few times with backoff instead of giving up: on slow connections
+    // mass downloads can time out, which used to leave the gray placeholder
+    // stuck forever.
+    if (retryKey < 3) {
+      retryTimer.current = setTimeout(() => {
+        setImageLoading(true);
+        setRetryKey((k: number) => k + 1);
+      }, 1200 * (retryKey + 1));
+    } else {
+      setImageError(true);
+    }
+  };
+
+  // Bundled icon ships with the app: instant, works offline
+  const bundledIcon = getBundledIcon(item.id);
+  if (bundledIcon) {
+    return (
+      <Image
+        source={bundledIcon}
+        style={{
+          width: size + 8,
+          height: size + 8,
+          opacity: item.is_broken ? 0.5 : 1,
+        }}
+        resizeMode="contain"
+      />
+    );
+  }
+
   if (item.icon_url && !imageError) {
     return (
       <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
         <Image
+          key={`${item.icon_url}-${retryKey}`}
           source={{ uri: item.icon_url, cache: 'force-cache' }}
-          style={{ 
-            width: size + 8, 
-            height: size + 8, 
+          style={{
+            width: size + 8,
+            height: size + 8,
             opacity: item.is_broken ? 0.5 : 1,
             position: 'absolute'
           }}
           resizeMode="contain"
-          onError={() => setImageError(true)}
+          onError={handleImageError}
           onLoadStart={() => setImageLoading(true)}
           onLoadEnd={() => setImageLoading(false)}
         />
@@ -166,15 +206,47 @@ const SkillIcon = ({
 }) => {
   const [imageError, setImageError] = React.useState(false);
   const [imageLoading, setImageLoading] = React.useState(true);
-  
+  const [retryKey, setRetryKey] = React.useState(0);
+  const retryTimer = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, []);
+
+  const handleImageError = () => {
+    if (retryKey < 3) {
+      retryTimer.current = setTimeout(() => {
+        setImageLoading(true);
+        setRetryKey((k: number) => k + 1);
+      }, 1200 * (retryKey + 1));
+    } else {
+      setImageError(true);
+    }
+  };
+
+  // Bundled icon ships with the app: instant, works offline
+  const bundledSkillIcon = getBundledIcon(skill.id);
+  if (bundledSkillIcon) {
+    return (
+      <Image
+        source={bundledSkillIcon}
+        style={{ width: size + 8, height: size + 8 }}
+        resizeMode="contain"
+      />
+    );
+  }
+
   if (skill.icon_url && !imageError) {
     return (
       <View style={{ width: size + 8, height: size + 8, justifyContent: 'center', alignItems: 'center' }}>
         <Image
+          key={`${skill.icon_url}-${retryKey}`}
           source={{ uri: skill.icon_url, cache: 'force-cache' }}
           style={{ width: size + 8, height: size + 8, position: 'absolute' }}
           resizeMode="contain"
-          onError={() => setImageError(true)}
+          onError={handleImageError}
           onLoadStart={() => setImageLoading(true)}
           onLoadEnd={() => setImageLoading(false)}
         />
@@ -230,22 +302,51 @@ export default function CharacterScreen() {
     }
   }, [activeTab]);
 
-  const loadAllData = async () => {
+  // Prefetch icon URLs into the native image cache so item/skill icons render
+  // instantly on this screen. (The `cache: 'force-cache'` source option is
+  // iOS-only; on Android this prefetch is what stops icons re-downloading.)
+  // Best-effort only: must never break the data load, so it tolerates any
+  // response shape (the skills endpoint returns an object, not an array).
+  const prefetchIcons = (items: any) => {
+    try {
+      const list = Array.isArray(items) ? items : items?.skills || [];
+      const urls = [...new Set(list.map((i: any) => i?.icon_url).filter(Boolean))] as string[];
+      urls.slice(0, 25).forEach((url) => {
+        Image.prefetch(url).catch(() => {});
+      });
+    } catch (e) {
+      // ignore prefetch failures
+    }
+  };
+
+  const loadAllData = async (forceRefresh = false) => {
     if (!playerId) return;
     setLoading(true);
     try {
+      // Reuse the already-loaded profile pic instead of re-downloading it on
+      // every visit to this tab (pull-to-refresh still fetches it fresh)
+      const cachedPic = forceRefresh ? null : useGameStore.getState().profilePic;
       const results = await Promise.allSettled([
         getPlayer(playerId),
         getPlayerSkills(playerId),
         getPlayerInventoryDetails(playerId),
         getPlayerEquipmentDetails(playerId),
-        getProfilePic(playerId),
+        cachedPic ? Promise.resolve({ profile_pic: cachedPic }) : getProfilePic(playerId),
         getOwnedTerritories(playerId),
       ]);
       if (results[0].status === 'fulfilled') setPlayer(results[0].value);
-      if (results[1].status === 'fulfilled') setSkills(results[1].value);
-      if (results[2].status === 'fulfilled') setInventory(results[2].value);
-      if (results[3].status === 'fulfilled') setEquipped(results[3].value);
+      if (results[1].status === 'fulfilled') {
+        setSkills(results[1].value);
+        prefetchIcons(results[1].value);
+      }
+      if (results[2].status === 'fulfilled') {
+        setInventory(results[2].value);
+        prefetchIcons(results[2].value);
+      }
+      if (results[3].status === 'fulfilled') {
+        setEquipped(results[3].value);
+        prefetchIcons(Object.values(results[3].value || {}).filter(Boolean) as EquipmentItem[]);
+      }
       if (results[4].status === 'fulfilled' && results[4].value.profile_pic) {
         setProfilePic(results[4].value.profile_pic);
         setGlobalProfilePic(results[4].value.profile_pic);
@@ -259,7 +360,7 @@ export default function CharacterScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadAllData();
+    await loadAllData(true);
     setRefreshing(false);
   };
 
@@ -328,11 +429,8 @@ export default function CharacterScreen() {
     
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
-    const damagePercent = (maxDur - curDur) / maxDur;
-    // Increased repair cost multipliers (75-180% of item value) - 50% higher
-    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8, mythic: 2.2 };
-    const mult = rarityMult[item.rarity] || 1.0;
-    const repairCost = Math.max(8, Math.floor(item.value * mult * damagePercent));
+    // Repair cost is a flat 25% of the item's price
+    const repairCost = Math.floor(item.value * 0.25);
     
     Alert.alert(
       'Repair Item',
@@ -366,11 +464,8 @@ export default function CharacterScreen() {
     
     const maxDur = item.max_durability || 100;
     const curDur = item.durability || maxDur;
-    const damagePercent = (maxDur - curDur) / maxDur;
-    // Increased repair cost multipliers (75-180% of item value) - 50% higher
-    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8, mythic: 2.2 };
-    const mult = rarityMult[item.rarity] || 1.0;
-    const repairCost = Math.max(8, Math.floor(item.value * mult * damagePercent));
+    // Repair cost is a flat 25% of the item's price
+    const repairCost = Math.floor(item.value * 0.25);
     
     Alert.alert(
       'Repair Equipped Item',
@@ -636,7 +731,7 @@ export default function CharacterScreen() {
         }
       >
         {activeTab === 'status' && (
-          <StatusTab player={player} classColor={classColor} territories={ownedTerritories} playerId={playerId} />
+          <StatusTab player={player} classColor={classColor} territories={ownedTerritories} playerId={playerId} equipped={equipped} />
         )}
         {activeTab === 'equipment' && (
           <EquipmentTab
@@ -833,7 +928,46 @@ export default function CharacterScreen() {
 }
 
 // ========== STATUS TAB ==========
-function StatusTab({ player, classColor, territories, playerId }: { player: any; classColor: string; territories: any[]; playerId: string }) {
+// ---- Equipment condition helpers (mirror backend get_effective_stats) ----
+
+// Scaled stats_bonus for one item based on its durability condition.
+// Full durability -> full bonus; damaged -> proportionally reduced bonus.
+function getConditionScaledBonus(item: EquipmentItem | null | undefined): Record<string, number> {
+  const result: Record<string, number> = {};
+  if (!item?.stats_bonus) return result;
+  const maxDur = item.max_durability || 100;
+  const dur = item.durability ?? maxDur;
+  const condition = maxDur > 0 ? Math.max(0, Math.min(1, dur / maxDur)) : 0;
+  Object.entries(item.stats_bonus).forEach(([stat, val]) => {
+    result[stat] = Math.trunc((val as number) * condition);
+  });
+  return result;
+}
+
+// Effective combat stats = base stats + condition-scaled equipment bonuses,
+// with the same broken-item penalties the backend applies in combat.
+function getEffectiveCombatStats(baseStats: any, equipped: Record<string, EquipmentItem | null>): any {
+  const stats: Record<string, number> = { ...(baseStats || {}) };
+  Object.values(equipped || {}).forEach((item) => {
+    const scaled = getConditionScaledBonus(item);
+    Object.entries(scaled).forEach(([stat, val]) => {
+      stats[stat] = (stats[stat] || 0) + val;
+    });
+  });
+  const isBroken = (slot: string) => {
+    const it = (equipped || {})[slot];
+    if (!it) return false;
+    return (it.durability ?? it.max_durability ?? 100) <= 0;
+  };
+  if (isBroken('weapon')) stats.attack = 2;
+  if (isBroken('armor')) stats.defense = 0;
+  if (isBroken('accessory')) stats.luck = 0;
+  if (isBroken('vehicle')) stats.speed = 1;
+  return stats;
+}
+
+function StatusTab({ player, classColor, territories, playerId, equipped }: { player: any; classColor: string; territories: any[]; playerId: string; equipped: Record<string, EquipmentItem | null> }) {
+  const effectiveStats = getEffectiveCombatStats(player?.stats, equipped);
   const totalIncome = territories.reduce((sum: number, t: any) => sum + (t.rewards?.passive_income || 0), 0);
   const [collecting, setCollecting] = useState(false);
   const [incomePreview, setIncomePreview] = useState<{ available_income: number; ready_territories: number; total_territories: number; next_collection_hours: number } | null>(null);
@@ -893,10 +1027,10 @@ function StatusTab({ player, classColor, territories, playerId }: { player: any;
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>COMBAT STATS</Text>
         <View style={styles.statsGrid}>
-          <StatBar icon="flash" label="Attack" value={player.stats.attack} color="#e74c3c" />
-          <StatBar icon="shield" label="Defense" value={player.stats.defense} color="#3498db" />
-          <StatBar icon="speedometer" label="Speed" value={player.stats.speed} color="#2ecc71" />
-          <StatBar icon="dice" label="Luck" value={player.stats.luck} color="#f39c12" />
+          <StatBar icon="flash" label="Attack" value={effectiveStats.attack} color="#e74c3c" />
+          <StatBar icon="shield" label="Defense" value={effectiveStats.defense} color="#3498db" />
+          <StatBar icon="speedometer" label="Speed" value={effectiveStats.speed} color="#2ecc71" />
+          <StatBar icon="dice" label="Luck" value={effectiveStats.luck} color="#f39c12" />
         </View>
       </View>
 
@@ -1072,14 +1206,9 @@ function EquipmentTab({
 }) {
   const slots = ['weapon', 'armor', 'accessory', 'vehicle'];
 
-  // Calculate repair cost for equipped items (75-180% of item value) - 50% higher
+  // Repair cost is a flat 25% of the item's price
   const getEquippedRepairCost = (item: EquipmentItem) => {
-    const maxDur = item.max_durability || 100;
-    const curDur = item.durability || maxDur;
-    const damagePercent = (maxDur - curDur) / maxDur;
-    const rarityMult: Record<string, number> = { common: 0.75, uncommon: 0.975, rare: 1.2, epic: 1.5, legendary: 1.8, mythic: 2.2 };
-    const mult = rarityMult[item.rarity] || 1.0;
-    return Math.max(8, Math.floor(item.value * mult * damagePercent));
+    return Math.floor(item.value * 0.25);
   };
 
   return (
@@ -1184,11 +1313,10 @@ function EquipmentTab({
           {(() => {
             const totals: Record<string, number> = {};
             Object.values(equipped).forEach((item) => {
-              if (item?.stats_bonus) {
-                Object.entries(item.stats_bonus).forEach(([stat, val]) => {
-                  totals[stat] = (totals[stat] || 0) + (val as number);
-                });
-              }
+              const scaled = getConditionScaledBonus(item);
+              Object.entries(scaled).forEach(([stat, val]) => {
+                totals[stat] = (totals[stat] || 0) + val;
+              });
             });
             const entries = Object.entries(totals);
             if (entries.length === 0) {
@@ -1241,16 +1369,9 @@ function ItemsTab({
     );
   }
 
-  // Calculate repair cost (50-120% of item value based on rarity - HIGHER COSTS)
+  // Repair cost is a flat 25% of the item's price
   const getRepairCost = (item: EquipmentItem) => {
-    const maxDur = item.max_durability || 100;
-    const curDur = item.durability || maxDur;
-    const damagePercent = (maxDur - curDur) / maxDur;
-    // Increased multipliers: common 0.5, up to mythic 1.5
-    const rarityMult: Record<string, number> = { common: 0.5, uncommon: 0.65, rare: 0.8, epic: 1.0, legendary: 1.2, mythic: 1.5 };
-    const mult = rarityMult[item.rarity] || 0.7;
-    // Minimum cost is now $5 instead of $1
-    return Math.max(5, Math.floor(item.value * mult * damagePercent));
+    return Math.floor(item.value * 0.25);
   };
 
   return (

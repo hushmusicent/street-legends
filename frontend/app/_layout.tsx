@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { View, StyleSheet } from 'react-native';
 import { GameToastProvider } from '../components/GameToast';
+import IdleLogout from '../components/IdleLogout';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent the splash screen from auto-hiding before app is ready
@@ -39,6 +40,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <View style={styles.container} onLayout={onLayoutRootView}>
+        <IdleLogout>
         <StatusBar style="light" />
         <Stack
           screenOptions={{
@@ -57,6 +59,7 @@ export default function RootLayout() {
           <Stack.Screen name="instructions" options={{ presentation: 'modal' }} />
         </Stack>
         <GameToastProvider />
+        </IdleLogout>
       </View>
     </QueryClientProvider>
   );

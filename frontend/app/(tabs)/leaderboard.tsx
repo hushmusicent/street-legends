@@ -112,7 +112,7 @@ export default function LeaderboardScreen() {
 
         {/* Rest of leaderboard */}
         <View style={styles.list}>
-          {leaderboard.slice(3).map((entry) => (
+          {(leaderboard.length < 3 ? leaderboard : leaderboard.slice(3)).map((entry) => (
             <View
               key={entry.id}
               style={[
