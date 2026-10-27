@@ -19,14 +19,18 @@ gas stations):
    mirrors) at 90s each, instead of betting everything on one 120s call.
    First success wins; all-fail leaves the cache empty for the next
    refresh to retry (the blocking spawn already re-fetches on empty).
+
+v2: definitions step no longer requires exactly one `_osm_fetching` line —
+earlier patches may have added it twice (e.g. nightclubs before banks-v2),
+which made v1 abort before touching anything.
 """
+import re
 import sys
 from pathlib import Path
 
 SERVER = Path("backend/server.py")
 
-DEFINITIONS = '''_osm_fetching = set()
-# Overpass instances to try in order + cap on concurrent calls, so one map
+DEFINITIONS_TAIL = '''# Overpass instances to try in order + cap on concurrent calls, so one map
 # load firing banks/restaurants/clubs/shops at once can't queue itself out.
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
@@ -55,14 +59,26 @@ def main():
         print("ERROR: no Overpass fetchers found — apply the real-location patches first.")
         sys.exit(1)
 
-    if "OVERPASS_SEMAPHORE" not in src:
-        if src.count("_osm_fetching = set()") != 1:
-            print("ERROR: _osm_fetching definition anchor not found exactly once.")
-            sys.exit(1)
-        src = src.replace("_osm_fetching = set()", DEFINITIONS, 1)
+    if "OVERPASS_SEMAPHORE" in src:
+        print("SKIP: Overpass URL list + semaphore already defined")
+    elif "_osm_fetching = set()" in src:
+        # Insert after the FIRST occurrence, however many copies exist
+        # (earlier patches may have added this line twice).
+        src = src.replace(
+            "_osm_fetching = set()",
+            "_osm_fetching = set()\n" + DEFINITIONS_TAIL,
+            1,
+        )
         print("OK: Overpass URL list + semaphore defined")
     else:
-        print("SKIP: Overpass URL list + semaphore already defined")
+        # No _osm_fetching line at all — define everything before the first
+        # fetcher (the fetchers need _osm_fetching to exist).
+        m = re.search(r"async def _fetch_\w+_from_overpass", src)
+        if not m:
+            print("ERROR: no _osm_fetching line and no fetcher found — apply the real-location patches first.")
+            sys.exit(1)
+        src = src[:m.start()] + "_osm_fetching = set()\n" + DEFINITIONS_TAIL + "\n\n" + src[m.start():]
+        print("OK: _osm_fetching + Overpass URL list + semaphore defined")
 
     for ua, label in FETCHERS:
         old = f'''        async with httpx.AsyncClient(timeout=120) as client:
