@@ -61,7 +61,18 @@ def main():
     db = client[db_name]
     player = db.players.find_one({"name": {"$regex": f"^{re.escape(PLAYER_NAME)}$", "$options": "i"}})
     if not player:
+        # Fall back to a partial match (e.g. the stored name may differ
+        # slightly from the display name).
+        player = db.players.find_one({"name": {"$regex": "Veno", "$options": "i"}})
+    if not player:
         print(f"ERROR: no player named '{PLAYER_NAME}' found.")
+        print("Players in this database:")
+        found_any = False
+        for p in db.players.find({}, {"name": 1, "level": 1, "cash": 1}).limit(30):
+            found_any = True
+            print(f"  - {p.get('name')} (Lv.{p.get('level')}) cash ${p.get('cash', 0):,}")
+        if not found_any:
+            print("  (no players at all — check DB_NAME)")
         sys.exit(1)
     old_cash = player.get("cash", 0)
     db.players.update_one({"id": player["id"]}, {"$inc": {"cash": AMOUNT}})
