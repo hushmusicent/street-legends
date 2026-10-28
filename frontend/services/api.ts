@@ -842,6 +842,28 @@ export const startShootout = async (shootoutId: string, playerId: string) => {
   return response.data;
 };
 
+// Standalone (practice mode) start endpoints - create real sessions so
+// practice games award the 50% rewards via the normal complete endpoints.
+export const startStandaloneCastle = async (playerId: string, level: number = 1) => {
+  const response = await api.post(`/castles/standalone/start?player_id=${playerId}&level=${level}`);
+  return response.data;
+};
+
+export const startStandaloneCarChase = async (playerId: string, level: number = 1) => {
+  const response = await api.post(`/car-chases/standalone/start?player_id=${playerId}&level=${level}`);
+  return response.data;
+};
+
+export const startStandaloneRunaway = async (playerId: string, level: number = 1) => {
+  const response = await api.post(`/runaways/standalone/start?player_id=${playerId}&level=${level}`);
+  return response.data;
+};
+
+export const startStandalonePackageGrab = async (playerId: string, level: number = 1) => {
+  const response = await api.post(`/package-grabs/standalone/start?player_id=${playerId}&level=${level}`);
+  return response.data;
+};
+
 export const completeShootout = async (gameId: string, hits: number, standalone: boolean = false) => {
   const response = await api.post(`/shootouts/game/${gameId}/complete?hits=${hits}&standalone=${standalone}`);
   return response.data;
@@ -929,3 +951,28 @@ export const loginPlayer = async (playerId: string) => {
 
 
 export default api;
+// ===== Player Houses =====
+export const buyHouse = async (playerId: string, tier: string, latitude: number, longitude: number): Promise<any> => {
+  const response = await api.post('/houses/buy', { player_id: playerId, tier, latitude, longitude });
+  return response.data;
+};
+
+export const getPlayerHouse = async (playerId: string): Promise<any> => {
+  const response = await api.get(`/houses/player/${playerId}`);
+  return response.data.house;
+};
+
+export const getNearbyHouses = async (latitude: number, longitude: number, radius: number = 2000): Promise<any[]> => {
+  const response = await api.get(`/houses/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`);
+  return response.data;
+};
+
+export const toggleHouseHide = async (houseId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/toggle-hide`, { player_id: playerId });
+  return response.data;
+};
+
+export const sellHouse = async (houseId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/sell`, { player_id: playerId });
+  return response.data;
+};

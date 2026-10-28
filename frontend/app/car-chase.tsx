@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../stores/gameStore';
-import { startCarChase, completeCarChase } from '../services/api';
+import { startCarChase, completeCarChase, startStandaloneCarChase } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
 import { SFX } from '../hooks/useSoundEffects';
@@ -183,8 +183,18 @@ export default function CarChaseGame() {
 
   const initializeGame = async () => {
     if (isStandalone) {
-      // Standalone mode - no API call needed
-      setGameId('standalone');
+      // Practice mode: create a real backend session so winnings are awarded (50%)
+      try {
+        if (playerId) {
+          const session = await startStandaloneCarChase(playerId, difficulty);
+          setGameId(session.game_id);
+        } else {
+          setGameId('standalone');
+        }
+      } catch (e: any) {
+        console.log('Standalone start failed:', e?.response?.data?.detail || e?.message);
+        setGameId('standalone');
+      }
       setLoading(false);
       return;
     }

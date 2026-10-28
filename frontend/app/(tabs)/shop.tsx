@@ -15,12 +15,33 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
-import { getConsumableShop, buyConsumable, getPlayer } from '../../services/api';
+import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse } from '../../services/api';
 import api from '../../services/api';
 import { GodPotions } from '../../components/GodPotions';
 import { getBundledIcon } from '../../assets/icons/iconMap';
 
-type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable';
+type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable' | 'house';
+const HOUSES = [
+  { tier: 'apartment', name: 'Street Apartment', price: 100000, image: require('../../assets/houses/house-apartment.jpg'), blurb: 'A rough city pad. Four walls, a barred window, and a door that locks.' },
+  { tier: 'cabin', name: 'Country Cabin', price: 500000, image: require('../../assets/houses/house-cabin.jpg'), blurb: 'Wood walls, open fields, and quiet. Room to breathe.' },
+  { tier: 'mansion', name: 'Luxury Mansion', price: 1000000, image: require('../../assets/houses/house-mansion.jpg'), blurb: 'Marble floors, a chandelier, and gardens. You made it.' },
+];
+
+const HOUSE_STYLES = StyleSheet.create({
+  houseCard: { backgroundColor: '#111', borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
+  houseImage: { width: '100%', height: 180, resizeMode: 'cover' },
+  houseInfo: { padding: 12 },
+  houseName: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  houseBlurb: { color: '#999', fontSize: 13, marginTop: 4 },
+  houseWarn: { color: '#f39c12', fontSize: 12, marginTop: 8, fontWeight: '700' },
+  houseOwnedBadge: { backgroundColor: 'rgba(76,175,80,0.2)', borderRadius: 8, paddingVertical: 8, alignItems: 'center', marginTop: 10 },
+  houseOwnedText: { color: '#4caf50', fontWeight: '800', fontSize: 13 },
+  houseBuyBtn: { backgroundColor: '#f39c12', borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 10 },
+  houseBuyBtnDisabled: { backgroundColor: '#333' },
+  houseBuyText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  houseOwnedNote: { color: '#888', fontSize: 12, textAlign: 'center', marginTop: 4, marginBottom: 12 },
+});
+
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9e9e9e',
@@ -116,6 +137,8 @@ export default function ShopTabScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [buying, setBuying] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [myHouse, setMyHouse] = useState<any | null>(null);
+  const [buyingHouse, setBuyingHouse] = useState<string | null>(null);
   const [successModal, setSuccessModal] = useState<{ visible: boolean; message: string; effects: string[] }>({
     visible: false, message: '', effects: [],
   });
@@ -132,6 +155,9 @@ export default function ShopTabScreen() {
       ]);
       setItems(data);
       setActiveBuffs(buffs);
+      if (playerId) {
+        try { const h = await getPlayerHouse(playerId); setMyHouse(h); } catch (_) {}
+      }
     } catch (error) {
       console.error('Failed to load shop:', error);
     } finally {
@@ -188,6 +214,31 @@ export default function ShopTabScreen() {
     }
   };
 
+  const handleBuyHouse = (h: typeof HOUSES[0]) => {
+    if (!playerId || !player) return;
+    const pos = (player as any).position;
+    if (!pos) { Alert.alert('No Location', 'We need your location to place the house.'); return; }
+    if (player.cash < h.price) { Alert.alert('Not Enough Cash', `You need $${h.price.toLocaleString()} but only have $${player.cash.toLocaleString()}.`); return; }
+    const warn = myHouse
+      ? `You already own ${myHouse.name}. Buying ${h.name} will REPLACE it (the old house is gone). Are you sure?`
+      : `Buy ${h.name} for $${h.price.toLocaleString()}? A house icon will be placed where you are standing right now.`;
+    Alert.alert('Are You Sure?', warn, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Buy', onPress: async () => {
+        try {
+          setBuyingHouse(h.tier);
+          const res = await buyHouse(playerId, h.tier, pos.latitude, pos.longitude);
+          setMyHouse(res.house);
+          const p = await getPlayer(playerId);
+          setPlayer(p);
+          Alert.alert('House Bought', `${h.name} is yours! Look for the \u{1F3E0} icon on the map.`);
+        } catch (e: any) {
+          Alert.alert('Error', e.response?.data?.detail || 'Purchase failed');
+        } finally { setBuyingHouse(null); }
+      } },
+    ]);
+  };
+
   const filteredItems = filter === 'all' ? items : items.filter(i => i.category === filter);
 
   const filters: { key: FilterKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -196,6 +247,7 @@ export default function ShopTabScreen() {
     { key: 'energy_recharge', label: 'EN', icon: 'battery-charging' },
     { key: 'combo', label: 'Combo', icon: 'fast-food' },
     { key: 'consumable', label: 'Stims', icon: 'fitness' },
+    { key: 'house', label: 'House', icon: 'home' },
   ];
 
   const getEffectText = (effect: Record<string, any>): string[] => {
@@ -283,8 +335,6 @@ export default function ShopTabScreen() {
         </View>
       )}
 
-      <GodPotions playerId={playerId} />
-
       {/* Filter Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
         {filters.map(f => (
@@ -293,7 +343,7 @@ export default function ShopTabScreen() {
             style={[styles.filterTab, filter === f.key && styles.filterTabActive]}
             onPress={() => setFilter(f.key)}
           >
-            <Ionicons name={f.icon} size={14} color={filter === f.key ? '#f39c12' : '#666'} />
+            <Ionicons name={f.icon} size={14} color={filter === f.key ? '#f39c12' : '#999'} />
             <Text style={[styles.filterLabel, filter === f.key && styles.filterLabelActive]}>
               {f.label}
             </Text>
@@ -301,8 +351,52 @@ export default function ShopTabScreen() {
         ))}
       </ScrollView>
 
+      <GodPotions playerId={playerId} />
+
+      {filter === 'house' ? (
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {HOUSES.map((h) => {
+            const owned = myHouse?.tier === h.tier;
+            const canAfford = (player?.cash || 0) >= h.price;
+            return (
+              <View key={h.tier} style={HOUSE_STYLES.houseCard}>
+                <Image source={h.image} style={HOUSE_STYLES.houseImage} />
+                <View style={HOUSE_STYLES.houseInfo}>
+                  <Text style={HOUSE_STYLES.houseName}>{h.name}</Text>
+                  <Text style={HOUSE_STYLES.houseBlurb}>{h.blurb}</Text>
+                  {myHouse && !owned && (
+                    <Text style={HOUSE_STYLES.houseWarn}>You already own {myHouse.name} — buying replaces it.</Text>
+                  )}
+                  {owned ? (
+                    <View style={HOUSE_STYLES.houseOwnedBadge}>
+                      <Text style={HOUSE_STYLES.houseOwnedText}>YOUR HOUSE</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[HOUSE_STYLES.houseBuyBtn, !canAfford && HOUSE_STYLES.houseBuyBtnDisabled]}
+                      disabled={!canAfford || buyingHouse === h.tier}
+                      onPress={() => handleBuyHouse(h)}
+                    >
+                      {buyingHouse === h.tier ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={HOUSE_STYLES.houseBuyText}>BUY ${h.price.toLocaleString()}</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+          {myHouse && (
+            <Text style={HOUSE_STYLES.houseOwnedNote}>You own: {myHouse.name} — tap its 🏠 icon on the map to enter, hide, or sell.</Text>
+          )}
+        </ScrollView>
+      ) : (
+      <>
       {/* Items List */}
       <ScrollView
+        style={styles.itemsScroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#f39c12" />}
       >
@@ -372,6 +466,8 @@ export default function ShopTabScreen() {
           })
         )}
       </ScrollView>
+      </>
+      )}
 
       {/* Success Modal */}
       <Modal
@@ -465,7 +561,7 @@ const styles = StyleSheet.create({
   buffCountText: { color: '#e1bee7', fontSize: 9, fontWeight: '800' },
 
   // Filter
-  filterScroll: { maxHeight: 46, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  filterScroll: { maxHeight: 46, borderBottomWidth: 1, borderBottomColor: '#1a1a1a', backgroundColor: '#0a0a0a' },
   filterContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   filterTab: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -473,11 +569,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
   },
   filterTabActive: { backgroundColor: 'rgba(243,156,18,0.15)', borderWidth: 1, borderColor: 'rgba(243,156,18,0.3)' },
-  filterLabel: { color: '#666', fontSize: 11, fontWeight: '600' },
+  filterLabel: { color: '#999', fontSize: 11, fontWeight: '600' },
   filterLabelActive: { color: '#f39c12' },
 
   // Content
   scrollContent: { padding: 12, paddingBottom: 40 },
+  itemsScroll: { flex: 1 },
 
   // Empty
   emptyState: { alignItems: 'center', paddingVertical: 48 },

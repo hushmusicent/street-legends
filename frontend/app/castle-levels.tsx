@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL, startRandomCastleGame, completeCastleGame } from '../services/api';
+import { API_URL, startRandomCastleGame, completeCastleGame, startStandaloneCastle } from '../services/api';
 import { useGameStore } from '../stores/gameStore';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
@@ -277,6 +277,14 @@ export default function CastleLevelsScreen() {
     generateLevel(level);
     setShowLevelSelect(false);
     structureHitRef.current = false; // Ensure reset on level start
+    // Practice mode: create a backend session so winnings are awarded (50%)
+    if (isStandalone && playerId) {
+      startStandaloneCastle(playerId, level)
+        .then((s) => setGameSessionId(s.game_id))
+        .catch(() => setGameSessionId(null));
+    } else if (!isRandomMode) {
+      setGameSessionId(null);
+    }
   };
 
   // Pan responder for aiming
@@ -463,8 +471,8 @@ export default function CastleLevelsScreen() {
           setGameOver(true);
           saveProgress(currentLevel);
           
-          // If from map, submit result to backend for rewards
-          if (isFromMap && gameSessionId) {
+          // Submit result to backend for rewards (map or practice session)
+          if (gameSessionId) {
             submitGameResult(true, eliminatedCount);
           } else {
             setShowResults(true);
@@ -479,8 +487,8 @@ export default function CastleLevelsScreen() {
           setWon(false);
           setGameOver(true);
           
-          // If from map, submit result to backend (cooldown still applies)
-          if (isFromMap && gameSessionId) {
+          // Submit result to backend (cooldown still applies)
+          if (gameSessionId) {
             submitGameResult(false, eliminatedCount);
           } else {
             setShowResults(true);

@@ -218,7 +218,7 @@ export default function ShopScreen() {
             style={[styles.filterTab, filter === f.key && styles.filterTabActive]}
             onPress={() => setFilter(f.key)}
           >
-            <Ionicons name={f.icon} size={16} color={filter === f.key ? '#f39c12' : '#666'} />
+            <Ionicons name={f.icon} size={16} color={filter === f.key ? '#f39c12' : '#999'} />
             <Text style={[styles.filterLabel, filter === f.key && styles.filterLabelActive]}>
               {f.label}
             </Text>
@@ -228,6 +228,7 @@ export default function ShopScreen() {
 
       {/* Items List */}
       <ScrollView
+        style={styles.itemsScroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#f39c12" />}
       >
@@ -323,6 +324,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
+    backgroundColor: '#0a0a0a',
   },
   filterTab: {
     flex: 1,
@@ -334,10 +336,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   filterTabActive: { backgroundColor: 'rgba(243,156,18,0.15)' },
-  filterLabel: { color: '#666', fontSize: 11, fontWeight: '600' },
+  filterLabel: { color: '#999', fontSize: 11, fontWeight: '600' },
   filterLabelActive: { color: '#f39c12' },
 
   scrollContent: { padding: 12, paddingBottom: 40 },
+  itemsScroll: { flex: 1 },
 
   itemCard: {
     flexDirection: 'row',

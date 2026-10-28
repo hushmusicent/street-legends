@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../stores/gameStore';
-import { startPackageGrab, completePackageGrab } from '../services/api';
+import { startPackageGrab, completePackageGrab, startStandalonePackageGrab } from '../services/api';
 import { showGameToast } from '../components/GameToast';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
 import { SFX } from '../hooks/useSoundEffects';
@@ -214,7 +214,18 @@ export default function PackageGrabGame() {
 
   const initializeGame = async () => {
     if (isStandalone) {
-      setGameId('standalone');
+      // Practice mode: create a real backend session so winnings are awarded (50%)
+      try {
+        if (playerId) {
+          const session = await startStandalonePackageGrab(playerId, difficulty);
+          setGameId(session.game_id);
+        } else {
+          setGameId('standalone');
+        }
+      } catch (e: any) {
+        console.log('Standalone start failed:', e?.response?.data?.detail || e?.message);
+        setGameId('standalone');
+      }
       setLoading(false);
       return;
     }

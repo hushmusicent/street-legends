@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
+import asyncio
 from datetime import datetime, timedelta
 import random
 import math
@@ -2596,7 +2597,9 @@ async def get_nearby_players(player_id: str, radius: float = 500):
                 {"is_logged_out": {"$exists": False}}
             ],
             # Must have been active in last 30 minutes
-            "last_active": {"$gte": inactivity_threshold}
+            "last_active": {"$gte": inactivity_threshold},
+            # Hidden players (via Hide on their house) don't appear
+            "hidden_from_map": {"$ne": True}
         },
         {"id": 1, "name": 1, "level": 1, "character_class": 1, "position": 1, "guild_id": 1, "profile_pic": 1}
     ).to_list(100)
@@ -2918,6 +2921,18 @@ async def remove_friend(player_id: str, target_id: str):
     return {"message": f"Removed {target['name']} from friends", "success": True}
 
 # ============== MONSTER ENDPOINTS ==============
+# Canned monster descriptions (replaces the live GPT-4o call during spawn)
+MONSTER_DESCRIPTIONS = [
+    "A level {level} {name} holding down this block. Don't let the look fool you.",
+    "A level {level} {name} with a reputation on these streets. Approach with caution.",
+    "Word on the street is this level {level} {name} runs with a rough crew.",
+    "A level {level} {name} posted up here, watching everyone who passes.",
+    "This level {level} {name} has been causing trouble in the neighborhood.",
+    "A hardened level {level} {name}. The streets made them this way.",
+    "A level {level} {name} looking for their next score. Could be you.",
+    "Nobody walks past this level {level} {name} without paying attention.",
+]
+
 @api_router.get("/monsters/spawn")
 async def spawn_monsters(latitude: float, longitude: float, player_level: int = 1):
     """Spawn monsters tied to the territory grid. 5 enemies per new territory cell, 1 more every 5 minutes (max 10)."""
@@ -2998,11 +3013,7 @@ async def spawn_monsters(latitude: float, longitude: float, player_level: int = 
             
             enemy_stats = calculate_enemy_stats(monster_level, template["is_boss"])
             enemy_type = "boss" if template["is_boss"] else "humanoid"
-            description = await generate_ai_content("monster", {
-                "name": template["name"],
-                "level": monster_level,
-                "type": enemy_type
-            })
+            description = random.choice(MONSTER_DESCRIPTIONS).format(name=template["name"], level=monster_level)
             
             monster = Monster(
                 name=template["name"],
@@ -3448,6 +3459,123 @@ async def get_battle(battle_id: str):
         raise HTTPException(status_code=404, detail="Battle not found")
     return serialize_doc(battle)
 
+# ============== PLAYER HOUSES ==============
+HOUSE_TIERS = {
+    "apartment": {"name": "Street Apartment", "price": 100000, "image": "house-apartment"},
+    "cabin": {"name": "Country Cabin", "price": 500000, "image": "house-cabin"},
+    "mansion": {"name": "Luxury Mansion", "price": 1000000, "image": "house-mansion"},
+}
+
+# ============== HOUSE ENDPOINTS ==============
+@api_router.post("/houses/buy")
+async def buy_house(data: dict):
+    """Buy a house at the player's current location. One house per
+    player — buying a new one replaces the old one."""
+    player_id = data.get("player_id")
+    tier = data.get("tier")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    if tier not in HOUSE_TIERS:
+        raise HTTPException(status_code=400, detail="Invalid house tier")
+    if latitude is None or longitude is None:
+        raise HTTPException(status_code=400, detail="Location required")
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    tier_info = HOUSE_TIERS[tier]
+    price = tier_info["price"]
+    if player.get("cash", 0) < price:
+        raise HTTPException(status_code=400, detail="Not enough cash")
+    # One house only: replace any existing house.
+    replaced = await db.houses.find_one({"player_id": player_id})
+    await db.houses.delete_many({"player_id": player_id})
+    await db.players.update_one(
+        {"id": player_id},
+        {"$inc": {"cash": -price}, "$set": {"hidden_from_map": False}},
+    )
+    house = {
+        "id": str(uuid.uuid4()),
+        "player_id": player_id,
+        "player_name": player.get("name", "Player"),
+        "tier": tier,
+        "name": tier_info["name"],
+        "price": price,
+        "image": tier_info["image"],
+        "latitude": float(latitude),
+        "longitude": float(longitude),
+        "items": [],
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    await db.houses.insert_one(house)
+    updated = await db.players.find_one({"id": player_id})
+    return {
+        "house": serialize_doc(house),
+        "cash": updated.get("cash", 0),
+        "replaced": serialize_doc(replaced) if replaced else None,
+    }
+
+
+@api_router.get("/houses/player/{player_id}")
+async def get_player_house(player_id: str):
+    """The player's current house, or null."""
+    house = await db.houses.find_one({"player_id": player_id})
+    return {"house": serialize_doc(house) if house else None}
+
+
+@api_router.get("/houses/nearby")
+async def get_nearby_houses(latitude: float, longitude: float, radius: float = 2000):
+    """Houses within radius (meters) for the map."""
+    center = Position(latitude=latitude, longitude=longitude)
+    houses = await db.houses.find().to_list(200)
+    nearby = []
+    for h in houses:
+        try:
+            d = calculate_distance(center, Position(latitude=h["latitude"], longitude=h["longitude"]))
+        except Exception:
+            continue
+        if d <= radius:
+            doc = serialize_doc(h)
+            doc["distance"] = round(d)
+            nearby.append(doc)
+    nearby.sort(key=lambda x: x["distance"])
+    return nearby
+
+
+@api_router.post("/houses/{house_id}/toggle-hide")
+async def toggle_house_hide(house_id: str, data: dict):
+    """Hide / unhide the player from other players' maps. Only the
+    owner can toggle it."""
+    player_id = data.get("player_id")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if house.get("player_id") != player_id:
+        raise HTTPException(status_code=403, detail="Not your house")
+    player = await db.players.find_one({"id": player_id})
+    new_hidden = not player.get("hidden_from_map", False)
+    await db.players.update_one({"id": player_id}, {"$set": {"hidden_from_map": new_hidden}})
+    return {"hidden": new_hidden}
+
+
+@api_router.post("/houses/{house_id}/sell")
+async def sell_house(house_id: str, data: dict):
+    """Sell for HALF the price paid. Only the owner can sell."""
+    player_id = data.get("player_id")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if house.get("player_id") != player_id:
+        raise HTTPException(status_code=403, detail="Not your house")
+    refund = int(house.get("price", 0) // 2)
+    await db.houses.delete_one({"id": house_id})
+    await db.players.update_one(
+        {"id": player_id},
+        {"$inc": {"cash": refund}, "$set": {"hidden_from_map": False}},
+    )
+    updated = await db.players.find_one({"id": player_id})
+    return {"refund": refund, "cash": updated.get("cash", 0)}
+
+
 # ============== MISSION ENDPOINTS ==============
 @api_router.get("/missions/generate")
 async def generate_missions(latitude: float, longitude: float, player_level: int = 1, player_id: str = ""):
@@ -3475,6 +3603,16 @@ async def generate_missions(latitude: float, longitude: float, player_level: int
                 doc["goal_progress"] = 0
         nearby.append(doc)
     
+    def _dist_to_player(doc):
+        try:
+            return calculate_distance(position, Position(**doc["position"]))
+        except Exception:
+            return 1e9
+    # Show only the nearest 8 so the map doesn't drown in a day's worth of
+    # unexpired missions (they last 24h and pile up as you drive around).
+    nearby.sort(key=_dist_to_player)
+    nearby = nearby[:8]
+
     if len(nearby) >= 3:
         return nearby
     
@@ -5364,6 +5502,199 @@ async def get_image(path: str):
 
 # ============== SHOP ENDPOINTS ==============
 
+
+async def _fetch_all_places_from_overpass(latitude: float, longitude: float, player_level: int, area_key: str):
+    """ONE Overpass query for banks + restaurants + clubs + gas stations.
+    Routes each element to its collection by amenity tag. Per-type fetch
+    records only for types that actually returned data."""
+    try:
+        query = (
+            "[out:json][timeout:80];"
+            "("
+            f'node["amenity"="bank"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="bank"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="restaurant"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="restaurant"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="fast_food"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="fast_food"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="nightclub"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="nightclub"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="bar"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="bar"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="pub"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="pub"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="fuel"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="fuel"](around:2000,{latitude},{longitude});'
+            ");"
+            "out center 200;"
+        )
+        elements = []
+        async with OVERPASS_SEMAPHORE:
+            for overpass_url in OVERPASS_URLS:
+                try:
+                    async with httpx.AsyncClient(timeout=90) as client:
+                        resp = await client.post(
+                            overpass_url,
+                            data={"data": query},
+                            headers={"User-Agent": "StreetLegends/1.0 (game places lookup)"},
+                        )
+                    if resp.status_code == 200:
+                        elements = resp.json().get("elements", [])
+                        break
+                except Exception:
+                    continue
+        base_reward = int((500 + (player_level * 100)) * 0.5)
+        found = set()
+        for el in elements:
+            osm_id = f"{el.get('type')}/{el.get('id')}"
+            tags = el.get("tags", {}) or {}
+            amenity = tags.get("amenity")
+            if el.get("type") == "node":
+                plat, plng = el.get("lat"), el.get("lon")
+            else:
+                center = el.get("center") or {}
+                plat, plng = center.get("lat"), center.get("lon")
+            if plat is None or plng is None:
+                continue
+            name = tags.get("name") or tags.get("brand")
+            if amenity == "bank":
+                if not name:
+                    name = "Bank"
+                if not await db.banks.find_one({"osm_id": osm_id}):
+                    await db.banks.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "osm_id": osm_id,
+                        "name": name,
+                        "icon": "🏦",
+                        "latitude": plat,
+                        "longitude": plng,
+                        "min_reward": int(base_reward * 0.5),
+                        "max_reward": int(base_reward * 1.5),
+                        "source": "osm",
+                        "created_at": datetime.utcnow().isoformat(),
+                    })
+                found.add("bank")
+            elif amenity in ("restaurant", "fast_food"):
+                if not name:
+                    name = "Restaurant"
+                if not await db.restaurants.find_one({"osm_id": osm_id}):
+                    await db.restaurants.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "osm_id": osm_id,
+                        "name": name,
+                        "icon": "🍔",
+                        "latitude": plat,
+                        "longitude": plng,
+                        "heal_percent": 25,
+                        "source": "osm",
+                        "created_at": datetime.utcnow().isoformat(),
+                    })
+                found.add("restaurant")
+            elif amenity in ("nightclub", "bar", "pub"):
+                if not name:
+                    name = "Nightclub"
+                if not await db.nightclubs.find_one({"osm_id": osm_id}):
+                    await db.nightclubs.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "osm_id": osm_id,
+                        "name": name,
+                        "icon": "🎵",
+                        "latitude": plat,
+                        "longitude": plng,
+                        "energy_percent": 25,
+                        "source": "osm",
+                        "created_at": datetime.utcnow().isoformat(),
+                    })
+                found.add("nightclub")
+            elif amenity == "fuel":
+                if not name:
+                    name = "Gas Station"
+                if not await db.gas_stations.find_one({"osm_id": osm_id}):
+                    await db.gas_stations.insert_one({
+                        "id": str(uuid.uuid4()),
+                        "osm_id": osm_id,
+                        "name": name,
+                        "latitude": plat,
+                        "longitude": plng,
+                        "source": "osm",
+                        "created_at": datetime.utcnow().isoformat(),
+                    })
+                found.add("fuel")
+        now = datetime.utcnow().isoformat()
+        if "bank" in found:
+            await db.bank_fetches.insert_one({"latitude": latitude, "longitude": longitude, "fetched_at": now})
+        if "restaurant" in found:
+            await db.restaurant_fetches.insert_one({"latitude": latitude, "longitude": longitude, "fetched_at": now})
+        if "nightclub" in found:
+            await db.nightclub_fetches.insert_one({"latitude": latitude, "longitude": longitude, "fetched_at": now})
+        if "fuel" in found:
+            await db.gas_station_fetches.insert_one({"latitude": latitude, "longitude": longitude, "fetched_at": now})
+    except Exception as e:
+        logging.warning(f"Overpass combined places fetch failed: {e}")
+    finally:
+        _osm_fetching.discard(area_key)
+
+async def _fetch_gas_stations_from_overpass(latitude: float, longitude: float, player_level: int, area_key: str):
+    """Background fill of real stores + gas stations for an area. Never blocks the map response."""
+    try:
+        query = (
+            "[out:json][timeout:100];"
+            "("
+            f'node["amenity"="fuel"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="fuel"](around:2000,{latitude},{longitude});'
+            ");"
+            "out center 100;"
+        )
+        elements = []
+        async with OVERPASS_SEMAPHORE:
+            for overpass_url in OVERPASS_URLS:
+                try:
+                    async with httpx.AsyncClient(timeout=90) as client:
+                        resp = await client.post(
+                            overpass_url,
+                            data={"data": query},
+                            headers={"User-Agent": "StreetLegends/1.0 (game gas station lookup)"},
+                        )
+                    if resp.status_code == 200:
+                        elements = resp.json().get("elements", [])
+                        break
+                except Exception:
+                    continue
+        if True:
+            for el in elements:
+                osm_id = f"{el.get('type')}/{el.get('id')}"
+                tags = el.get("tags", {}) or {}
+                if el.get("type") == "node":
+                    slat, slng = el.get("lat"), el.get("lon")
+                else:
+                    center = el.get("center") or {}
+                    slat, slng = center.get("lat"), center.get("lon")
+                if slat is None or slng is None:
+                    continue
+                name = tags.get("name") or tags.get("brand") or "Gas Station"
+                existing = await db.gas_stations.find_one({"osm_id": osm_id})
+                if existing:
+                    continue
+                await db.gas_stations.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "osm_id": osm_id,
+                    "name": name,
+                    "latitude": slat,
+                    "longitude": slng,
+                    "source": "osm",
+                    "created_at": datetime.utcnow().isoformat(),
+                })
+            if elements:
+                await db.gas_station_fetches.insert_one({
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "fetched_at": datetime.utcnow().isoformat(),
+                })
+    except Exception as e:
+        logging.warning(f"Overpass store fetch failed: {e}")
+    finally:
+        _osm_fetching.discard(area_key)
+
 @api_router.get("/shops/spawn")
 async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
     """Spawn random shops near a location - only shows items available at player's level"""
@@ -5377,14 +5708,62 @@ async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
         shop_types_to_spawn.append(random.choice(remaining_types))
     random.shuffle(shop_types_to_spawn)
     
+    # Real store/gas-station locations (background-filled cache) — fall back to
+    # random offsets when the area hasn't been fetched yet.
+    dlat = 5000 / 111000.0
+    dlng = 5000 / (111000.0 * max(0.2, math.cos(math.radians(latitude))))
+    cutoff = (datetime.utcnow() - timedelta(days=36500)).isoformat()
+    recent_store_fetch = await db.gas_station_fetches.find_one({
+        "latitude": {"$gte": latitude - 0.02, "$lte": latitude + 0.02},
+        "longitude": {"$gte": longitude - 0.02, "$lte": longitude + 0.02},
+        "fetched_at": {"$gte": cutoff},
+    })
+    if not recent_store_fetch:
+        gas_area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if gas_area_key not in _osm_fetching:
+            _osm_fetching.add(gas_area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, gas_area_key))
+    real_locations = await db.gas_stations.find({
+        "latitude": {"$gte": latitude - dlat, "$lte": latitude + dlat},
+        "longitude": {"$gte": longitude - dlng, "$lte": longitude + dlng},
+    }).to_list(100)
+    # Closest first so shops spawn near the player, not randomly up to 5 km
+    # away off-screen. (Squared distance is enough for sorting.)
+    _cos = max(0.2, math.cos(math.radians(latitude)))
+    real_locations.sort(key=lambda loc: ((loc["latitude"] - latitude) * 111000.0) ** 2 + ((loc["longitude"] - longitude) * 111000.0 * _cos) ** 2)
+
+    # If no gas stations cached here, fill them in the BACKGROUND — never
+    # block the map on Overpass. The next refresh picks them up.
+    if len(real_locations) == 0:
+        gas_area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if gas_area_key not in _osm_fetching:
+            _osm_fetching.add(gas_area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, gas_area_key))
+
+    # If the closest cached station is still outside the 2 km grid fetch
+    # radius, the nearby stations were never fetched for this area — fetch
+    # them even though the result isn't empty. Distant-only results must
+    # not block nearby fetches.
+    if len(real_locations) > 0:
+        _c = real_locations[0]
+        _dlat = (_c["latitude"] - latitude) * 111000.0
+        _dlng = (_c["longitude"] - longitude) * 111000.0 * max(0.2, math.cos(math.radians(latitude)))
+        if _dlat * _dlat + _dlng * _dlng > 2000.0 * 2000.0:
+            gas_area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+            if gas_area_key not in _osm_fetching:
+                _osm_fetching.add(gas_area_key)
+                asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, gas_area_key))
+
+    # Gas stations only — no random fallback.
+    num_shops = min(num_shops, len(real_locations))
     for i in range(num_shops):
-        # Random offset within ~500m
-        lat_offset = random.uniform(-0.004, 0.004)
-        lng_offset = random.uniform(-0.004, 0.004)
-        
+        shop_lat = real_locations[i]["latitude"]
+        shop_lng = real_locations[i]["longitude"]
+        real_name = real_locations[i]["name"]
+
         shop_type = shop_types_to_spawn[i] if i < len(shop_types_to_spawn) else random.choice(list(SHOP_TYPES.keys()))
         shop_config = SHOP_TYPES[shop_type]
-        shop_name = random.choice(SHOP_NAMES)
+        shop_name = real_name
         
         # Filter items by player level - only show items the player can actually use
         level_appropriate_items = [item for item in ALL_ITEMS.values() if item.get("level_requirement", 1) <= player_level]
@@ -5432,8 +5811,8 @@ async def spawn_shops(latitude: float, longitude: float, player_level: int = 1):
             "id": str(uuid.uuid4()),
             "name": shop_name,
             "shop_type": shop_type,
-            "latitude": latitude + lat_offset,
-            "longitude": longitude + lng_offset,
+            "latitude": shop_lat,
+            "longitude": shop_lng,
             "price_multiplier": price_mult,
             "stock": priced_stock,
             "skills_for_sale": skills_for_sale,
@@ -5487,47 +5866,113 @@ RESTAURANT_NAMES = [
 RESTAURANT_ICONS = ["🍔", "🍕", "🌮", "🍗", "🍜", "🥩", "🍣", "☕"]
 
 
+
+async def _fetch_restaurants_from_overpass(latitude: float, longitude: float, player_level: int, area_key: str):
+    """Background fill of real restaurants for an area. Never blocks the map response."""
+    try:
+        query = (
+            "[out:json][timeout:100];"
+            "("
+            f'node["amenity"="restaurant"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="restaurant"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="fast_food"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="fast_food"](around:2000,{latitude},{longitude});'
+            ");"
+            "out center 100;"
+        )
+        elements = []
+        async with OVERPASS_SEMAPHORE:
+            for overpass_url in OVERPASS_URLS:
+                try:
+                    async with httpx.AsyncClient(timeout=90) as client:
+                        resp = await client.post(
+                            overpass_url,
+                            data={"data": query},
+                            headers={"User-Agent": "StreetLegends/1.0 (game restaurant lookup)"},
+                        )
+                    if resp.status_code == 200:
+                        elements = resp.json().get("elements", [])
+                        break
+                except Exception:
+                    continue
+        if True:
+            for el in elements:
+                osm_id = f"{el.get('type')}/{el.get('id')}"
+                tags = el.get("tags", {}) or {}
+                if el.get("type") == "node":
+                    rlat, rlng = el.get("lat"), el.get("lon")
+                else:
+                    center = el.get("center") or {}
+                    rlat, rlng = center.get("lat"), center.get("lon")
+                if rlat is None or rlng is None:
+                    continue
+                name = tags.get("name") or tags.get("brand") or "Restaurant"
+                existing = await db.restaurants.find_one({"osm_id": osm_id})
+                if existing:
+                    continue
+                restaurant = {
+                    "id": str(uuid.uuid4()),
+                    "osm_id": osm_id,
+                    "name": name,
+                    "icon": "🍔",
+                    "latitude": rlat,
+                    "longitude": rlng,
+                    "heal_percent": 25,
+                    "source": "osm",
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+                await db.restaurants.insert_one(restaurant)
+            if elements:
+                await db.restaurant_fetches.insert_one({
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "fetched_at": datetime.utcnow().isoformat(),
+                })
+    except Exception as e:
+        logging.warning(f"Overpass restaurant fetch failed: {e}")
+    finally:
+        _osm_fetching.discard(area_key)
+
 @api_router.get("/restaurants/spawn")
 async def spawn_restaurants(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn restaurants near a location — only appears in some areas (not every radius)"""
-    # Use a grid-based seed so the same area always gives the same result
-    grid_lat = round(latitude * 200) / 200  # ~500m grid cells
-    grid_lng = round(longitude * 200) / 200
-    area_seed = hash(f"restaurant_{grid_lat}_{grid_lng}")
-    rng = random.Random(area_seed)
-    
-    # Only spawn in ~40% of areas (every few radius areas)
-    if rng.random() > 0.4:
-        return []
-    
-    # Check if restaurants already exist nearby in DB
-    existing = await db.restaurants.find({
-        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
-        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
-    }).to_list(10)
-    
-    if existing:
-        for r in existing:
-            r.pop("_id", None)
-        return existing
-    
-    # Spawn 1 restaurant in this area
-    lat_offset = rng.uniform(-0.003, 0.003)
-    lng_offset = rng.uniform(-0.003, 0.003)
-    
-    restaurant = {
-        "id": str(uuid.uuid4()),
-        "name": rng.choice(RESTAURANT_NAMES),
-        "icon": rng.choice(RESTAURANT_ICONS),
-        "latitude": latitude + lat_offset,
-        "longitude": longitude + lng_offset,
-        "heal_percent": 25,
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    
-    await db.restaurants.insert_one(restaurant)
-    restaurant.pop("_id", None)
-    return [restaurant]
+    """Real restaurants from OpenStreetMap near the player — eat only when physically near."""
+    RADIUS_M = 5000  # 5 km search radius
+    CACHE_DAYS = 36500  # effectively permanent: once fetched, never re-searched
+    # Bounding box for the DB lookup (approx, 1 deg lat ~ 111 km)
+    dlat = RADIUS_M / 111000.0
+    dlng = RADIUS_M / (111000.0 * max(0.2, math.cos(math.radians(latitude))))
+
+    # 1. Area cache check: was this area fetched recently? (within 2 km, last 7 days)
+    cutoff = (datetime.utcnow() - timedelta(days=CACHE_DAYS)).isoformat()
+    recent = await db.restaurant_fetches.find_one({
+        "latitude": {"$gte": latitude - 0.02, "$lte": latitude + 0.02},
+        "longitude": {"$gte": longitude - 0.02, "$lte": longitude + 0.02},
+        "fetched_at": {"$gte": cutoff},
+    })
+    if not recent:
+        # 2. Fetch real restaurants in the BACKGROUND — never block the map on Overpass
+        area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if area_key not in _osm_fetching:
+            _osm_fetching.add(area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, area_key))
+
+    # 3. Return real restaurants in the DB within the radius
+    restaurants = await db.restaurants.find({
+        "source": "osm",
+        "latitude": {"$gte": latitude - dlat, "$lte": latitude + dlat},
+        "longitude": {"$gte": longitude - dlng, "$lte": longitude + dlng},
+    }).to_list(100)
+    for r in restaurants:
+        r.pop("_id", None)
+    # If nothing cached here, fill it in the BACKGROUND — never block the
+    # map on Overpass. The fetch has 3-instance fallback + a concurrency
+    # cap, and the next refresh picks up the data.
+    if len(restaurants) == 0:
+        area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if area_key not in _osm_fetching:
+            _osm_fetching.add(area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, area_key))
+    return restaurants
 
 
 @api_router.post("/restaurants/{restaurant_id}/eat")
@@ -5540,6 +5985,19 @@ async def eat_at_restaurant(restaurant_id: str, player_id: str):
     restaurant = await db.restaurants.find_one({"id": restaurant_id})
     if not restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    # Real-world proximity: you must be physically at the restaurant to eat there
+    player_pos = player.get("position")
+    if player_pos and player_pos.get("latitude") is not None:
+        dist_m = calculate_distance(
+            Position(latitude=player_pos["latitude"], longitude=player_pos["longitude"]),
+            Position(latitude=restaurant["latitude"], longitude=restaurant["longitude"]),
+        )
+        if dist_m > 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You're {int(dist_m)}m away — get within 100m of {restaurant['name']} to eat there!",
+            )
     
     # Check cooldown (10 minutes per player per restaurant)
     cooldown_key = f"restaurant_cooldowns.{restaurant_id}"
@@ -5599,47 +6057,125 @@ NIGHTCLUB_NAMES = [
 NIGHTCLUB_ICONS = ["🎵", "🎶", "🪩", "💃", "🕺", "🍸", "🎤", "🌙"]
 
 
+# In-flight Overpass fetches (dedupe so a driving player doesn't spam Overpass)
+_osm_fetching = set()
+# Overpass instances to try in order + cap on concurrent calls, so one map
+# load firing banks/restaurants/clubs/shops at once can't queue itself out.
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
+OVERPASS_SEMAPHORE = asyncio.Semaphore(2)
+
+
+async def _fetch_nightclubs_from_overpass(latitude: float, longitude: float, player_level: int, area_key: str):
+    """Background fill of real nightclubs/bars/pubs for an area. Never blocks the map response."""
+    try:
+        query = (
+            "[out:json][timeout:100];"
+            "("
+            f'node["amenity"="nightclub"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="nightclub"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="bar"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="bar"](around:2000,{latitude},{longitude});'
+            f'node["amenity"="pub"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="pub"](around:2000,{latitude},{longitude});'
+            ");"
+            "out center 100;"
+        )
+        elements = []
+        async with OVERPASS_SEMAPHORE:
+            for overpass_url in OVERPASS_URLS:
+                try:
+                    async with httpx.AsyncClient(timeout=90) as client:
+                        resp = await client.post(
+                            overpass_url,
+                            data={"data": query},
+                            headers={"User-Agent": "StreetLegends/1.0 (game nightclub lookup)"},
+                        )
+                    if resp.status_code == 200:
+                        elements = resp.json().get("elements", [])
+                        break
+                except Exception:
+                    continue
+        if True:
+            for el in elements:
+                osm_id = f"{el.get('type')}/{el.get('id')}"
+                tags = el.get("tags", {}) or {}
+                if el.get("type") == "node":
+                    clat, clng = el.get("lat"), el.get("lon")
+                else:
+                    center = el.get("center") or {}
+                    clat, clng = center.get("lat"), center.get("lon")
+                if clat is None or clng is None:
+                    continue
+                name = tags.get("name") or tags.get("brand") or "Nightclub"
+                existing = await db.nightclubs.find_one({"osm_id": osm_id})
+                if existing:
+                    continue
+                nightclub = {
+                    "id": str(uuid.uuid4()),
+                    "osm_id": osm_id,
+                    "name": name,
+                    "icon": "🎵",
+                    "latitude": clat,
+                    "longitude": clng,
+                    "energy_percent": 25,
+                    "source": "osm",
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+                await db.nightclubs.insert_one(nightclub)
+            if elements:
+                await db.nightclub_fetches.insert_one({
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "fetched_at": datetime.utcnow().isoformat(),
+                })
+    except Exception as e:
+        logging.warning(f"Overpass nightclub fetch failed: {e}")
+    finally:
+        _osm_fetching.discard(area_key)
+
 @api_router.get("/nightclubs/spawn")
 async def spawn_nightclubs(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn nightclubs near a location — appears in every other radius area"""
-    # Use a grid-based seed so the same area always gives the same result
-    grid_lat = round(latitude * 200) / 200  # ~500m grid cells
-    grid_lng = round(longitude * 200) / 200
-    area_seed = hash(f"nightclub_{grid_lat}_{grid_lng}")
-    rng = random.Random(area_seed)
-    
-    # Only spawn in ~50% of areas (every other radius)
-    if rng.random() > 0.5:
-        return []
-    
-    # Check if nightclubs already exist nearby in DB
-    existing = await db.nightclubs.find({
-        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
-        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
-    }).to_list(10)
-    
-    if existing:
-        for nc in existing:
-            nc.pop("_id", None)
-        return existing
-    
-    # Spawn 1 nightclub in this area
-    lat_offset = rng.uniform(-0.003, 0.003)
-    lng_offset = rng.uniform(-0.003, 0.003)
-    
-    nightclub = {
-        "id": str(uuid.uuid4()),
-        "name": rng.choice(NIGHTCLUB_NAMES),
-        "icon": rng.choice(NIGHTCLUB_ICONS),
-        "latitude": latitude + lat_offset,
-        "longitude": longitude + lng_offset,
-        "energy_percent": 25,
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    
-    await db.nightclubs.insert_one(nightclub)
-    nightclub.pop("_id", None)
-    return [nightclub]
+    """Real nightclubs/bars/pubs from OpenStreetMap near the player — visit only when physically near."""
+    RADIUS_M = 5000  # 5 km search radius
+    CACHE_DAYS = 36500  # effectively permanent: once fetched, never re-searched
+    # Bounding box for the DB lookup (approx, 1 deg lat ~ 111 km)
+    dlat = RADIUS_M / 111000.0
+    dlng = RADIUS_M / (111000.0 * max(0.2, math.cos(math.radians(latitude))))
+
+    # Area cache check: was this area fetched recently? (within 2 km, last 7 days)
+    cutoff = (datetime.utcnow() - timedelta(days=CACHE_DAYS)).isoformat()
+    recent = await db.nightclub_fetches.find_one({
+        "latitude": {"$gte": latitude - 0.02, "$lte": latitude + 0.02},
+        "longitude": {"$gte": longitude - 0.02, "$lte": longitude + 0.02},
+        "fetched_at": {"$gte": cutoff},
+    })
+    if not recent:
+        # Fetch real clubs in the BACKGROUND — never block the map on Overpass
+        area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if area_key not in _osm_fetching:
+            _osm_fetching.add(area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, area_key))
+
+    # Return real clubs in the DB within the radius (instant, possibly empty on first visit)
+    nightclubs = await db.nightclubs.find({
+        "source": "osm",
+        "latitude": {"$gte": latitude - dlat, "$lte": latitude + dlat},
+        "longitude": {"$gte": longitude - dlng, "$lte": longitude + dlng},
+    }).to_list(100)
+    for nc in nightclubs:
+        nc.pop("_id", None)
+    # If nothing cached here, retry even if a (possibly empty) fetch record
+    # exists — a previous fetch may have come back empty.
+    if len(nightclubs) == 0:
+        area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if area_key not in _osm_fetching:
+            _osm_fetching.add(area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, area_key))
+    return nightclubs
 
 
 @api_router.post("/nightclubs/{nightclub_id}/visit")
@@ -5652,6 +6188,19 @@ async def visit_nightclub(nightclub_id: str, player_id: str):
     nightclub = await db.nightclubs.find_one({"id": nightclub_id})
     if not nightclub:
         raise HTTPException(status_code=404, detail="Nightclub not found")
+
+    # Real-world proximity: you must be physically at the club to party there
+    player_pos = player.get("position")
+    if player_pos and player_pos.get("latitude") is not None:
+        dist_m = calculate_distance(
+            Position(latitude=player_pos["latitude"], longitude=player_pos["longitude"]),
+            Position(latitude=nightclub["latitude"], longitude=nightclub["longitude"]),
+        )
+        if dist_m > 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You're {int(dist_m)}m away — get within 100m of {nightclub['name']} to party there!",
+            )
     
     # Check cooldown (10 minutes per player per nightclub)
     last_visit = player.get("nightclub_cooldowns", {}).get(nightclub_id)
@@ -5709,51 +6258,115 @@ BANK_NAMES = [
 BANK_ICONS = ["🏦", "💰", "🏛️", "💵"]
 
 
+
+# In-flight Overpass fetches (dedupe so a driving player doesn't spam Overpass)
+_osm_fetching = set()
+
+async def _fetch_banks_from_overpass(latitude: float, longitude: float, player_level: int, area_key: str):
+    """Background fill of real banks for an area. Never blocks the map response."""
+    try:
+        query = (
+            "[out:json][timeout:100];"
+            "("
+            f'node["amenity"="bank"](around:2000,{latitude},{longitude});'
+            f'way["amenity"="bank"](around:2000,{latitude},{longitude});'
+            ");"
+            "out center 100;"
+        )
+        elements = []
+        async with OVERPASS_SEMAPHORE:
+            for overpass_url in OVERPASS_URLS:
+                try:
+                    async with httpx.AsyncClient(timeout=90) as client:
+                        resp = await client.post(
+                            overpass_url,
+                            data={"data": query},
+                            headers={"User-Agent": "StreetLegends/1.0 (game bank lookup)"},
+                        )
+                    if resp.status_code == 200:
+                        elements = resp.json().get("elements", [])
+                        break
+                except Exception:
+                    continue
+        if True:
+            base_reward = int((500 + (player_level * 100)) * 0.5)
+            for el in elements:
+                osm_id = f"{el.get('type')}/{el.get('id')}"
+                tags = el.get("tags", {}) or {}
+                if el.get("type") == "node":
+                    blat, blng = el.get("lat"), el.get("lon")
+                else:
+                    center = el.get("center") or {}
+                    blat, blng = center.get("lat"), center.get("lon")
+                if blat is None or blng is None:
+                    continue
+                name = tags.get("name") or tags.get("brand") or "Bank"
+                existing = await db.banks.find_one({"osm_id": osm_id})
+                if existing:
+                    continue
+                bank = {
+                    "id": str(uuid.uuid4()),
+                    "osm_id": osm_id,
+                    "name": name,
+                    "icon": "🏦",
+                    "latitude": blat,
+                    "longitude": blng,
+                    "min_reward": int(base_reward * 0.5),
+                    "max_reward": int(base_reward * 1.5),
+                    "source": "osm",
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+                await db.banks.insert_one(bank)
+            if elements:
+                await db.bank_fetches.insert_one({
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "fetched_at": datetime.utcnow().isoformat(),
+                })
+    except Exception as e:
+        logging.warning(f"Overpass bank fetch failed: {e}")
+    finally:
+        _osm_fetching.discard(area_key)
+
 @api_router.get("/banks/spawn")
 async def spawn_banks(latitude: float, longitude: float, player_level: int = 1):
-    """Spawn banks near a location — very rare, only 10% of areas have one"""
-    # Use a grid-based seed so the same area always gives the same result
-    grid_lat = round(latitude * 200) / 200  # ~500m grid cells
-    grid_lng = round(longitude * 200) / 200
-    area_seed = hash(f"bank_{grid_lat}_{grid_lng}")
-    rng = random.Random(area_seed)
-    
-    # Only spawn in ~10% of areas (banks are very rare - a significant opportunity)
-    if rng.random() > 0.10:
-        return []
-    
-    # Check if banks already exist nearby in DB
-    existing = await db.banks.find({
-        "latitude": {"$gte": latitude - 0.005, "$lte": latitude + 0.005},
-        "longitude": {"$gte": longitude - 0.005, "$lte": longitude + 0.005},
-    }).to_list(10)
-    
-    if existing:
-        for bank in existing:
-            bank.pop("_id", None)
-        return existing
-    
-    # Spawn 1 bank in this area
-    lat_offset = rng.uniform(-0.003, 0.003)
-    lng_offset = rng.uniform(-0.003, 0.003)
-    
-    # Bank rewards scale with player level (reduced by 50% for balance)
-    base_reward = int((500 + (player_level * 100)) * 0.5)
-    
-    bank = {
-        "id": str(uuid.uuid4()),
-        "name": rng.choice(BANK_NAMES),
-        "icon": rng.choice(BANK_ICONS),
-        "latitude": latitude + lat_offset,
-        "longitude": longitude + lng_offset,
-        "min_reward": int(base_reward * 0.5),
-        "max_reward": int(base_reward * 1.5),
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    
-    await db.banks.insert_one(bank)
-    bank.pop("_id", None)
-    return [bank]
+    """Real banks from OpenStreetMap near the player — rob only when physically near."""
+    RADIUS_M = 5000  # 5 km search radius
+    CACHE_DAYS = 36500  # effectively permanent: once fetched, never re-searched
+    # Bounding box for the DB lookup (approx, 1 deg lat ~ 111 km)
+    dlat = RADIUS_M / 111000.0
+    dlng = RADIUS_M / (111000.0 * max(0.2, math.cos(math.radians(latitude))))
+
+    # 1. Area cache check: was this area fetched recently? (within 2 km, last 7 days)
+    cutoff = (datetime.utcnow() - timedelta(days=CACHE_DAYS)).isoformat()
+    recent = await db.bank_fetches.find_one({
+        "latitude": {"$gte": latitude - 0.02, "$lte": latitude + 0.02},
+        "longitude": {"$gte": longitude - 0.02, "$lte": longitude + 0.02},
+        "fetched_at": {"$gte": cutoff},
+    })
+    if not recent:
+        # 2. Fetch real banks in the BACKGROUND — never block the map on Overpass
+        area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if area_key not in _osm_fetching:
+            _osm_fetching.add(area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, area_key))
+
+    # 3. Return real banks in the DB within the radius
+    banks = await db.banks.find({
+        "source": "osm",
+        "latitude": {"$gte": latitude - dlat, "$lte": latitude + dlat},
+        "longitude": {"$gte": longitude - dlng, "$lte": longitude + dlng},
+    }).to_list(100)
+    for bank in banks:
+        bank.pop("_id", None)
+    # If nothing cached here, retry even if a (possibly empty) fetch record
+    # exists — a previous fetch may have come back empty.
+    if len(banks) == 0:
+        area_key = f"all_{round(latitude, 2)}_{round(longitude, 2)}"
+        if area_key not in _osm_fetching:
+            _osm_fetching.add(area_key)
+            asyncio.create_task(_fetch_all_places_from_overpass(latitude, longitude, player_level, area_key))
+    return banks
 
 
 @api_router.post("/banks/{bank_id}/rob")
@@ -5766,9 +6379,22 @@ async def rob_bank(bank_id: str, player_id: str):
     bank = await db.banks.find_one({"id": bank_id})
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
+
+    # Real-world proximity: you must be physically at the bank to rob it
+    player_pos = player.get("position")
+    if player_pos and player_pos.get("latitude") is not None:
+        dist_m = calculate_distance(
+            Position(latitude=player_pos["latitude"], longitude=player_pos["longitude"]),
+            Position(latitude=bank["latitude"], longitude=bank["longitude"]),
+        )
+        if dist_m > 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You're {int(dist_m)}m away — get within 100m of {bank['name']} to rob it!",
+            )
     
     # Check cooldown (60 minutes per player per bank - banks are a rare opportunity)
-    cooldown_key = f"bank_cooldowns.{bank_id}"
+    cooldown_key = f"all_cooldowns.{bank_id}"
     last_rob = player.get("bank_cooldowns", {}).get(bank_id)
     if last_rob:
         try:
@@ -5815,7 +6441,7 @@ async def rob_bank(bank_id: str, player_id: str):
             {
                 "$set": {
                     "cash": new_cash,
-                    f"bank_cooldowns.{bank_id}": datetime.utcnow().isoformat(),
+                    f"all_cooldowns.{bank_id}": datetime.utcnow().isoformat(),
                 },
                 "$inc": {"stats.banks_robbed": 1}
             }
@@ -5845,7 +6471,7 @@ async def rob_bank(bank_id: str, player_id: str):
             {
                 "$set": {
                     "cash": new_cash,
-                    f"bank_cooldowns.{bank_id}": datetime.utcnow().isoformat(),
+                    f"all_cooldowns.{bank_id}": datetime.utcnow().isoformat(),
                 },
                 "$inc": {"stats.times_caught": 1}
             }
@@ -6618,6 +7244,158 @@ async def spawn_castles(latitude: float, longitude: float, player_level: int = 1
     return [castle]
 
 
+
+# ============== GLOBAL MINI-GAME COOLDOWN ==============
+# Play ANY mini-game once -> ALL mini-games lock for 15 minutes.
+MINIGAME_GLOBAL_COOLDOWN_SECONDS = 900
+
+def _check_minigame_global_cooldown(player):
+    """Raise 400 if the player is inside the global mini-game cooldown window."""
+    until = (player or {}).get("minigame_global_cooldown_until")
+    if not until:
+        return
+    try:
+        until_dt = datetime.fromisoformat(until)
+    except (ValueError, TypeError):
+        return
+    now = datetime.utcnow()
+    if now < until_dt:
+        remaining = int((until_dt - now).total_seconds())
+        mins, secs = remaining // 60, remaining % 60
+        raise HTTPException(
+            status_code=400,
+            detail=f"Mini-game cooldown active! Wait {mins}m {secs}s before playing again.",
+        )
+
+def _minigame_global_cooldown_until():
+    """ISO timestamp 15 minutes in the future."""
+    return (datetime.utcnow() + timedelta(seconds=MINIGAME_GLOBAL_COOLDOWN_SECONDS)).isoformat()
+
+
+# ============== STANDALONE (PRACTICE MODE) START ENDPOINTS ==============
+# Practice games launched from the options panel previously used
+# game_id='standalone', so the complete endpoints 404'd and no cash was ever
+# awarded. These create real sessions so completions award the 50% practice
+# rewards via the existing logic.
+
+@api_router.post("/castles/standalone/start")
+async def start_standalone_castle(player_id: str, level: int = 1):
+    """Start a standalone castle practice game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    _check_minigame_global_cooldown(player)
+    level = max(1, min(level, 10))
+    level_rewards = {
+        1: {"min": 25, "max": 50, "xp": 12, "rep": 2},
+        2: {"min": 35, "max": 70, "xp": 18, "rep": 3},
+        3: {"min": 50, "max": 100, "xp": 25, "rep": 4},
+        4: {"min": 75, "max": 150, "xp": 35, "rep": 5},
+        5: {"min": 100, "max": 200, "xp": 50, "rep": 6},
+        6: {"min": 125, "max": 250, "xp": 75, "rep": 7},
+        7: {"min": 175, "max": 350, "xp": 100, "rep": 8},
+        8: {"min": 225, "max": 450, "xp": 125, "rep": 9},
+        9: {"min": 300, "max": 600, "xp": 185, "rep": 10},
+        10: {"min": 500, "max": 1000, "xp": 250, "rep": 15},
+    }
+    rewards = level_rewards[level]
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "castle_id": "standalone",
+        "player_id": player_id,
+        "castle_name": f"Training Fortress Lv.{level}",
+        "difficulty": level,
+        "total_members": level + 2,
+        "status": "active",
+        "min_reward": rewards["min"],
+        "max_reward": rewards["max"],
+        "xp_reward": rewards["xp"],
+        "rep_reward": rewards["rep"],
+        "standalone": True,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    await db.castle_games.insert_one(game)
+    return {"game_id": game_id, "castle_name": game["castle_name"]}
+
+
+@api_router.post("/car-chases/standalone/start")
+async def start_standalone_car_chase(player_id: str, level: int = 1):
+    """Start a standalone car chase practice game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    _check_minigame_global_cooldown(player)
+    level = max(1, min(level, 10))
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "chase_id": "standalone",
+        "chase_name": f"Training Run Lv.{level}",
+        "difficulty": level,
+        "county_line_distance": 5000,
+        "min_reward": 100 + level * 20,
+        "max_reward": 250 + level * 50,
+        "xp_reward": 20 + level * 5,
+        "rep_reward": 3 + level,
+        "status": "active",
+        "standalone": True,
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    await db.car_chase_games.insert_one(game)
+    return {"game_id": game_id, "chase_name": game["chase_name"]}
+
+
+@api_router.post("/runaways/standalone/start")
+async def start_standalone_runaway(player_id: str, level: int = 1):
+    """Start a standalone runaway practice game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    _check_minigame_global_cooldown(player)
+    level = max(1, min(level, 20))
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "runaway_id": "standalone",
+        "runaway_name": f"Training Hideout Lv.{level}",
+        "difficulty": level,
+        "hideout_distance": 3000 + level * 200,
+        "min_reward": 80 + level * 10,
+        "max_reward": 200 + level * 25,
+        "xp_reward": 20 + level * 3,
+        "rep_reward": 2 + level // 2,
+        "status": "active",
+        "standalone": True,
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    await db.runaway_games.insert_one(game)
+    return {"game_id": game_id, "runaway_name": game["runaway_name"]}
+
+
+@api_router.post("/package-grabs/standalone/start")
+async def start_standalone_package_grab(player_id: str, level: int = 1):
+    """Start a standalone package grab practice game"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    _check_minigame_global_cooldown(player)
+    level = max(1, min(level, 20))
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "grab_id": "standalone",
+        "grab_name": f"Training Route Lv.{level}",
+        "status": "active",
+        "standalone": True,
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    await db.packagegrab_games.insert_one(game)
+    return {"game_id": game_id, "grab_name": game["grab_name"]}
+
 @api_router.get("/minigames/cooldowns/{player_id}")
 async def get_minigame_cooldowns(player_id: str):
     """Get all active cooldowns for mini-games (castles, car chases, runaways, package grabs, and shootouts)"""
@@ -6714,6 +7492,23 @@ async def get_minigame_cooldowns(player_id: str):
         except (ValueError, TypeError):
             pass
     
+
+    # Global mini-game cooldown (applies to all map mini-games)
+    _global_until = player.get("minigame_global_cooldown_until")
+    if _global_until:
+        try:
+            _until_dt = datetime.fromisoformat(_global_until)
+            _secs_left = (_until_dt - now).total_seconds()
+            if _secs_left > 0:
+                cooldowns["global"] = {
+                    "type": "global",
+                    "marker_id": None,
+                    "remaining_seconds": int(_secs_left),
+                    "expires_at": _until_dt.isoformat(),
+                }
+        except (ValueError, TypeError):
+            pass
+
     return cooldowns
 
 
@@ -6723,6 +7518,9 @@ async def start_castle_minigame(castle_id: str, player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     castle = await db.castles.find_one({"id": castle_id})
     if not castle:
@@ -6782,6 +7580,9 @@ async def start_random_castle_game(player_id: str, castle_id: str = None):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     # Check cooldown if castle_id provided
     if castle_id:
@@ -6875,6 +7676,11 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool,
             {"id": game["player_id"]},
             {"$set": {f"castle_cooldowns.{castle_id}": datetime.utcnow().isoformat()}}
         )
+    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
+    )
     
     if won:
         # Calculate rewards based on difficulty and members eliminated
@@ -7002,6 +7808,9 @@ async def start_car_chase(chase_id: str, player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     car_chase = await db.car_chases.find_one({"id": chase_id})
     if not car_chase:
@@ -7084,6 +7893,11 @@ async def complete_car_chase(game_id: str, won: bool, distance_traveled: int, st
             {"id": game["player_id"]},
             {"$set": {f"carchase_cooldowns.{chase_id}": datetime.utcnow().isoformat()}}
         )
+    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
+    )
     
     if won:
         # Calculate rewards based on difficulty and distance
@@ -7193,6 +8007,9 @@ async def start_runaway(runaway_id: str, player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     runaway = await db.runaways.find_one({"id": runaway_id})
     if not runaway:
@@ -7275,6 +8092,11 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int, stan
             {"id": game["player_id"]},
             {"$set": {f"runaway_cooldowns.{runaway_id}": datetime.utcnow().isoformat()}}
         )
+    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
+    )
     
     if won:
         # Calculate rewards based on difficulty (1-20)
@@ -7377,6 +8199,9 @@ async def start_package_grab(grab_id: str, player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     grab = await db.packagegrabs.find_one({"id": grab_id})
     if not grab:
@@ -7455,6 +8280,11 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
             {"id": game["player_id"]},
             {"$set": {f"packagegrab_cooldowns.{grab_id}": datetime.utcnow().isoformat()}}
         )
+    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
+    )
     
     if won:
         # Calculate rewards based on boxes collected
@@ -7569,6 +8399,9 @@ async def start_shootout(shootout_id: str, player_id: str):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     shootout = await db.shootouts.find_one({"id": shootout_id})
     if not shootout:
@@ -7616,6 +8449,9 @@ async def start_standalone_shootout(player_id: str, level: int = 1):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
+
+    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
+    _check_minigame_global_cooldown(player)
     
     # Create game session for standalone mode
     game_id = str(uuid.uuid4())
@@ -7673,6 +8509,11 @@ async def complete_shootout(game_id: str, hits: int, standalone: bool = False):
             {"id": game["player_id"]},
             {"$set": {f"shootout_cooldowns.{shootout_id}": datetime.utcnow().isoformat()}}
         )
+    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
+    await db.players.update_one(
+        {"id": game["player_id"]},
+        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
+    )
     
     if hits > 0:
         # Calculate rewards based on hits and level
