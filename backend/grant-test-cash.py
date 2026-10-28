@@ -43,8 +43,20 @@ def main():
     try:
         from pymongo import MongoClient
     except ImportError:
-        print("ERROR: pymongo not installed.")
-        sys.exit(1)
+        print("pymongo not installed — installing it now...")
+        import subprocess
+        installed = False
+        for cmd in (["pip", "install", "pymongo"], ["pip3", "install", "pymongo"], [sys.executable, "-m", "pip", "install", "pymongo"]):
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+                installed = True
+                break
+            except Exception:
+                continue
+        if not installed:
+            print("ERROR: could not install pymongo. Run 'pip install pymongo' first, then re-run this script.")
+            sys.exit(1)
+        from pymongo import MongoClient
     client = MongoClient(mongo_url, serverSelectionTimeoutMS=15000)
     db = client[db_name]
     player = db.players.find_one({"name": {"$regex": f"^{re.escape(PLAYER_NAME)}$", "$options": "i"}})
