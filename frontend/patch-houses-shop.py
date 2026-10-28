@@ -128,7 +128,7 @@ SHOP_EDITS = [
           setMyHouse(res.house);
           const p = await getPlayer(playerId);
           setPlayer(p);
-          Alert.alert('House Bought', `${h.name} is yours! Look for the \\u{1F3E0} icon on the map.`);
+          Alert.alert('House Bought', `${h.name} is yours! Look for the 🏠 icon on the map.`);
         } catch (e: any) {
           Alert.alert('Error', e.response?.data?.detail || 'Purchase failed');
         } finally { setBuyingHouse(null); }
@@ -178,7 +178,7 @@ SHOP_EDITS = [
             );
           })}
           {myHouse && (
-            <Text style={HOUSE_STYLES.houseOwnedNote}>You own: {myHouse.name} — tap its \\u{1F3E0} icon on the map to enter, hide, or sell.</Text>
+            <Text style={HOUSE_STYLES.houseOwnedNote}>You own: {myHouse.name} — tap its 🏠 icon on the map to enter, hide, or sell.</Text>
           )}
         </ScrollView>
       ) : (
