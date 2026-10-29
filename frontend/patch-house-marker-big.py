@@ -13,8 +13,9 @@ FIX (frontend/components/GameMap.tsx):
    no label) — it reads as a house, not another framed dot.
 2. House icon size 72x72 (bigger than any other marker) with a
    centered anchor.
-3. House markers get zIndexOffset 1000 so they draw ABOVE the player
-   marker — standing on your own house no longer hides it.
+3. (REMOVED per user 2026-10-29: house must NOT draw above the player
+   marker — the player stays on top. No zIndex change is applied; if a
+   previous run added one, this patch reverts it.)
 
 FRONTEND change: needs a rebuild + new AAB upload to Play internal
 testing. A backend Deploy alone does NOT ship this.
@@ -41,8 +42,8 @@ HEIGHT_NEW = "            var markerHeight = isHouseMarker ? 72 : ((isCastleMark
 ANCHOR_OLD = "            var iconAnchorY = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : ((isBankMarker || isCasinoMarker) ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));"
 ANCHOR_NEW = "            var iconAnchorY = isHouseMarker ? 36 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : ((isBankMarker || isCasinoMarker) ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16)))));"
 
-ZINDEX_OLD = "            var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);"
-ZINDEX_NEW = "            var marker = L.marker([m.lat, m.lng], { icon: divIcon, zIndexOffset: isHouseMarker ? 1000 : 0 }).addTo(map);"
+ZINDEX_OLD = "            var marker = L.marker([m.lat, m.lng], { icon: divIcon, zIndexOffset: isHouseMarker ? 1000 : 0 }).addTo(map);"
+ZINDEX_NEW = "            var marker = L.marker([m.lat, m.lng], { icon: divIcon }).addTo(map);"
 
 REPLACEMENTS = [
     (HOUSE_BRANCH_OLD, HOUSE_BRANCH_NEW, "house marker branch added"),
@@ -50,7 +51,7 @@ REPLACEMENTS = [
     (WIDTH_OLD, WIDTH_NEW, "house marker width 72"),
     (HEIGHT_OLD, HEIGHT_NEW, "house marker height 72"),
     (ANCHOR_OLD, ANCHOR_NEW, "house marker centered anchor"),
-    (ZINDEX_OLD, ZINDEX_NEW, "house draws above player marker"),
+    (ZINDEX_OLD, ZINDEX_NEW, "house NOT forced above player marker (reverted if present)"),
 ]
 
 
