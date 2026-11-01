@@ -14,6 +14,7 @@ import {
   spawnRunaways,
   spawnPackageGrabs,
   spawnShootouts,
+  getNearbyHouses,
   getPlayer,
   updatePlayerPosition,
   getMinigameCooldowns,
@@ -52,6 +53,7 @@ export interface MapEntitiesData {
   runaways: any[];
   packageGrabs: any[];
   shootouts: any[];
+  houses: any[];
 }
 
 interface UseMapEntitiesOptions {
@@ -95,6 +97,7 @@ export const useMapEntities = ({
         spawnRunaways(latitude, longitude, playerLevel),
         spawnPackageGrabs(latitude, longitude, playerLevel),
         spawnShootouts(latitude, longitude, playerLevel),
+        getNearbyHouses(latitude, longitude, 2000, playerId),
       ]);
 
       return {
@@ -112,6 +115,7 @@ export const useMapEntities = ({
         runaways: results[11].status === 'fulfilled' ? results[11].value : [],
         packageGrabs: results[12].status === 'fulfilled' ? results[12].value : [],
         shootouts: results[13].status === 'fulfilled' ? results[13].value : [],
+        houses: results[14].status === 'fulfilled' ? results[14].value : [],
       };
     },
     enabled: enabled && !!playerId && !!latitude && !!longitude,

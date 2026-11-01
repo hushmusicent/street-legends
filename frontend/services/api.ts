@@ -962,8 +962,9 @@ export const getPlayerHouse = async (playerId: string): Promise<any> => {
   return response.data.house;
 };
 
-export const getNearbyHouses = async (latitude: number, longitude: number, radius: number = 2000): Promise<any[]> => {
-  const response = await api.get(`/houses/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`);
+export const getNearbyHouses = async (latitude: number, longitude: number, radius: number = 2000, playerId?: string): Promise<any[]> => {
+  const query = `/houses/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}` + (playerId ? `&player_id=${playerId}` : '');
+  const response = await api.get(query);
   return response.data;
 };
 
@@ -974,5 +975,40 @@ export const toggleHouseHide = async (houseId: string, playerId: string): Promis
 
 export const sellHouse = async (houseId: string, playerId: string): Promise<any> => {
   const response = await api.post(`/houses/${houseId}/sell`, { player_id: playerId });
+  return response.data;
+};
+
+export const addHouseItem = async (houseId: string, playerId: string, itemId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/items/add`, { player_id: playerId, item_id: itemId });
+  return response.data;
+};
+
+export const removeHouseItem = async (houseId: string, playerId: string, itemId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/items/remove`, { player_id: playerId, item_id: itemId });
+  return response.data;
+};
+export const moveHouseItem = async (houseId: string, playerId: string, itemId: string, x: number, y: number): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/items/move`, { player_id: playerId, item_id: itemId, x, y });
+  return response.data;
+};
+
+export const moveHouseToInventory = async (houseId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/move-to-inventory`, { player_id: playerId });
+  return response.data;
+};
+
+export const getInventoryHouses = async (playerId: string): Promise<any> => {
+  const response = await api.get(`/houses/inventory/${playerId}`);
+  return response.data.houses || [];
+};
+
+export const placeHouse = async (houseId: string, playerId: string, latitude: number, longitude: number): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/place`, { player_id: playerId, latitude, longitude });
+  return response.data;
+};
+
+
+export const placeItemFromInventory = async (houseId: string, playerId: string, itemId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/items/place-from-inventory`, { player_id: playerId, item_id: itemId });
   return response.data;
 };

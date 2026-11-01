@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
-import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse } from '../../services/api';
+import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse, getInventoryHouses, placeHouse, moveHouseToInventory } from '../../services/api';
 import api from '../../services/api';
 import { GodPotions } from '../../components/GodPotions';
 import { getBundledIcon } from '../../assets/icons/iconMap';
@@ -138,6 +138,8 @@ export default function ShopTabScreen() {
   const [buying, setBuying] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [myHouse, setMyHouse] = useState<any | null>(null);
+  const [inventoryHouses, setInventoryHouses] = useState<any[]>([]);
+  const [placingHouse, setPlacingHouse] = useState<string | null>(null);
   const [buyingHouse, setBuyingHouse] = useState<string | null>(null);
   const [successModal, setSuccessModal] = useState<{ visible: boolean; message: string; effects: string[] }>({
     visible: false, message: '', effects: [],
@@ -157,6 +159,7 @@ export default function ShopTabScreen() {
       setActiveBuffs(buffs);
       if (playerId) {
         try { const h = await getPlayerHouse(playerId); setMyHouse(h); } catch (_) {}
+        try { const inv = await getInventoryHouses(playerId); setInventoryHouses(inv || []); } catch (_) {}
       }
     } catch (error) {
       console.error('Failed to load shop:', error);
@@ -212,6 +215,29 @@ export default function ShopTabScreen() {
     } finally {
       setBuying(null);
     }
+  };
+
+  const handlePlaceHouse = (h: any) => {
+    if (!playerId || !player?.position) {
+      Alert.alert('Place House', 'Your location is not available yet.');
+      return;
+    }
+    Alert.alert('Place House?', `Drop ${h.name} right where you are standing?`, [
+      { text: 'Not Yet', style: 'cancel' },
+      { text: 'Place It', onPress: async () => {
+        setPlacingHouse(h.id);
+        try {
+          const res = await placeHouse(h.id, playerId, player.position.latitude, player.position.longitude);
+          setMyHouse(res.house);
+          setInventoryHouses((prev) => prev.filter((x) => x.id !== h.id));
+          Alert.alert('House Placed', `${h.name} is now on the map where you stand.`);
+        } catch (e: any) {
+          Alert.alert('Place Failed', e?.response?.data?.detail || e?.message || 'Could not place house.');
+        } finally {
+          setPlacingHouse(null);
+        }
+      } },
+    ]);
   };
 
   const handleBuyHouse = (h: typeof HOUSES[0]) => {
@@ -285,7 +311,7 @@ export default function ShopTabScreen() {
         </View>
         <View style={styles.cashBadge}>
           <Ionicons name="cash" size={16} color="#f39c12" />
-          <Text style={styles.cashText}>${player?.cash || 0}</Text>
+          <Text style={styles.cashText} numberOfLines={1} adjustsFontSizeToFit>${(player?.cash || 0).toLocaleString()}</Text>
         </View>
       </View>
 
@@ -354,7 +380,35 @@ export default function ShopTabScreen() {
       <GodPotions playerId={playerId} />
 
       {filter === 'house' ? (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.itemsScroll} contentContainerStyle={styles.scrollContent}>
+          {inventoryHouses.length > 0 && (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ color: '#f39c12', fontWeight: '800', fontSize: 14, marginBottom: 8 }}>YOUR INVENTORY — PLACE IT WHERE YOU STAND</Text>
+              {inventoryHouses.map((h: any) => {
+                const img = HOUSES.find((x) => x.tier === h.tier)?.image;
+                return (
+                  <View key={h.id} style={HOUSE_STYLES.houseCard}>
+                    {img ? (<Image source={img} style={HOUSE_STYLES.houseImage} />) : null}
+                    <View style={HOUSE_STYLES.houseInfo}>
+                      <Text style={HOUSE_STYLES.houseName}>{h.name}</Text>
+                      <Text style={HOUSE_STYLES.houseBlurb}>In your inventory — {h.items?.length || 0}/{h.item_limit || 6} items inside.</Text>
+                      <TouchableOpacity
+                        style={[HOUSE_STYLES.houseBuyBtn, placingHouse === h.id && HOUSE_STYLES.houseBuyBtnDisabled]}
+                        disabled={placingHouse === h.id}
+                        onPress={() => handlePlaceHouse(h)}
+                      >
+                        {placingHouse === h.id ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={HOUSE_STYLES.houseBuyText}>PLACE HERE</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
           {HOUSES.map((h) => {
             const owned = myHouse?.tier === h.tier;
             const canAfford = (player?.cash || 0) >= h.price;
@@ -561,7 +615,7 @@ const styles = StyleSheet.create({
   buffCountText: { color: '#e1bee7', fontSize: 9, fontWeight: '800' },
 
   // Filter
-  filterScroll: { maxHeight: 46, borderBottomWidth: 1, borderBottomColor: '#1a1a1a', backgroundColor: '#0a0a0a' },
+  filterScroll: { maxHeight: 46, minHeight: 46, borderBottomWidth: 1, borderBottomColor: '#1a1a1a', backgroundColor: '#0a0a0a' },
   filterContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   filterTab: {
     flexDirection: 'row', alignItems: 'center', gap: 4,

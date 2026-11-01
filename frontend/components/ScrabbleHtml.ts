@@ -1,0 +1,607 @@
+export const SCRABBLE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { margin: 0; background: #111827; color: #fff; font-family: system-ui, sans-serif; }
+#wrap { width: 100%; max-width: none; margin: 0 auto; padding: 8px; box-sizing: border-box; }
+h1 { text-align: center; color: #f59e0b; margin: 4px 0 2px; letter-spacing: 2px; }
+.deco { display: flex; justify-content: center; gap: 3px; margin-bottom: 6px; }
+.deco .tile { background: linear-gradient(180deg, #fffdf6, #f5f0e1 60%, #e6d9b8); color: #111; font-weight: 800; font-size: 15px; width: 26px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 #fff; }
+.scorebar { text-align: center; font-weight: 800; margin-bottom: 6px; }
+.board { display: grid; gap: 2px; background: linear-gradient(180deg, #a06a35, #8b5a2b 55%, #6b421f); border-radius: 12px; padding: 6px; margin: 10px 0; touch-action: manipulation; box-shadow: 0 6px 16px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.18); }
+.board-scroll { overflow-x: auto; }
+.ver { text-align: center; font-size: 10px; color: #888; margin-top: 2px; }
+.cell { aspect-ratio: 1; border: none; border-radius: 2px; font-size: 6px; font-weight: 800; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; position: relative; background: linear-gradient(180deg, #f0e6cc, #e8dcc0); color: #555; box-shadow: inset 0 1px 3px rgba(0,0,0,0.35); }
+.cell.DL { background: linear-gradient(180deg, #c4e4f7, #a8d8f0); color: #1e5a7a; }
+.cell.TL { background: linear-gradient(180deg, #60a5fa, #3b82f6); color: #fff; }
+.cell.DW { background: linear-gradient(180deg, #fbcfe8, #fbb6ce); color: #9d174d; }
+.cell.TW { background: linear-gradient(180deg, #f87171, #ef4444); color: #fff; }
+.cell.STAR { background: linear-gradient(180deg, #fbcfe8, #fbb6ce); color: #9d174d; font-size: 12px; }
+.prem { display: block; font-size: 5px; line-height: 1.05; font-weight: 700; text-align: center; }
+.cell .tile { position: absolute; inset: 0; background: linear-gradient(180deg, #fffdf6, #f5f0e1 60%, #e6d9b8); color: #111; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; box-shadow: 0 2px 4px rgba(0,0,0,0.45), inset 0 1px 0 #fff, inset 0 0 0 1px #cbb; }
+.cell .tile.pending { outline: 2px solid #f59e0b; outline-offset: -2px; }
+.cell .tile .val { position: absolute; right: 1px; bottom: 0; font-size: 6px; font-weight: 700; color: #555; }
+.msg { text-align: center; min-height: 20px; margin: 6px 0; font-size: 13px; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 6px; }
+button { cursor: pointer; border: none; border-radius: 8px; padding: 10px 12px; font-weight: 800; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.25); }
+button.green { background: #2e7d32; color: #fff; }
+button.blue { background: #1e88e5; color: #fff; }
+button.red { background: #e74c3c; color: #fff; }
+button.gray { background: #666; color: #fff; }
+button.diron { background: #f59e0b; color: #111; }
+.rack { display: flex; gap: 6px; justify-content: flex-start; margin: 6px 0; flex-wrap: wrap; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.07) 0 2px, rgba(255,255,255,0.05) 2px 4px, transparent 4px 9px), linear-gradient(180deg, #c08a4a, #8b5a2b 45%, #6b421f); padding: 8px; border-radius: 10px; border-top: 1px solid rgba(255,255,255,0.25); border-bottom: 2px solid rgba(0,0,0,0.35); box-shadow: 0 4px 10px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -3px 0 rgba(0,0,0,0.3); }
+.rack .tile { background: linear-gradient(180deg, #fffdf6, #f5f0e1 60%, #e6d9b8); color: #111; width: 36px; height: 44px; border-radius: 6px; font-size: 17px; font-weight: 800; position: relative; box-shadow: 0 3px 6px rgba(0,0,0,0.5), inset 0 1px 0 #fff; }
+.rack .tile .val { position: absolute; right: 3px; bottom: 2px; font-size: 9px; font-weight: 700; color: #555; }
+.rack .tile.sel { outline: 3px solid #f59e0b; transform: translateY(-4px); }
+.rack .tile.marked { outline: 3px solid #e74c3c; }
+.rack .tile.used { opacity: 0.25; }
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 10; }
+.overlay .box { background: #222; padding: 20px; border-radius: 12px; text-align: center; max-width: 320px; }
+.overlay .box button { margin: 6px; }
+/* APP TALL SCALE */
+#wrap { min-height: 100vh; display: flex; flex-direction: column; padding: 16px; }
+.board-scroll { flex: 1; display: flex; align-items: center; }
+.board { flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+<h1>SCRABBLE</h1>
+<div class="deco"><span class="tile">S</span><span class="tile">C</span><span class="tile">R</span><span class="tile">A</span><span class="tile">B</span><span class="tile">B</span><span class="tile">L</span><span class="tile">E</span></div>
+<div class="scorebar" id="scorebar"></div>
+<div class="board-scroll"><div class="board" id="board" style="grid-template-columns:repeat(15,1fr);width:280px"></div></div>
+<div class="msg" id="msg"></div>
+<div class="actions" id="actions"></div>
+<div class="rack" id="rack"></div>
+<div class="actions">
+<button class="green" id="btnSubmit">SUBMIT WORD</button>
+<button class="gray" id="btnClear">CLEAR</button>
+<button class="blue" id="btnPass">PASS</button>
+<button class="blue" id="btnExch">EXCHANGE</button>
+<button class="red" id="btnLeave">LEAVE TABLE</button>
+</div>
+<div class="ver">v12</div>
+</div>
+<div class="overlay" id="leaveOverlay"><div class="box">
+<p>Leave the Scrabble table? Your progress will be lost.</p>
+<button class="red" id="btnLeaveYes">LEAVE</button>
+<button id="btnLeaveNo">STAY</button>
+</div></div>
+<div class="overlay" id="overOverlay"><div class="box">
+<p id="overText"></p>
+<button class="green" id="btnAgain">PLAY AGAIN</button>
+<button class="red" id="btnOverLeave">LEAVE TABLE</button>
+</div></div>
+<script>
+var DICT = new Set("aa aarons ab abandoned abbey abbreviate abbreviations ability able abnormal about above abroad abrupt abs absent absolute absolutely absolutes absorbs abstractions academic accent accept acceptable acceptalltracke acceptance acceptances accepted accepting accepts access accessed accessibility accessible accessories accidental accompanies accompanying accomplish according account accountant accounting accounts accountscenter accrual accurate accurately ace acefitness achieved acid acknowledge acknowledgement acknowledges acknowledging acquired acrobat acroform acronyms across act acting action actions activate activating activation activations active actively activities activity actor actress acts actual actually ad adapt adaptation adapter adapters add added adding addition additional address addressed addresses adds adherence adjacent adjective adjust adjustable adjustment adjustments admin administered administers admire admission admissions admitted adobe adopt adoption ads adsmanager adult adults advance advanced advancing adventure adversarial advertise advertised advertiser advertises advertising advice advise adviser advising advisories advisory ae aenergy aerobics aerobus af affect affected affects affordability affordable afraid afresh after afternoon aftership afterward afterwards ag again against age aged agency agenda agent agentic agents ages agg aggregate aggregated aggregates aggregator aggressive aging agoda agree agreed agreeing agreement agrees ah ahead ai aim air airbnb aircraft airline airlines airport airports airside airtable al alarm alarms album albums alert alex algebra algorithm alias aliases alice align aligned alignment alike all allergen allergies allergy alley allocation allow allowance allowances allowed allowing allowlist allows almost alone along alongside aloud alpha already also alt alternates alternative alternatives altitude always am amazed amber ambient ambiguity ambiguous ambulance amd amend amendment amendments amends amenity america american among amount amounts amtrak an analysis analytics analyze analyzed analyzing ancestor ancestors ancestry anchor anchored anchors ancient and anderson anecdotal anghami angle angles angry animal animation ankle ann annot annotated annotation annotations annots announce announced announcement announcing annoyed annualize anonymous another answer answered answering answers ant anton anxious any anyone anything anytime anywhere ap apart apartment apartments ape apis apostrophes apower appear appearance appearances appeared appears append appendix appends appetizer apple applicable application applications applied applies apply applying appointment appointments approach appropriate approval approvals approve approved approves approving approximate approximated apr april apt aqua aquarium ar arbitrary arc arch archery archetype architecture archival archive archived archives archiving archivo are area aren argentina argon argos args argument arguments argv aria arial arithmetic arlo arm arming around arrange arrangement arrangements array arrival arrivals arrive arrived arrives art artery artichoke article articles artifact artifacts artificial artist artists artwork as asana ascii ash ashamed asia aside ask asked asking asks asleep asparagus aspect assemble assembled assembles assembly assert asserts assessment assessments asset assets assign assigned assignee assignees assignment assigns assist assistant associated association associations assume assumes assuming assumption assumptions asterisks astronomy asymmetric async at ate atlassian atmosphere atom atomically ats attach attached attaches attaching attachment attachments attack attempt attempted attempting attempts attend attendee attendees attention attic attr attraction attractions attribute attributed attributes attributing attribution au auction audience audiences audio audit audited audits aunt australia austria auth authd authentic authenticated authenticates authentication author authored authoring authoritative authorities authority authorization authorize authorized authorizes authorizing authors auto autobiography autodial autodials autoeurope automate automatic automatically automation automations availability available avalanche avatar avenue average averages avg avif avis avocado avoid avoids aw awaiting awake award aware awareness away awe awkwardly awn ax axe axes axiom axion axis axs ay azalea azure ba baby back backache backdrop backed backend backfill background backgrounded backgrounds backing backlog backpack backstop backticks backtracking backup backups bacon bad badge badges badly badminton baffled bag bagel bags bahn baidu bake baker bakery balance balanced balances balancing balcony ball ballet ballpark ban band bandage bandcamp bandit bands banjo bank banker bankrate banned banner bans bar bare barely bargain bark barn barrier bars base baseball based baseline basement basename bases bash basic basis basket basketball bass bat batch batches bathroom battery baw bay bb bbox bc bcc bcferries bcp be beach beacon bean beanie bear bearer bearing beat beaver bebas became because become becomes becoming bed bedroom bee beef beehiiv been beetle before beg begin beginner begonia behalf behaves behavior behind beige being bel belief believe belly belong belonging belongs below belt ben benchmark benchmarks bend benefit benefits bento berry beside best bestbuy bet better between beyond bf bfl bg bi bib bible bicycle bid big bigger biggest bigint bike bikes bikini bilingual bill billed billing billion bills bin binaries binary bind binding bindings bing bio biography biological biology biomarkers biometric biometrics bird birth birthday bis biscuit bit bite bitter biz black bladder blade blame blank blast blaze blazer ble bleached bleak bleed bleeding bleeds blender blending bless blind blindly blink blizzard blob block blocked blocker blocking blocks blog blood bloom blossom blouse blown blue bluetooth blur blurry bm bo board boarding boards boat bodies body bodyweight boil boiling bold bolded bolt bomb bond bone bonus book bookable booked booking bookings bookish bookkeeping bookmark books bool boolean boost boot boots bootstrap border borders bored born borrow borrower boss bot both bottle bottleneck bottom boulevard bounce bounced bound boundaries boundary bounded bounding bounds boutique bow bowl bowtie box boxers boxes boxing boy boyfriend bpm br bra bracelet brain branch branches branching brand branded branding brands bras brass brave brazil breach bread break breakdowns breakfast breaking breaks breast breath breathe breathing breeze brett brevo brick bride bridge bridges brief briefed briefing briefings briefly briefs bright brightness bring brings britain british broad broaden broadening broader broadly broccoli brochure broke broken broker brokerage bronze brooch brook broom brother brown brownie browsable browse browser browsertask browsing btb bthome btn btrim bub bubble bucket bud budget budgeting budgets buffer buffers bug build builder building builds built builtin bulb bulk bulky bull bullet bullets bum bump bun bunch bundle bundled bundling bur burden bureau burn burned burst bursts bus buses bush business businesses bust busy busyness but butcher butter butterfly buttock button buttons buy buyer buyers buying buys buzz by bye bypass byte bytea bytes ca cab cabbage cabin cabins cable cache cached caches caching cad cadence cafe cage caid cake calculate calculation calculations calculator calculators calculus calendar calendars calendly calf calibration calibri call callback called caller callers calling callout calls calm calories cam came camel camera camp campaign campaignmanager campaigns camping can canada canadian canal cancel canceled canceling cancellation cancellations cancelled cancelling cancels cancer candidate candidates candle cannot canoeing canonical canva canvas canyon cap capabilities capability capabilties capable capacity capital caps capsule captain captcha captchas caption captions capture captured captures car carbon card cardholder cardinality cards care career careful carefully caregiving cargo carmen carnation carousel carousels carp carpet carried carrier carriers carries carrot carry carrying cars cart carts carve cascade case cases cash cashback casino cast castle casts cat catalog catalogs catbox catch catchall categories category catfish cathedral cattle caught cauliflower cause causes cave caveat caveats caw cb cbo cdn ce cease cedar ceil ceiling ceilings celery cell cells cent center centered centering central centrally cents century certain certificate certificates certification certified certify chain chains chair chalk challenge challenges chance change changed changes changing channel channels chaos chapter char character characteristics characters charge charged charger charges charging charity charm chars charset chart charts chase chat chatgpt chats cheap cheaper cheapest cheaply check checkbox checked checking checklist checklists checkout checkouts checkpoint checkpoints checks checksum cheek cheerful cheese chef chemical chemistry chest chew chiaroscuro chicken chickpea chief child children chill chin china chinese chip chips chocolate choice choices choose chooses choosing choreograph choreography chose chosen chrome chromium chromosome chrysanthemum chunk chunks church cinema circle circleback circumstances citation citations cite cites cities citizen citizenship city civil claim claimed claiming claims clam clamp clarification clarify clarifying clash class classes classic classification classified classifier classify classifying claude claw clay clean cleaned cleaner cleaning cleanly cleanup clear cleared clearer clearing clearly clears clerk clever cli click clickable clicking clicks client clientheight clients cliff climate climb climbing clinic clinical clinician clinicians clip clipped clipping clips clis clock close closed closeness closes closest closing closings closure cloth clothes clothing cloud cloudflare cloudy club clubs clustering clutter cm cmd co coach coaching coal coalesce coarse coast coat coco cod code codebase coded codename codenames codes codeshares coding coffee cog coherent coin coinbase col cold collaboration collaborator collapse collapses collapsing collect collected collecting collection collections collectively collectors collects college collide colliding collision colon colons color colored colors colour column columns combat combination combine combined combines combining come comedy comes comfort comfortable coming comma command commands commas comment commentary commentex commentrangeend commentrangesta commentreferenc comments commentsextende commentsextensi commentsids commitment commitments commits committing common comms communicate communicating communication community commute compact compaction compactions companies companion company comparable comparator compare compared compares comparing comparison comparisons compassion compatibility compatible compensation compete competing competitor competitors compile compiles complain complete completed completeness completes completing completion completions complex compliance component components compose composed composer composing composio composite composites composition compositions compound compress compute computed computer computes computing con concat concatenates concept conceptual concern concerning concerns concert concise conclude concludes conclusion conclusions concrete concurrency concurrent condition conditional conditions condo conduct conducts conference conferencing confidence confident confidential confidentiality confidently config configurable configuration configure configured confirm confirmation confirmations confirmed confirming confirms conflict conflicting conflicts confluence confused congestion congress connect connected connecting connection connections connectivity connector connectors connects consecutive consent consented consequence consequential conservative consider consideration considerations considered consist consistent console consolidated constant constants constraint constraints construct construction consult consulted consume consumed consumer consumerfinance contact contacting contacts contain contained container containers containing contains content contents contest context contexts continuation continue continued continues continuing continuous continuously contract contradiction contradicts contrast contribute contributing contribution contributions control controllable controlled controlling controls convenience conventions conversation conversational conversations conversion conversions convert converted converting conveys coo cook cookie cookies cool cooldown coordinate coordinates coordinator cop cope copied copies copper copy copyable copying cor coral core corn corner corners corporate corpus correct corrected correction corrections correctly corrects correlation corresponding corrupt cos cost costs costume cot cottage cotton couch cough could couldn count counted counter counterparts counterparty counters counting countries country counts county couple coupon course courses court courthouse cousin cover coverage covered covering covers cow cowardly coworker cox coy coz cozy cpc cpm crab crack craft craigslist crash crashed crashes crate crates crawl crazy cream create created creates creating creation creative creator creators credential credentials credit credited credits crew cricket crime crimson crisis crisp critic crm crons crop cropped cropping crops cross crossed crosswalk crowd crowded crowds cru crucial cruel cruise crush crushing crutches cry crypto csv csvs cta cte ctes ctr cub cucumber cud cue cuisine cultural culture cum cumulative cup cups cur curated curation cure curiosity curious curl curly currencies currency current currently curriculum currys cursor cursors curtain curve custard custody custom customer customers customs cut cutoff cuts cutting cv cvms cyan cyber cycle cycles cycling da dab dac dad daemon daffodil daily daisy dam damage damaged dan dana dance dancer dances dancing danger dap dark darker darkmode dash dashboard dashboards dashes data database databases datasets datatype date dated dates dating daughter daw dawn day daylight days db dc dchanges dd de dead deadlettered deadline deadlines deal dealer deals dear death deb debate debit debt debts debugging decade decathlon deception decide decided decides deciding decimal decimals decision decisions decisive deck decks declare declared declares decline declined declines declining decorative decrypt dedicated dedup dedupe deduplicate deduplication dee deep deeper deepl deeply deer deezer def default defaults defeat defect defects defend defensive deferred deferring define defined defines defining definition definitions definitive definitively deglaze degraded degree dejavu del delay delayed delays delegate delegated delegates delegating deletable delete deleted deletes deleting deletion deletions deliberate deliberately delighted delinstrtext deliver deliverable deliverables delivered deliveries delivering deliveroo delivers delivery deltext demand democracy demographic demonstrate demonstration demonstrations demotions den denial denied denominator dense denser density dentist deny denying depart department departure departures depend dependably dependencies dependency dependents depends depicts deploy deploying deployment deployments deposit deposits depot deprecate depressed depth deputy derivation derive derived descendant describe described describes describing descript description descriptions descriptive descriptor desert deserves design designated designed designing designs desire desired desk desks desktop despegar despite dest destination destinations detail detailed details detect detected detecting detection detections detector detects determine determined determines deterministic deterministical deutsche dev develop developer developers developing development device devices devil dew dhcp diagnose diagnosing diagnosis diagnostic diagnostics diagonal diagram diagrams dial dialed dialing dialog dialogue diamond diary dice dict dictate dictates dictating dictation did didn die diet dietary diff differ difference differences different differently differs difficult dig digest digests digging digit digital digits dim dimensions din dining dinner dip diploma dir direct directferries directing direction directions directive directly director directories directory dirt dirty dis disable disabled disagree disagreement disagrees disappeared disappears disappointed discards discharge discipline disclaimer disclaimers disclose disclosed disclosure disclosures disconnect disconnected disconnecting disconnects discord discount discounted discounts discover discovercars discovered discovery discreet discrepancy discretionary discrimination discuss discussing disease disgusted dish dishwasher disk dislike dismiss dismissal dismissals dismissed dismisses dismissing dispatch dispatched dispatches display displayed disposable disposition dispute disputes disputing disqualifies disrupt disruptions dist distance distant distillation distinct distinctive distinguish distinguishable distortion distributing distribution distrust disturb div diverse divide dividend dividers dividing diving divorced dizziness dler dm dna dns do doc dock docprops docs doctolib doctor doctors doctype document documentation documented documents docx doe does doesn dog doing dol dollar dollars dolphin dom domain domains domestic dominates don done donkey doodle door doordash dor dos doses dot dotx double doubt dough dove dow down downgrade download downloadable downloaded downloading downloads downstream dozen dpi draft drafted drafting drafts drag dragged dragging drama dramatic draw drawing drawn dream dreaming dreams dress dressing drift drifted drifts drill drink drip drive driven driver drivers drives driveway driving drizzle drop dropbox dropped dropping drops drought drum dry dryer dub duck dud due duffel dug duh dull dump dumpling dumps dun duo dup duplicate duplicates durability durable durableid durably duration durations during dusk dust dustpan duty dw dwell dye dynamic each eagle ear earache earlier early earn earning earns earring ears earth earthquake ease easier easiest east eastern easy easyjet eat eats eb ebay ebb ecg echo eco economy ed edge edges edit editable edited editing edition editions editor editorial edits educate education educational eel ef effect effective effects effort egg eggplant ego egress eh eight eighteen eighth eighty either eke el elaborate elbow elder elect electric electricity electronic electronics elegant element elements elephant eleven eligibility eligible elite elk ell ellipsis elm else elsewhere em email emailed emails embark embarrassed embassy embed embedded embedder embedding embeddings embeds ember embrace emerald emerge emergency emission emit emitted emoji emotion emotional empathy emphasis empire employ employer employers employment empty emu en enable enabled enables encode encouraging encrypted encryption end ended ending endpoint endpoints ends enemy energy enforce enforced enforces eng engage engaged engagement engine engineering england english enjoy enjoyed enjoyment enlarge enormous enough enquiry enrolling enrollment ens ensure enter entered entering enterprise enters entertainment entire entirely entities entity entries entry enumerable enumerate env envelope envious environment environments enzyme eon ephemeral episode episodes eplus epoch equal equals equate equation equations equip equipment equivalent er era erase erased erases erasure ere erg ern err error errors erupt es esc escalation escape esim esp especially espresso essay essence essential establish established establishes estate estimate estimated estimates et eta eth ethics etsy eu eurail europa europcar europe european euros evaluate evaluates evaluations eve even evening event eventim events ever evernote every everyday everyone everything everywhere evidence evil evolution evolve ew ewe ex exact exactly exam example examples exceed exceeding excel except exception exceptions excerpts exchange exchanges excite excited exclude excluded excludes exclusion exclusions exclusive exclusives excuse exec execstart executable execute executing execution executive executor executors exempt exemption exercise exercises exercising exhaust exhausted exhibit exif exist existed existing exists exit exits expand expanded expanding expect expected expects expedia expense expenses expensive experience experiences experiment experimental experiments expert expire expired expires expiring expiry explain explained explaining explains explanation explicit explicitly explode exploration explore explores exploretock export exported exporting exports expose exposed exposing exposure expr express expressions extend extended extending extensible extension extensions external extra extract extracted extracting extraction extractor extractors extracts extras eye eyebrow eyebrows eyelash eyelid fa face facebook faces facilities facing fact factor factors facts factual fad fade fades faf fail failed failing fails failure failures fainting faintness fair fairly faith faithful fake fall fallback fallbacks falling falls false fame familiar families family famous fan fancy fans fantasy faqir far fare fares farm fashion fast fat fate father fatigue fault favor favorite favorites fax fay fbids fc fcc fe fear feasibility feasible feather feature featured features february fed federal fee feed feedback feeds feel feeling feels fees fell fellow fem female fen fence fenced fencing fer ferries ferry ferryhopper fes festival fet fetch fetched fetches fetching fever few fewer fewest fey ff fff ffffffe fffffff ffmpeg fg fi fiance fiancee fib fiction fictional fid fie field fields fierce fifteen fifth fifty fig fight figma figure figures fil file filed filename filenames files filing filings fill fillable filled filler filling fills film filter filtered filtering filters fin final finalization finance finances financial financing find finding findings finds fine finger fingerprint fingerprints finish finished finishes finishing finite fir fire fireflies fires firm firmness firmware first fish fishing fit fitness fits fitting fitz five fix fixed fixes fixing fiz fk fkey flag flags flame flash flat flats flatten flattened flattening flattens flavor flee fleet flesh flex flexibility flexible flexport flicking flight flightaware flightradar flights flixbus float floating flock flood floor flounder flour flow flower flowing flows flu fluency fluid flushes flux fly flying flypeach flyporter fm fmt fn fob focal focus focused focuses foe fog foggy fold folded folder folders folk follow followed follower following follows fon font fontmono fonts fontsans fontweight food fool foolish foot football footers footnotes fop for forbids force forcing foreground foregrounding forehead foreign forest forget forgetting forgotten fork form formal format formats formatted formatting formed former forms formula formulas forth fortune forty forum forward forwarded forwards found foundation fountain four fourteen fourth fox foy fr fractions fragment fragments frame framer frames framework framing framings france freddie freddiemac free freely frees freeway freeze freezer freezing freight french frequency frequent fresh freshbooks freshly freshness friday fridge friend friendly fringe fro frog from front frontier frontmatter frost frosted frown frozen fruit frustrated fry fssl fssli ft ftp fts fub fud fuel fug fulfill fulfillment full fullstack fully fun function functionality functions fund fundamentals funded funding funds funny fur furious furniture further future futures fuzzy gab gad gadget gag gain gains gal galaxy galleries gallery gam game games gaming gamma gap gaps gar garage garbled garden garlic garmin gas gat gate gated gates gather gathered gathering gauges gave gay gaze gb gbp gc gdpr gear ged gee gel gem gemini gen genai gender gene general generalize generalized generally generate generated generates generating generation generations generator generic generically generous genius genre genres gentle genuine genuinely geocode geocoded geocoding geofence geographic geography geology geometry georgia geranium germany gesture gestures get getdeviceinfo gets getstatus getting getyourguide ghibli ghl ghost gi giant gib gid gie gift gig gin ginger gip giraffe girl girlfriend git github give given gives giving glacier glad glance glass glasses glide glideapps glimpse glob global globally globs gloomy glory glossaries glossary glove gloves glow glue glyph glyphs gm gmail gnu go goa goal goals goat gob god goes going gold golden golds golf gone goo good goodbye goods google googleapis gor gorgeous gos gossip got gov govern government governments governs gox goy gp gps grab grace graceful grade graded gradient gradients grading gradual gradually grain grand granddaughter grandfather grandma grandmother grandpa grandson granola grant granted grants grape graph graphics grasp grass grateful grave gravy gray great greater greatest greece greedy green greenhouse greet grep grey greyhound grid gridlines grids grief grin grip groceries grocery gross ground grounded group grouped groups grow grows growth grubhub gstatic guarantee guaranteed guarantees guard guess guessed guesses guessing guest guests guidance guide guided guideline guidelines guides guilt guilty guitar gul gum gumroad gumtree gun gut guy gym gymnastics gyp ha habit habits had haddock hag hah hail hailey hair half halibut hall ham hamburger hand handball handed handle handled handlers handles handling handoff handoffs handover hands handy hang hap happen happened happening happens happy harassment harbor hard hardcode hardcoded harder hardware harm harmless harmonizes harness harvest has hasdata hash hashtags hasn hat hatch hate hats have haw hawk hay hazard hazy he head headache header headers heading headings headless headline headphone headscale headset heal health healthcare healthex healthkit healthy hear heart heartbeat heartbreak heat heaven heavier heavy hedge heel heels heh heic height held helio helium hello helmet help helper helpers helpful helping helps hem hen hep her herb here hermetic hero hers herself hertz hes hesitate het hew hex hexadecimal hey heygen hi hic hid hidden hide hides hie hierarchy high higher highest highlevel highlight highlights highway hiking hill him hin hinge hint hip hire his historical histories history hit hitl hits hm ho hob hobbies hobby hoc hockey hod hoe hog hold holding holdings holds hole holiday holidays hollow hologram home homedepot homekit homepage homes homework homophone hon honest honestly honey honor honored honors hook hooks hop hope hopeful hopeless hopes horizon horizontal hormone horn horrified horror horse hospital host hosted hosting hostname hosts hot hotel hotels hotlink hour hourly hours house household houses housing hover how however hoy hr href hsla hsurr httpredirecthan hub hubspot hue hug huge huh hum human humane humid humor hun hundred hunt hunting hup hurdles hurricane hurry hurt hurtful husband hut hydrogen hygiene hyphen hyphens hypothesis iana iate ice iceberg icloud iclouddrive icmp icon icons icy id idea ideal idealista ideas idempotency identical identifiable identification identified identifier identifiers identifies identify identifying identities identity idle ids if iferror ifs ignorable ignore ignored ignores ilk ill illness illuminance illustrate illustrates illustration illustrative image imagery images imagetoraster imagine imessage imessages img immediate immediately immense immigration immobilienscout immunizations immutable imp impact impartial impatient imperfect implausible implement implementation implementing implements implicit implied imply implying import importance important importing importlib imports imposed impossible impress impression impressions improve improvement improvements improves improving impulse in inaccurate inbound inbox inch inches incident incidental include included includes including inclusion inclusions inclusive incognito income incoming incomparable incomplete inconsistencies inconsistent incorporated increase increasing indent indentation independent independently index indexed indexes india indicate indicates indicative indigo indirectly individual individually indoor industry infant infer inference inferred inflate inflation influence info infomaniak inform information ingest ingested ingestion ingredient ingredients inherit inherits initial initialization initialized initiate initiated injected injection injects injuries injury ink inline inlined inmuebles inn inner innocent innovation input inputs inquiry ins insect insensitive insert insertion inserts inset inside insight insights insist inspect inspecting inspection inspects inspiration inspire instacart instagram install installation installed installer installing installs instance instant instead institution institutional institutions instruct instructed instruction instructions instructs instrument insufficient insulin insurance insurer int intact intake integer integration integrations integrity intelligence intend intended intense intent intentional intentionally intentions interact interacting interaction interactions interactive intercom interest interests interface interfaces interim intermediate internal internalizes international internationally internet interpret interpretable interpretation interpreter interpreting interrupt interrupted interruption interruptions intersect intersection interval intervals interview intestine into intro introduce introducing introduction invalid invalidated invalidates invalidation invent invented inventing invention inventory inverse inverter inverts invest investigating investing investment invisible invitation invitations invite invitees invocation invocations invoice invoices invoicing invoke invoked invoking involve involved ion ip iphones ipp ipv ire irk iron irregular irrelevant irreversible irritated is iserror island islnk ism isn iso isometric issue issued issuer issues issuing it ita italian italy itasoftware item itemized items iterate iteration iterations itineraries itinerary its itself ivory ivy ja jab jacket jag jaguar jail jalan jam january japan japanese jar jargon jarvis jasmine jaw jay jazz jazzy jealous jean jeans jee jelly jellypod jet jew jewel jewelry jiao jib jiffy jig jihad jin jinx jiosaavn jira jive jo job jobs jock joe joey jog jogging john johnlewis join joined joining joins joint joke joker jolly jolt jordan josh joss jostle jot jota jotform joule journal journald journey journeys joust jow jowl joy joyful jp jq jsonb jsonl juba jube judge judged judgment judo jug juggle juice juicy jujitsu juju juke jukebox jumble jumbo jump jumper jumping jumps jun june jungle junior juniper junk junket junkie junta jury jus just justice justify jut jute juvenile ka kab kaiseki kangaroo karaoke karate kat kay kayak kayaking kb kcal kea kebab keen keep keeping keeps kef keg ken kep kept ket ketchup kettle key keyboard keyed keys keyword khaki ki kick kicker kickers kickoff kid kidney kids kif kijiji kill killmode kin kind kinds king kingdom kip kir kis kiss kit kitchen klaviyo kleinanzeigen klook km knee kneel knife knock know knowing knowledge known knows ko koa kob koi kon kop kor korea korean kos kow kpi krea ktlverror kye kyushu la lab labcorp label labeled labeling labelled labels labor laboratory labs lac lack lacks lad ladder lady lag laid lake lam lamb lamp land landed landing lands landscape lane lang language languages lap lapsed laptop lar large larger largest las lasagna laser last lasting lasts lat latched late latency later latest latex latin latitude latter laugh launch launched launches launching laundry lav lavender law lawn lawyer lax lay layer layers layout layouts layover lazy lea lead leaders leading leads leaf league lean learn learned learning learnings lease leases least leather leave leaves leboncoin lecture led ledger lee left leg legacy legal legalistic legend legends leggings legible legitimate legitimately legs lei lek lemon len lend lender lenders length lengths lens lenses lentil les less lesson lessons let lets letter letterbox letters letting lettuce lev level levels lever leverage levers lew lewis lex ley li liabilities liability lib liberation libraries library libre libreoffice license licensed lick lid lie life lifecycle lifestyle lifetime lift lig light lighter lightest lighthouse lighting lightly lightning lights lightweight like liked likely likeness likes likewise lilac lily limb lime limit limitation limitations limited limits lin line lineage linear linearly lines lingerie lingering linguee link linked linkedin linking links lion lip liquid lis list listed listen listener listeners listening listing listings lists lit literal literally litterbox little live liver liverpool lives living lizard ll lo load loaded loading loads loafers loan lob lobster local locale locales localized locally locals locate location locations locator locators lock locked locking lockout lockup lockups lodging log logged logging logic logical login logins logistics logo logos logs lon lone lonely long longer longitude loo look lookalike lookback looked looking looks lookup lookups loop looping loose lop lose loses losing loss lost lot loud lovable love loves low lowe lowepro lower lowercase lowes lowest lox loy loyal loyalty ls ltrim luck lud lug luggage lum lunch lung lutron lux ly lye lyft ma mac macaroni machine machinery machines macos macro macros mad madam made mag magazine magenta magi magic magicdns magnet magnific mai maid mail mailbox mailboxes mailchimp main mainland maintain maintained maintains maintenance major make maker makes making male mall mamen man manage managed management manager managers manages managing mandatory manifest manner mansion manual manually manuals manufactured manufacturer manufacturers many map mapping mappings maps mar marathon march margin margins marigold marine mark markdown marked marker markers market marketing marketplace marketplaces marks markup markups maroon marriage married marry mary mas mask masked mass massive master mastering mastery mat match matched matches matching mate material materially materials math mathematics matplotlib matrix matter matters mature maw max maxdepth maxifs maximum may mayonnaise mb mc mcp mcps mdns me meadow meal meals mean meaning meaningful meaningfully meanings means meant meanwhile measurable measurably measure measured measurement measurements measures meat mechanically mechanics mechanism mechanisms med media mediamarkt medical medication medications medicine medieval mediterranean medium medlineplus meet meeting meetings meets meetup meg mel melody melt mem member members membership memberships memo memories memory men mending mental mention mentioned mentioning mentions menu menus mercado mercadolibre mercari merchant merchants mercury mere merely merged merges merino mess messa message messages messaging messenger messi messy met meta metadata metal meter metering meters method methods metric metrics metro mew mexican mexico mfc mi mib mic microphone microsoft microwave mid middle midnight midpoint mig might migrate migration mil mild mile mileage miles milestone milestones milk milky mill million milliseconds mim mime min mind mine mineral minidom minifs minimal minimum minmax minor mints minute minutes mir mirror mirrored mirroring mirrors mis misbehaved misbehaves misconceptions mislead misleads mismatch mismatched miss missed misses missing mission mist mistake mistakes misty misuse mittens mix mixed mixer mjs mkdir mm mms mo moa mob mobile mobility mobimatter moc mock mod mode model models modem modern modes modest modified modify modifying module modules moe mog mol molecule moltbook mom moment momentum mon monastery money moneyforward moneyhelper moneysmart monitor monitoring monkey month monthly monument moo mood moon mop mor moral more morning mortgage mos mosque most mostly mot motel mother motion motivates motivation motor motorcycle motorway mount mountain mounts mouse mouth movable move moved movement moves movie moving mow moy mozilla mp mqtt ms msl mu much mud muffin mug multi multicast multimodal multiple multiples mum mun mus muscle muse museum mushroom music musical mussel must mustard mut mutate mutation mutations mute muted mutual mutually mv mx my myc mylabcorp myquest myself mysterious mystery na nab nag nail nam name nameable named nameobject names namespace naming nan nap napkin narrate narrated narration narrative narrow narrower narrowing narrowly nasa nation national nationalexpress nationalrail native natively natural naturally nature nav naver navigate navigation navy naw nay ne near nearby nearest nears neat neb necessarily necessary neck necklace ned nee need needappearances needed needing needle needs neg negative negatives neglect negotiable negotiates negotiation neighbor neighborhood neighborhoods neighboring neither nem neon nep nephew nerdwallet nerve nervous nest nested nesting net network networking networks neue neutral never new newegg newer newest newly news newsletter newsletters next nextcursor nextdns nextval nhs nib nice nickname nid niece night nightly nike nil nim nine nineteen ninety ninth nip nit nitrogen nix nn no nob noble nobody nod node nodes nog noh noise noisy nom non none nonempty nonrefundable noo noodle noon nop nor noredirect normal normalize normalized normally norms north nos nose nostalgic nostril not notation note notebook notebooks notes notetaker notetakers nothing notice notices notification notifications notified notifies notify noting notion noto novel novelty now nowhere ntc nth ntile nu nub nuclear nudges null nullable nullif number numbered numbering numberless numbers numeric nun nur nurse nut nutrition oacr oaf oak oar oat obe obi object objection objective objectives objects obligation obligations obscure obscured observation observations observe observed observes obtain obtained obvious oca ocado occasion occasional occasionally occupancy occupants occurred occurrence occurrences ocean oceans ocr octet october octopus od oda odd oe of off offending offer offered offering offers office official offline offset oft often oh ohm oho oi oil ok oka oke ol old older oldest ole olive olympic om omakase omissions omit omits omitting oms on onboarding once one onedrive onenote ones ongoing onion online only ono ons onsale onto onward ooh oot op opacity opal opaque ope open opened opener opening openings openly openpyxl opens opentable opera operate operated operates operating operation operational operations operator operators opinion opinions opponent opportunistic opposite ops opt opted optician optimization optimize optimizes option optional options or ora orange orb orbit orc orchestration orchid ord order ordered ordering orders ordina ordinal ordinary ore orf organ organic organization organizations organize organizer organizing orientation oriented origin original originals originate originating orphan orphaned ors ort os ose ota other others otherwise otter oud ought ouk oup our ous out outage outages outbound outbox outboxes outcome outcomes outdated outdir outdoor outer outfit outgoing outlast outline outlined outlook output outputs outrank outreach outright outrun outs outside outweigh ova oven over overall overcast overcoat overcurrent overdue overexposed overflow overflows overflowx overflowy overlap overlapping overlaps overlay overlays overleaf overloaded overnight overpass overpayments overpower override overrides overrules oversized overview overwork overwrite overwrites ow owe owed owes owl own owned owner owners ownership owning owns owt ox oxide oxo oxygen oy oye oyster ozone pa pace pacing pack package packages packed packets pad padded padding page pageable paged pages paginated pagination pah paid pain paint painter paints pair paired pairing pairs pairsetup pairsetupwithau pajamas pal palace pale palette palm pam pan panasonic pancake pandas pane panel panels panes panic panties pants pap paper papers paperwork par parade paragraph paraid paraidparent parallel param parameter parameters params paraphrase paraphrasing parcel parent parented parentheses paris pariscope park parked parking parks parser parsestring part partial partially participant participants particular particularly partly partner partners partnership parts party pas pass passage passages passed passenger passengers passes passing passkey passkeys passport password passwords past pasta paste pasted pastels pastes pasting pat patch path paths patient patio patriots pattern patterns pause paused pauses pausing paw pax pay payable paying payload payloads payment payments payoff payout payouts paypal pays pct pdf pdfimages pdfinfo pdfreader pdfs pdfseparate pdftoppm pdftotext pdfunite pdfwriter pe pea peace peach peak peanut pear pearl pebble pec ped pee peek peer peers peg peh peloton pen penalties pencil pendant pending penguin peninsula pentathlon people pep pepper per percent percentage percentages perch perfect perfectly perform performance performed performer performing performs perhaps period periodic periodically periods permalink permalinks permanent permanently permission permissions permit permitted persist persisted persistent persisting persists person persona personal personality personalization personalize personalized personally pes pesos pet petal petunia pew pewter pharmacist pharmacy phase phases phi philips phishing pho phone phones phonetic photo photograph photography photos phrase phrases phrasing physical physics pi pia piano pic pick pickable picked picker picking pickle picks pickup picture pid pie piece pieces pig pigeon pike pilates pile pill pills pilot pin pinch ping pink pinned pinning pins pinterest pioneer pip pipe pipeline pipelines pir pis pit pitch pitfalls pity piu pix pixar pixel pixelated pixels pizza pkce pkey pktc pl place placed placeholder placeholders placement placements places placing plaice plaid plain plainly plan plane planes planet planned planner planning plans plant plaster plastic plate platform platforms platinum plausible play playable playback player players playful playing playlist playlists plays playwright pleasant please pleased pledge plenty plot plots plotted plotting plug plugin plugs plum plumbing plus ply pmms pngs po poa pocket pod podcast podcasts podcastsconnect poem poet poetry poh poi point pointer points pol polar police policies policy polish polished polite political poll pollen polling polo polygon polymorphic pool poor pop poppler poppy popular populated population popup porch pork port portable portal portals porter portfolio portion portrait ports portugal portuguese pose posed position positioned positions positive possible post postal postcode posted postgresql posting postings postponement posts pot potato potential potentially pound pounds pour poverty pow powder power powered powerpoint pox poy ppr ppt pptx practical practice practices prairie praise praised pray pre preamble preapprove prebooked precedence preceding precise precision preclearance precomputed precondition predates predecessor predicates predict predicted preemptibility preemptive prefer prefercsspagesi preference preferences preferred prefers prefilled prefix prefixes preflight preinstalled prep prepaid preparation prepare prepared prepares preparing prepayment preprocessing prerequisite prerequisites presale presales prescribe presence present presentation presentations presented presenter presenting presents preserve preserves preserving preset president press pressed pressing pressure pretrained pretty prevent prevents preview previewers previews previous previously price priced prices pricing pride priest primary prime prince principal print printable printer printers printify printing prints prior priorities prioritization prioritize prioritized priority prison privacy private privately privilege privsep prize pro proactive proactivity probability probably probe probes problem problems procedure procedures proceed proceeds process processed processes processing processor procrastination produce produced producer producers produces producing product production productive productivity products professional professionals professor profile profiles profit program programs progress progresses progression project projected projection projections projects prominent promise promised promises promising promo promote promoted promoter promotion promotional promotions prompt prompting promptless promptly prompts pronounce pronunciation proof prooferr proper properly properties property proposal proposals propose proposed proposing props prose prospect protect protected protecting protection protections protein protocol protocols proton prototype proud provable prove proven provenance proves provide provided provider providers provides proving provisional provisioned proxied proximity proxy pry psi pt pub public publication publications publicly publish published publisher publishes publishing pud pudding pug pul pull pulled pulley pulling pulls pulp pulse pump pumpkin pun punch punctuation pup pupil puppy pur purchasable purchase purchased purchases purchasing pure purple purpose purposes purse pursuing push pushable pushed pushes pushing put puts putting puzzle puzzled pwg px py pye pypdf python pyx qadi qanat qapik qat qats qi qibla qin qintar qis qiviut qoph qr qua quaint qualified qualifiers qualifies qualify quality quandoo quantities quantity quarter quarterly queen queer quell quench queried queries query queryable querying quest questdiagnostic question questionnaire questions queue queued queueing quick quickbooks quickly quiesce quiet quietly quilt quirk quit quite quiz quizzes quo quota quotation quotations quote quoted quotes quoting qxr rabbit race racquetball rad radio radiological radius rag rah rai rail rain rainbow raincoat rainy raise raised raises raising raj rakuten ram ran ranch randint random randomized range ranges rank ranked ranking rankings ranks rap rapid rare ras raster rasterize rasterized rasterizes rasterizing rastertopwg rat rate rates rather rating ratings ratio rationale ravioli raw rax ray rcs re reach reachability reachable reached reaches reaching react reaction reactions read readable readai reader readers readiness reading readings reads readwise ready real realestate realistic reallocating really realm realtor reappearance reapply rear reason reasonable reasoning reasons reassessing reassignments reassure reattach reauthenticatio reauthorization reauthorize reb rebase rebel rebook rebooking rebuild rebuilding rebuilt rec recalc recalculate recalculated recalculates recalculation recall recap receipt receipts receivables receive received receives recency recent recently recheck rechecking recipe recipes recipient recipients recite recognise recognition recognized recommend recommendation recommendations recommended recommending recompressed recompute recomputes reconcile reconciled reconciles reconciliation reconciling reconnect reconnecting reconnection reconnects reconstruct reconstructing record recorded recording recordings records recover recoverable recovered recovering recovers recovery recreate recreating recruiter recruiting recur recurrence recurring recursive recursively recycle red redacted redacting redaction redactions redeem redeemed redeeming redefine redefining redemption redesign redfin redials redirect redirecting redirects rediscovering redlining redrawing reduce reducing ree reel reels ref refer reference referenced references referential referer referral referrals refers refinance refine refinement refinements refining reflect reflection reflections reform refresh refreshed refreshes refund refundability refundable refunding refunds refurbished refusal refusals refuse refused refuses reg regard regardless regclass regconfig regenerate regexp region regional regions register registered registration registrations registry regret regular regularly regulated rehabilitation rei reimbursement reimbursements reindent reindex reinforced reinsert reintroduces reject rejected rejection rejects rel relate related relation relations relationship relationships relative relax relaxing relay relayed relays release releases relevance relevant reliability reliable reliably relief relies religion relocated relocating relocation relpath rels rely relying rem remain remaining remains remark remarks remaster remedy remember remembered rememberthemilk remind reminder reminders reminding remorse remote remotely removable removal removals remove removed removes removing rename renamed renames renaming render renderable rendered renderer rendering renderings renders renew renewal renfe rent rental rentals rents renumber reopen reopened reopening reopens reorder reordered reordering reorders reorganizing rep repack repacked repair repairing repairs repayment repeat repeatably repeated repeatedly repeating repeats repetition repetitions rephrase replace replaced replacement replaces replacing replay replaying replies replit reply replying report reported reporter reporting reports repository reposted represent representation representations representative represents reproduce reproduces reproducible reps repurpose reputable reputation request requested requester requesting requests require required requirement requirements requires requiring rerank reread rereads rerun res resale rescue research researched researches resell reseller reselling resend reservation reservations reserve reserved reset resets resetting reshaping residency resident resist resize resizing resolution resolve resolved resolver resolves resolving resort resource resources respect respond responded respondent respondents responding responds response responses responsibilitie responsibility responsible responsive rest restart restarted restarting restarts restartsec restate restatements restating restaurant restaurants resting restock restocking restore restores restoring restrained restraint restrict restricted restriction restrictions restrictive restricts restyle restyling result results resumable resume resumed resumes resuming resy ret retail retailer retailers retain retained retains retaliation retargeting retention retire retired retires retopic retract retracting retraction retracts retried retries retrieval retrieve retrieved retriever retry retryable retrying return returned returning returns reusable reuse reused reuses reusing rev revalidate revalidating revalidation reveal revealing revenue reverse reverses reversibility reversible revert reverting reverts review reviewed reviewing reviews revise revised revision revisions revisit revives revoke revoked revokes reward rewards rewording rewordings rework rewrite rewrites rewritten rewrote rex rf rgb rgba rho rhythm ria rib rice rich richer rid ride rides rif rig right rightmove rights rim rin ring rio rip ris rise risk risky rit rival river rm rn rna road roadmap roaming roas roast rob robe robinhood robot robustness roc rock rocket rocketmortgage rod roe role roles roll rollback rolling rollout rom roman romance romantic rome roof room rooms root rope rose rot rough roughly round rounded route routed router routes routine routines routing routings row rowing rows royal rpc rpr rsid rss rt rtrim rub ruby ruc rud rude rue rug rugby rule rules rum run runner running runonce runs runtime runtimeerror runtimework runway ruptured rural rush rust rut rv rya ryanair rye ryokan sab sac sad safe safeguard safeguards safely safer safety sag said sail sailing sailings sainsbury sainsburys sal salad salary sale sales salience salmon salt sam same sample sampled samples san sand sandals sandbox sandwich sans sanyo sap sapphire sat satisfied satisfies satisfy satisfying saturate sauce sausage savanna save saved saves saving savings saw sax say saying says scaffold scaffolding scaffolds scalar scale scaling scallop scam scan scanned scanner scanning scans scarcity scare scared scarf scarlet scarves scenario scenarios scene scenes schedule scheduled scheduler schedules scheduling schema schemas scheme school schools science scientist scissors scooters scope scoped scopes scoping score scored scorer scores scorn scrabble scrap scratch scream screen screening screenplay screens screenshot screenshots screw scrim script scripting scripts scrollheight scuba sculptor sea sean search searchable searched searchers searches searching season seasonal seat seated seatgeek seating seats sec second seconds secret secretly secrets secs section sections secure secured securely securities security see seed seeded seeding seeing seek seem seems seen sees seetickets seg segment segments sei sel select selectable selected selection selections selector selects self selfie selfies selfish sell seller sellers selling sells seloger semantic semantics semi semicolons sen send sender senders sending sends senior sense sensible sensitive sensitivity sensor sent sentence sentences sentinel separate separated separately separates separation separators sepia september seq sequence sequential ser serializes series serif serious serve served server servers serves service serviced services serving session sessions set setconfig sets settable setting settings settle settled settlement settles settling setup seven sevenrooms seventeen seventh seventy several severe sew sex sh sha shade shades shading shadow shadows shake shaking shall shallow shame shape shaped shapes share shareable shared shares sharing shark sharp sharper shawn she shed sheep sheet sheets shelf shell shelly shellyplugusg shh shift shifted shin shine shinkansen ship shipment shipped shipping ships shirt shock shocked shoe shoes shoot shooting shop shopback shopify shopping shops shore short shortcode shortcodes shortcut shortcuts shorten shortening shorter shortest shortlist shortlisted shortly shorts shortwave shot shots should shoulder shoulders shout show showed shower showing shown shows shrimp shrine shrink shrinking shrunk shut shutdown shy si sib sibling sic sick side sidebar sidecar sides sidewalk sif sig sigh sight sightings sightline sign signal signals signed significant signing signs silence silent silently silk silly silo silver sim similar simple simpler simplest simplified simplify simply sin since sing singapore singer single singleton singletons sink sinks sip sir siren sis sister sit site sites sits situation six sixt sixteen sixth sixty size sized sizes sizing ska skate skating sketch skew ski skiing skill skills skin skip skipped skipping skips skirt skus sky skyscanner slack slap slash slave sleep sleeps sleet slice slide slides slim slip slippers slipping slips slope slot slots slow slower slowness slug slugs sly small smaller smallest smallint smart smartex smell smile smoke smooth sms sn snack snail snake snap snapshot snapshots sncf sneakers sneeze snippet snippets snow snowy so soap sob soccer social society sock socket socks sod sodium soffice soft software soil sol solar sold sole solid solve solves some someone something sometimes somewhere son song soon sop sore sorry sort sorted sorting sos sot sou sought soul sound sounding sounds soup sour source sourced sources sourcing south southeast southwest sow sox soy soybean spa space spacebar spacer spaces spacing spaghetti spain spam span spanish spanning spans spare sparingly spark sparse spawn spawning spawns speak speaker speakers speaking speaks spec special specialist specialized specialty specific specifically specifics specified specifies specs speculative speech speed spell spelled spelling spellings spend spending spends sphere spice spider spill spilled spilling spills spin spinach spine spirit split splits splitting spoil spoke spoken sponge sponsored spoon sport sports spot spotify spotter spread spreadsheet spreadsheets spring sprinting spy sqrt square squarespace squareup squash squid src srcset srgb sri ssdp stable stack stacked stacking stacks staff stage staged stages staging stain stair stake stakes stale stamp stance stand standalone standard standing stands star starbasic stare starry start started starting starts startup starved stashes stat state stated statement statements states static station stations statistic statistics stats statue status statuses stay stays std stderr stdin stdio stdout steady steak steal steam steel steep steer steering steers stem step steps stereo stick stiff still sting stitch stock stockings stockpile stomach stomachache stone stop stopped stopping stops storage store stored storefront stores stories storing storm stormy story storyboard stove straight strain strange strangers strategies strategy strava straw stray streak stream streamable streaming streams street stress stretch stretches strict strictly strike string strings strip stripe stripes stripping strips stroke stroller strong stronger strongest strongly strpos structural structure structured struggle stubhub stuck student studied studio studocu study studying stuff stupid sturgeon style styled styleplan styles stylesheet styling sub subagent subagents subcommand subcommands subdomain subdued subgoal subgoals subject subjects submission submissions submit submits submitted submitting subnet subphase subscribe subscriber subscribers subscription subscriptions subsection subsets substance substantial substantiate substitute substituting substitution substitutions substr substring subsystem subtags subtask subtasks subtitle subtitles subtotal subtotals subtype subtypes succeed succeeded succeeds success successful such suck sud sudden sue suffer suffix sugar suggest suggested suggesting suggestion suggestions suggests suit suitability suitable suitcase suite suits suk sum sumifs summaries summarize summarized summarizing summary summer sumproduct sun sunflower sunglasses sunlit sunny sunrise sunset sup super superhuman superintelligen superlatives supermarket supersede supersedes supersession supervise supervision supper supplement supplemental supplied supplier supplies supply supplying support supported supporting supports suppressed suppression supreme suq suqs sur surcharges sure surface surfaced surfaces surfing surge surgeon surgery surprise surprised surrogate surround surrounding surveillance survey surveymonkey surveys survive survives sus sushi suspect suspenders sustain sustainable sustained suumo swallow swap swapping swaps swear sweat sweater sweep sweet swift swim swimming swimsuit swimwear swing swipe swiping swisstransfer switch switching switzerland sworn sye symbol symbols symlink symlinks symmetrically sympathy symptom symptoms syn synagogue sync synced synchronization synchronized synonym synonyms syntax synthesis synthesize synthesized synthesizes synthesizing synthetic syrup sys system systemd systems ta tab tabelog table tablecheck tables tablet tabs tabular tackle tactics tad tae taekwondo tag tagged tagging tagline tags tail tailnet tailscale taj take takeaway taken takeover takes taking tale talk talking tall taller tallest tam tame tan tank tao tap tape tappable tapped tapping tar target targeted targeting targets tas task tasks taste tastes tat tau tav taw tax taxes taxi tcp tcpa tea teach teacher teaches team teammates teams tear teardown tears teaser tech technical technique technology ted teddy teen teeth teg tel telegram telemetry television tell telling tells telnet temperature template templates temple temporarily temporary ten tend tennis tent tentative tenth term terminal terminalized terminals termination terminology termium termiumplus terms terrified territories tesco test testing tests tet tew text texting textjoin textmuted texts texture th than thank thankful that the theater thefork theft their theirs them theme themes themselves then theory therapist therapy there therefore these thetrainline they thick thigh thin thing things think thinking third thirds thirst thirteen thirty this tho thorough thoroughly those though thought thousand thousands thread threads threat threatens three threshold thresholds throat throttles through throughout throw throwing thumb thumbnail thumbnails thunder thunderstorm thursday thy ti tic ticker ticket ticketed ticketing ticketmaster tickets ticketswap ticktick tide tides tie tied tier tig tiger tight tighten tightening tightest tightly tights tiktok tiktokstudio til tilde tile till time timed timeframe timeline timely timeout timeouts timeoutstopsec timer times timespent timestamp timestamps timestamptz timetable timetz timezone timezones timing tin tint tiny tip tips tired tires tis tissue tit title titled titles tix tmp to toast toaster tock tod today toddler todo todoist toe toenail tofu tog together toggle toggles toggling toilet tokaido token tokens tokio tokyo told tolerance tolerates tolls tom tomato tombstone tomm tomorrow ton tonal tone tones tongue tonight too took tool tooling tools tooth toothache top topaz topic topics tor torch tornado tot total totals touch touched touches touching tough tour tourist tours tow toward towel tower town townhouse toy trace traceroute traces tracing track tracked tracker trackers tracking tracks trade tradeoff tradeoffs trades trading traffic tragedy trail trailing train trained training trainline trains traits tranq transact transaction transactional transactions transcribe transcribed transcribing transcript transcription transcripts transfer transferring transfers transform transient transiently transit translate translated translates translating translation translator transparent transport transports trap traps trash trashed trashing travel traveler travelers traveling traversal tray tread treat treating treatment treats tree trello trend trends trenitalia triage trial triathlon tribe trick tried tries trigger triggering triggers trim trims trip tripadvisor trips triumph troop trophy troubleshooting trout truck true truly trumpet trunc truncated trunk trunks trust trustandwill trusted truth try trying tryon tsk tstzrange tsvector ttl tts tub tube tuesday tug tui tulip tun tuna tundra tune tunnel tup tur turkey turn turned turning turns turo turquoise turtle tut tutorial tux twa twelve twenty twice twickets twin twist two txt tye type typed typefaces typeform typeof types typical typically typing typographic typography tz uber ubereats ucp udo udp ugh ugly uh uk uke ul ultimate ulu um umm ump un unable unambiguous unanchored unanswerable unanswered unattended unauthenticated unavailability unavailable unbelievable unblocks unbounded uncertain uncertainty unchanged unchecked unchecks uncle unclear uncommon unconfirmed unconsumed uncorrectable uncovered undecided undeclared under underlying underneath underpass underperformer underscores understand understanding underway underwear undescribed undo undocumented undoes undone unedited unexplained unfamiliar unfinished unflattened unicode unidentified unified uniform unintended union unique unit units universal universe university unix unknown unless unlike unlikely unlinked unlisted unlock unlocked unlocking unmatched unnamed uno unpack unpacked unpaired unpin unplanned unplug unproductive unprompted unprotected unquoted unrankable unreachable unread unreadable unrelated unreliable unrequested unresolvable unresolved uns unsafe unscoped unsent unserved unset unsettled unsharing unspecified unstable unstyled unsubscribe unsubscribed unsubscribes unsubscribing unsupported untested until untouched untrusted unused unusual unverified unwanted unwrap unwraps unzip up upbeat upcoming update updated updates updating upfront upgrade upgrades upkeep upload uploaded uploading uploads upo upon upper uppercase ups upscaled upscaling upset upstream urb urban urd urge urgent uri uris urllib urls urn urp us usable usage use used useful usefulness user username usernames users uses using usual usually ut uta utc ute utf util utility uts utu uva vac vacant vacation vacuum valid validate validated validates validation validity valley valuable valuation value valueerror values van vanilla vanish var varchar variable variables variant variants variations varies various vary varying vas vast vat vau vault vaw vba ve vector vee veg vegetable vehicle vehicles vein vendor vendored vendors venmo venture venue venues verb verbatim verbose vercel verdict verdicts verifiable verification verified verify verifying version versioned versions versus vertical vertically very vet veteran vex via viagogo viarail viator vibe victim victory video videos vidiq vie view viewer viewers viewing viewport views vig vignettes villa village vim vinegar vintage violate violations violence violet virtual virus vis visa visibility visible visibly vision visit visiting visitor visitors visits visual visually visuals vital vitals vitamin viva vivaaerobus vivid vividseats vm vms vocab vocabulary vocal voe voice voiceid voices voids volaris volatile volcano volleyball voltage volume vote vouch vow vox voyage vrbo vs vug vum wa wab wad wae waffle wag wage waist wait waiting waitlist waitlisted waits waivers wake wakeup waking wal walk walking wall wallet wallets walmart wan wander want wanted wanting wants wap war warehouse warm warn warning warnings warrant warranted warrants warranty was wash washing washington wasn waste wasted wat watch watchers watches watching water watercolor waterfall watermark watermarked watermarks watt watts wave wavy waw wax way ways wb wc we weak weakest wealth weapon wear wearable wearables wearer wearing wears weather web webflow webfont webfonts webkit webmail webp website websites wed wee week weekday weekly weeks weigh weighing weight weights weird welcome well wellness wen went were weren wes west wet wetransfer wetsuit wex wey wha whale what whatever whatsapp wheat wheel wheelchair when whenever where wherever whether which whichever while whisper whistle white whitepapers whitespace who whole whoop whose why wi wide widely widen wider widget widgets widowed width widths wife wig wiki wild will win wind windmill window windy wine wing wink winner wins winter wipe wipes wire wireless wis wise wish wit with withdraw withdrawal withdrawals withdrawing withheld within withings without witness wix wiz wizz wizzair wo woe wog wok wolf woman won wonder woocommerce wood wool woop word wording wordpress words work workable workaround workarounds workbook workbooks worked worker workers workflow workflows working workingdirector workload workout workouts workplace works worksheet workshop workspace world worm worn worried worry worse worth worthwhile wos wot would wouldn wound wow wrap wrapped wrapper wrappers wrestling wrist write writer writers writes writing written wrong wrote wry ws wsdot wud wxh wye wyn xargs xebec xenia xenon xeric xero xerus xi xlfn xlookup xlsm xlsx xmatch xray xu xx xxxx xylan xylem xylene xylic xylophone xylose xyst ya yag yah yahoo yak yam yap yar yard yaw yay ye yea year years yeh yell yellow yelp yen yep yes yesterday yet yew yex ygo yid yield yields yin yip yo yob yod yodobashi yoga yogurt yok yom yon yor you young your yours yourself youth youtube yow yuk yum yup yus yyyy za zag zap zapier zas zax ze zeal zealand zebra zed zee zek zelle zen zep zephyr zero zeros zh zig zillow zin zinc zine zing zip zipfile zipper zit zite ziti zoa zocdoc zodiac zombie zone zones zoo zoom zoopla zowie ztl zucchini".split(" "));
+var PREM7 = [
+  ["TW","","","DL","","","","TW","","","","DL","","","TW"],
+  ["","DW","","","","TL","","","","TL","","","","DW",""],
+  ["","","DW","","","","DL","","DL","","","","DW","",""],
+  ["DL","","","DW","","","","DL","","","","DW","","","DL"],
+  ["","","","","DW","","","","","","DW","","","",""],
+  ["","TL","","","","TL","","","","TL","","","","TL",""],
+  ["","","DL","","","","DL","","DL","","","","DL","",""],
+  ["TW","","","DL","","","","STAR","","","","DL","","","TW"]
+];
+var PREM = [];
+for (var i = 0; i < 15; i++) PREM.push(i < 8 ? PREM7[i] : PREM7[14 - i].slice());
+var LETTERS = { A: [9, 1], B: [2, 3], C: [2, 3], D: [4, 2], E: [12, 1], F: [2, 4], G: [3, 2], H: [2, 4], I: [9, 1], J: [1, 8], K: [1, 5], L: [4, 1], M: [2, 3], N: [6, 1], O: [8, 1], P: [2, 3], Q: [1, 10], R: [6, 1], S: [4, 1], T: [6, 1], U: [4, 1], V: [2, 4], W: [2, 4], X: [1, 8], Y: [2, 4], Z: [1, 10] };
+var WORDS_BY_LETTER = {};
+DICT.forEach(function (w) { for (var i = 0; i < w.length; i++) { var ch = w[i].toUpperCase(); if (!WORDS_BY_LETTER[ch]) WORDS_BY_LETTER[ch] = []; WORDS_BY_LETTER[ch].push(w); } });
+function el(id) { return document.getElementById(id); }
+function newBag() {
+  var bag = [];
+  for (var ch in LETTERS) { for (var i = 0; i < LETTERS[ch][0]; i++) bag.push({ ch: ch, val: LETTERS[ch][1], blank: false }); }
+  bag.push({ ch: "", val: 0, blank: true });
+  bag.push({ ch: "", val: 0, blank: true });
+  for (var j = bag.length - 1; j > 0; j--) { var k = Math.floor(Math.random() * (j + 1)); var t = bag[j]; bag[j] = bag[k]; bag[k] = t; }
+  return bag;
+}
+function drawInto(rack, bag) { while (rack.length < 7 && bag.length) rack.push(bag.pop()); }
+function newGame() {
+  var bag = newBag();
+  var you = [], cpu = [];
+  drawInto(you, bag); drawInto(cpu, bag);
+  var board = [];
+  for (var r = 0; r < 15; r++) { var row = []; for (var c = 0; c < 15; c++) row.push(null); board.push(row); }
+  S = { board: board, you: you, cpu: cpu, bag: bag, turn: "you", youScore: 0, cpuScore: 0, scoreless: 0, over: false, msg: "Your turn. Tap a rack tile, then a board square.", pending: [], dir: "H", sel: -1, exchanging: false, exch: [], firstMove: true };
+  render();
+}
+var S = null;
+function boardEmpty() { for (var r = 0; r < 15; r++) for (var c = 0; c < 15; c++) if (S.board[r][c]) return false; return true; }
+function pips(rack) { var s = 0; for (var i = 0; i < rack.length; i++) s += rack[i].val; return s; }
+function tapRack(i) {
+  if (!S || S.turn !== "you" || S.over) return;
+  if (S.exchanging) {
+    var m = S.exch.indexOf(i);
+    if (m >= 0) S.exch.splice(m, 1); else S.exch.push(i);
+    render(); return;
+  }
+  for (var p = 0; p < S.pending.length; p++) if (S.pending[p].rackIdx === i) return;
+  S.sel = (S.sel === i) ? -1 : i;
+  render();
+}
+function tapBoard(r, c) {
+  if (!S || S.turn !== "you" || S.over || S.exchanging) return;
+  var cell = S.board[r][c];
+  for (var p = 0; p < S.pending.length; p++) {
+    if (S.pending[p].r === r && S.pending[p].c === c) {
+      var pend = S.pending[p];
+      if (pend.blank) {
+        var alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var cur = alpha.indexOf(pend.ch);
+        pend.ch = alpha[(cur + 1) % 26];
+        render(); return;
+      }
+      S.pending.splice(p, 1);
+      if (S.sel === pend.rackIdx) S.sel = -1;
+      render(); return;
+    }
+  }
+  if (cell) return;
+  if (S.sel < 0) { S.msg = "Tap a rack tile first."; render(); return; }
+  var tile = S.you[S.sel];
+  if (S.pending.length === 0) {
+    S.pending.push({ r: r, c: c, rackIdx: S.sel, ch: tile.blank ? "A" : tile.ch, val: tile.val, blank: tile.blank });
+  } else if (S.pending.length === 1) {
+    var first = S.pending[0];
+    if (r !== first.r && c !== first.c) { S.msg = "Tiles must form one straight line."; render(); return; }
+    S.dir = (r === first.r) ? "H" : "V";
+    S.pending.push({ r: r, c: c, rackIdx: S.sel, ch: tile.blank ? "A" : tile.ch, val: tile.val, blank: tile.blank });
+  } else {
+    var dir = (S.pending[0].r === S.pending[1].r) ? "H" : "V";
+    if (dir === "H" && r !== S.pending[0].r) { S.msg = "Tiles must form one straight line."; render(); return; }
+    if (dir === "V" && c !== S.pending[0].c) { S.msg = "Tiles must form one straight line."; render(); return; }
+    S.pending.push({ r: r, c: c, rackIdx: S.sel, ch: tile.blank ? "A" : tile.ch, val: tile.val, blank: tile.blank });
+  }
+  S.sel = -1;
+  render();
+}
+function lineDir() {
+  if (S.pending.length >= 2) return (S.pending[0].r === S.pending[1].r) ? "H" : "V";
+  if (S.pending.length === 1) {
+    var p = S.pending[0];
+    var hasH = (p.c > 0 && cellLetter(p.r, p.c - 1)) || (p.c < 14 && cellLetter(p.r, p.c + 1));
+    var hasV = (p.r > 0 && cellLetter(p.r - 1, p.c)) || (p.r < 14 && cellLetter(p.r + 1, p.c));
+    if (hasH && !hasV) return "H";
+    if (hasV && !hasH) return "V";
+  }
+  return S.dir;
+}
+function wordCells(dir, fixed, from, to) {
+  var cells = [];
+  for (var i = from; i <= to; i++) cells.push(dir === "H" ? { r: fixed, c: i } : { r: i, c: fixed });
+  return cells;
+}
+function cellLetter(r, c, pendingMap) {
+  if (pendingMap) { var key = r + "," + c; if (pendingMap[key]) return pendingMap[key].ch; }
+  var cell = S.board[r][c];
+  return cell ? cell.ch : null;
+}
+function collectWords(pendingMap, pendingList) {
+  var dir = lineDir();
+  var words = [];
+  var mainFixed = dir === "H" ? pendingList[0].r : pendingList[0].c;
+  var idxs = pendingList.map(function (p) { return dir === "H" ? p.c : p.r; });
+  var lo = Math.min.apply(null, idxs), hi = Math.max.apply(null, idxs);
+  var a = lo, b = hi;
+  while (a - 1 >= 0 && cellLetter(dir === "H" ? mainFixed : a - 1, dir === "H" ? a - 1 : mainFixed, pendingMap)) a--;
+  while (b + 1 < 15 && cellLetter(dir === "H" ? mainFixed : b + 1, dir === "H" ? b + 1 : mainFixed, pendingMap)) b++;
+  var mainCells = wordCells(dir, mainFixed, a, b);
+  var mainWord = mainCells.map(function (cl) { return cellLetter(cl.r, cl.c, pendingMap); }).join("");
+  words.push({ word: mainWord, cells: mainCells, dir: dir, main: true });
+  for (var p = 0; p < pendingList.length; p++) {
+    var pend = pendingList[p];
+    var pdir = dir === "H" ? "V" : "H";
+    var pfixed = pdir === "H" ? pend.r : pend.c;
+    var pidx = pdir === "H" ? pend.c : pend.r;
+    var pa = pidx, pb = pidx;
+    while (pa - 1 >= 0 && cellLetter(pdir === "H" ? pfixed : pa - 1, pdir === "H" ? pa - 1 : pfixed, pendingMap)) pa--;
+    while (pb + 1 < 15 && cellLetter(pdir === "H" ? pfixed : pb + 1, pdir === "H" ? pb + 1 : pfixed, pendingMap)) pb++;
+    if (pb - pa + 1 >= 2) {
+      var cc = wordCells(pdir, pfixed, pa, pb);
+      words.push({ word: cc.map(function (cl) { return cellLetter(cl.r, cl.c, pendingMap); }).join(""), cells: cc, dir: pdir, main: false });
+    }
+  }
+  return words;
+}
+function scoreWord(w, pendingMap) {
+  var sum = 0, mult = 1;
+  for (var i = 0; i < w.cells.length; i++) {
+    var cl = w.cells[i];
+    var key = cl.r + "," + cl.c;
+    var isNew = !!pendingMap[key];
+    var ch = cellLetter(cl.r, cl.c, pendingMap);
+    var val = 0;
+    if (isNew) { val = pendingMap[key].val; }
+    else { var locked = S.board[cl.r][cl.c]; val = locked ? locked.val : 0; }
+    if (isNew) {
+      var prem = PREM[cl.r][cl.c];
+      if (prem === "DL") val *= 2;
+      else if (prem === "TL") val *= 3;
+      if (prem === "DW" || prem === "STAR") mult *= 2;
+      else if (prem === "TW") mult *= 3;
+    }
+    sum += val;
+  }
+  return sum * mult;
+}
+function preview() {
+  if (!S.pending.length) return null;
+  var pendingMap = {};
+  for (var i = 0; i < S.pending.length; i++) pendingMap[S.pending[i].r + "," + S.pending[i].c] = S.pending[i];
+  var dir = lineDir();
+  var idxs = S.pending.map(function (p) { return dir === "H" ? p.c : p.r; });
+  var lo = Math.min.apply(null, idxs), hi = Math.max.apply(null, idxs);
+  var fixed = dir === "H" ? S.pending[0].r : S.pending[0].c;
+  for (var i = lo; i <= hi; i++) {
+    var r = dir === "H" ? fixed : i, c = dir === "H" ? i : fixed;
+    if (!cellLetter(r, c, pendingMap)) return { ok: false, reason: "Tiles must connect with no gaps." };
+  }
+  var words = collectWords(pendingMap, S.pending);
+  var real = words.filter(function (w) { return w.word.length >= 2; });
+  if (!real.length) return { ok: false, reason: "Place tiles that form a word." };
+  for (var j = 0; j < real.length; j++) if (!DICT.has(real[j].word.toLowerCase())) return { ok: false, reason: "Not a word: " + real[j].word };
+  var total = 0;
+  for (var k = 0; k < real.length; k++) total += scoreWord(real[k], pendingMap);
+  if (S.pending.length === 7) total += 50;
+  return { ok: true, total: total, words: real.map(function (w) { return w.word; }).join(", ") };
+}
+function submit() {
+  if (!S || S.turn !== "you" || S.over || S.exchanging) return;
+  if (!S.pending.length) { S.msg = "Place tiles first."; render(); return; }
+  var pv = preview();
+  if (!pv.ok) { S.msg = pv.reason; render(); return; }
+  var pendingMap = {};
+  for (var i = 0; i < S.pending.length; i++) pendingMap[S.pending[i].r + "," + S.pending[i].c] = S.pending[i];
+  if (S.firstMove) {
+    var covers = false;
+    for (var i = 0; i < S.pending.length; i++) if (S.pending[i].r === 7 && S.pending[i].c === 7) covers = true;
+    if (!covers) { S.msg = "The first word must cover the center star."; render(); return; }
+  } else {
+    var connected = false;
+    for (var i = 0; i < S.pending.length; i++) {
+      var p = S.pending[i];
+      if ((p.r > 0 && S.board[p.r - 1][p.c]) || (p.r < 14 && S.board[p.r + 1][p.c]) || (p.c > 0 && S.board[p.r][p.c - 1]) || (p.c < 14 && S.board[p.r][p.c + 1])) connected = true;
+    }
+    var words = collectWords(pendingMap, S.pending);
+    var main = words[0];
+    var usesLocked = false;
+    for (var j = 0; j < main.cells.length; j++) { var cl = main.cells[j]; if (!pendingMap[cl.r + "," + cl.c] && S.board[cl.r][cl.c]) usesLocked = true; }
+    if (!connected && !usesLocked) { S.msg = "Your word must connect to tiles already on the board."; render(); return; }
+  }
+  var used = S.pending.map(function (p) { return p.rackIdx; }).sort(function (a, b) { return b - a; });
+  for (var i = 0; i < S.pending.length; i++) {
+    var p = S.pending[i];
+    S.board[p.r][p.c] = { ch: p.ch, val: p.val, blank: p.blank, locked: true };
+  }
+  for (var j = 0; j < used.length; j++) S.you.splice(used[j], 1);
+  S.youScore += pv.total;
+  S.firstMove = false;
+  S.scoreless = 0;
+  S.pending = []; S.sel = -1;
+  var playedWord = pv.words;
+  drawInto(S.you, S.bag);
+  if (!S.you.length && !S.bag.length) { endByEmpty("you"); return; }
+  S.turn = "cpu";
+  S.msg = "You played " + playedWord + " for " + pv.total + " points. CPU is thinking...";
+  render();
+  setTimeout(cpuTurn, 700);
+}
+function endByEmpty(finisher) {
+  var loser = finisher === "you" ? "cpu" : "you";
+  var rem = pips(S[loser]);
+  S[finisher + "Score"] += rem;
+  S[loser + "Score"] -= rem;
+  S.over = true;
+  var win = S.youScore > S.cpuScore ? "you" : (S.cpuScore > S.youScore ? "cpu" : "tie");
+  S.msg = win === "tie" ? "Tie game!" : (win === "you" ? "You win!" : "CPU wins.");
+  el("overText").textContent = (win === "tie" ? "Tie game! " : (win === "you" ? "YOU WIN! " : "CPU WINS. ")) + "Final: You " + S.youScore + " - CPU " + S.cpuScore + ".";
+  el("overOverlay").style.display = "flex";
+  render();
+}
+function endByPasses() {
+  S.youScore -= pips(S.you);
+  S.cpuScore -= pips(S.cpu);
+  S.over = true;
+  var win = S.youScore > S.cpuScore ? "you" : (S.cpuScore > S.youScore ? "cpu" : "tie");
+  S.msg = win === "tie" ? "Tie game!" : (win === "you" ? "You win!" : "CPU wins.");
+  el("overText").textContent = (win === "tie" ? "Tie game! " : (win === "you" ? "YOU WIN! " : "CPU WINS. ")) + "Final: You " + S.youScore + " - CPU " + S.cpuScore + ".";
+  el("overOverlay").style.display = "flex";
+  render();
+}
+function passTurn() {
+  if (!S || S.turn !== "you" || S.over) return;
+  S.pending = []; S.sel = -1; S.exchanging = false; S.exch = [];
+  S.scoreless++;
+  if (S.scoreless >= 6) { endByPasses(); return; }
+  S.turn = "cpu";
+  S.msg = "You pass. CPU is thinking...";
+  render();
+  setTimeout(cpuTurn, 700);
+}
+function toggleExchange() {
+  if (!S || S.turn !== "you" || S.over) return;
+  if (S.exchanging) { S.exchanging = false; S.exch = []; render(); return; }
+  if (S.bag.length < 7) { S.msg = "Need at least 7 tiles in the bag to exchange."; render(); return; }
+  S.exchanging = true; S.exch = []; S.pending = []; S.sel = -1;
+  S.msg = "Tap rack tiles to swap, then CONFIRM EXCHANGE.";
+  render();
+}
+function confirmExchange() {
+  if (!S || !S.exchanging) return;
+  if (!S.exch.length) { S.msg = "Tap tiles to swap first."; render(); return; }
+  var marked = S.exch.slice().sort(function (a, b) { return b - a; });
+  var out = [];
+  for (var i = 0; i < marked.length; i++) out.push(S.you[marked[i]]);
+  for (var j = 0; j < marked.length; j++) S.you.splice(marked[j], 1);
+  for (var k = 0; k < out.length; k++) S.bag.push(out[k]);
+  for (var m = S.bag.length - 1; m > 0; m--) { var n = Math.floor(Math.random() * (m + 1)); var t = S.bag[m]; S.bag[m] = S.bag[n]; S.bag[n] = t; }
+  drawInto(S.you, S.bag);
+  S.exchanging = false; S.exch = [];
+  S.scoreless++;
+  if (S.scoreless >= 6) { endByPasses(); return; }
+  S.turn = "cpu";
+  S.msg = "You exchanged tiles. CPU is thinking...";
+  render();
+  setTimeout(cpuTurn, 700);
+}
+
+function assignRack(need, rack) {
+  var used = [];
+  var pool = rack.slice();
+  for (var n = 0; n < need.length; n++) {
+    var found = -1;
+    for (var j = 0; j < pool.length; j++) if (pool[j] && !pool[j].blank && pool[j].ch === need[n]) { found = j; break; }
+    if (found < 0) for (var k = 0; k < pool.length; k++) if (pool[k] && pool[k].blank) { found = k; break; }
+    if (found < 0) return null;
+    used.push(pool[found].blank);
+    pool[found] = null;
+  }
+  return used;
+}
+function rackCanForm(need, rack) { return assignRack(need, rack) !== null; }
+function cpuFindMove() {
+  var rack = S.cpu;
+  if (boardEmpty()) {
+    var best = null;
+    DICT.forEach(function (w) {
+      if (w.length < 2 || w.length > 7) return;
+      var up = w.toUpperCase();
+      var assign = assignRack(up.split(""), rack);
+      if (!assign) return;
+      for (var k = 0; k < up.length; k++) {
+        var start = 7 - k;
+        if (start < 0 || start + up.length > 15) continue;
+        var cells = [];
+        for (var i = 0; i < up.length; i++) cells.push({ r: 7, c: start + i });
+        var sc = 0, mult = 1;
+        for (var m = 0; m < up.length; m++) {
+          var v = assign[m] ? 0 : (LETTERS[up[m]] ? LETTERS[up[m]][1] : 0);
+          var prem = PREM[7][start + m];
+          if (prem === "DL") v *= 2; else if (prem === "TL") v *= 3;
+          if (prem === "DW" || prem === "STAR") mult *= 2; else if (prem === "TW") mult *= 3;
+          sc += v;
+        }
+        sc *= mult;
+        if (up.length === 7) sc += 50;
+        if (!best || sc > best.score) best = { word: up, cells: cells, allCells: cells, dir: "H", score: sc };
+      }
+    });
+    return best;
+  }
+  var candidates = [];
+  for (var r = 0; r < 15; r++) {
+    for (var c = 0; c < 15; c++) {
+      var locked = S.board[r][c];
+      if (!locked) continue;
+      var ch = locked.ch;
+      var words = WORDS_BY_LETTER[ch] || [];
+      for (var wi = 0; wi < words.length; wi++) {
+        var w = words[wi].toUpperCase();
+        if (w.length < 2 || w.length > 10) continue;
+        for (var dirI = 0; dirI < 2; dirI++) {
+          var dir = dirI === 0 ? "H" : "V";
+          for (var k = 0; k < w.length; k++) {
+            if (w[k] !== ch) continue;
+            var startR = dir === "H" ? r : r - k;
+            var startC = dir === "H" ? c - k : c;
+            if (startR < 0 || startC < 0) continue;
+            var endR = dir === "H" ? r : startR + w.length - 1;
+            var endC = dir === "H" ? startC + w.length - 1 : c;
+            if (endR > 14 || endC > 14) continue;
+            var need = [], cells = [], ok = true, newCount = 0;
+            for (var i = 0; i < w.length; i++) {
+              var rr = dir === "H" ? r : startR + i, cc = dir === "H" ? startC + i : c;
+              var cell = S.board[rr][cc];
+              if (cell) { if (cell.ch !== w[i]) { ok = false; break; } }
+              else { need.push(w[i]); cells.push({ r: rr, c: cc }); newCount++; }
+            }
+            if (!ok || !newCount) continue;
+            if (!rackCanForm(need, rack)) continue;
+            var allCells = [];
+            for (var j = 0; j < w.length; j++) allCells.push(dir === "H" ? { r: r, c: startC + j } : { r: startR + j, c: c });
+            var beforeR = dir === "H" ? r : startR - 1, beforeC = dir === "H" ? startC - 1 : c;
+            var afterR = dir === "H" ? r : endR + 1, afterC = dir === "H" ? endC + 1 : c;
+            if ((beforeR >= 0 && beforeC >= 0 && S.board[beforeR][beforeC]) || (afterR < 15 && afterC < 15 && S.board[afterR][afterC])) continue;
+            var sum = 0, mult = 1;
+            for (var m = 0; m < w.length; m++) {
+              var cr = dir === "H" ? r : startR + m, cc2 = dir === "H" ? startC + m : c;
+              var isNew = !S.board[cr][cc2];
+              var v = isNew ? (LETTERS[w[m]] ? LETTERS[w[m]][1] : 0) : S.board[cr][cc2].val;
+              if (isNew) {
+                var prem = PREM[cr][cc2];
+                if (prem === "DL") v *= 2; else if (prem === "TL") v *= 3;
+                if (prem === "DW" || prem === "STAR") mult *= 2; else if (prem === "TW") mult *= 3;
+              }
+              sum += v;
+            }
+            candidates.push({ word: w, cells: cells, allCells: allCells, dir: dir, score: sum * mult });
+          }
+        }
+      }
+    }
+  }
+  candidates.sort(function (a, b) { return b.score - a.score; });
+  for (var ci = 0; ci < Math.min(100, candidates.length); ci++) {
+    var cand = candidates[ci];
+    var pendingMap = {};
+    for (var p = 0; p < cand.cells.length; p++) {
+      var cl = cand.cells[p];
+      var idx = cand.dir === "H" ? cl.c - cand.allCells[0].c : cl.r - cand.allCells[0].r;
+      pendingMap[cl.r + "," + cl.c] = { ch: cand.word[idx], val: 0, blank: false };
+    }
+    var savePending = S.pending, saveDir = S.dir;
+    S.pending = cand.cells.map(function (cl) {
+      var idx = cand.dir === "H" ? cl.c - cand.allCells[0].c : cl.r - cand.allCells[0].r;
+      return { r: cl.r, c: cl.c, rackIdx: -1, ch: cand.word[idx], val: 0, blank: false };
+    });
+    S.dir = cand.dir;
+    var words = collectWords(pendingMap, S.pending);
+    S.pending = savePending; S.dir = saveDir;
+    var real = words.filter(function (x) { return x.word.length >= 2; });
+    var valid = real.length > 0;
+    for (var v = 0; v < real.length; v++) if (!DICT.has(real[v].word.toLowerCase())) valid = false;
+    if (!valid) continue;
+    var needLetters = cand.cells.map(function (cl) {
+      var idx = cand.dir === "H" ? cl.c - cand.allCells[0].c : cl.r - cand.allCells[0].r;
+      return cand.word[idx];
+    });
+    var assign2 = assignRack(needLetters, S.cpu);
+    if (!assign2) continue;
+    var blankByKey = {};
+    for (var bi = 0; bi < cand.cells.length; bi++) blankByKey[cand.cells[bi].r + "," + cand.cells[bi].c] = assign2[bi];
+    var total = 0;
+    for (var t = 0; t < real.length; t++) {
+      var wsum = 0, wmult = 1;
+      for (var q = 0; q < real[t].cells.length; q++) {
+        var ccl = real[t].cells[q];
+        var key = ccl.r + "," + ccl.c;
+        var isNew2 = !!pendingMap[key];
+        var vv = 0;
+        if (isNew2) { var wch = real[t].word[q]; vv = blankByKey[key] ? 0 : (LETTERS[wch] ? LETTERS[wch][1] : 0); }
+        else { var lk = S.board[ccl.r][ccl.c]; vv = lk ? lk.val : 0; }
+        if (isNew2) {
+          var pr = PREM[ccl.r][ccl.c];
+          if (pr === "DL") vv *= 2; else if (pr === "TL") vv *= 3;
+          if (pr === "DW" || pr === "STAR") wmult *= 2; else if (pr === "TW") wmult *= 3;
+        }
+        wsum += vv;
+      }
+      total += wsum * wmult;
+    }
+    if (cand.cells.length === 7) total += 50;
+    cand.score = total;
+    cand.words = real.map(function (x) { return x.word; }).join(", ");
+    return cand;
+  }
+  return null;
+}
+function cpuTurn() {
+  if (!S || S.over || S.turn !== "cpu") return;
+  var move = cpuFindMove();
+  if (!move) {
+    S.scoreless++;
+    if (S.scoreless >= 6) { endByPasses(); return; }
+    S.turn = "you";
+    S.msg = "CPU passes. Your turn.";
+    render(); return;
+  }
+  var need = [];
+  for (var i = 0; i < move.cells.length; i++) {
+    var cl = move.cells[i];
+    var idx = move.dir === "H" ? cl.c - move.allCells[0].c : cl.r - move.allCells[0].r;
+    need.push(move.word[idx]);
+  }
+  var usedIdx = [];
+  var rackCopy = S.cpu.slice();
+  for (var n = 0; n < need.length; n++) {
+    var found = -1;
+    for (var j = 0; j < rackCopy.length; j++) if (rackCopy[j] && !rackCopy[j].blank && rackCopy[j].ch === need[n]) { found = j; break; }
+    if (found < 0) for (var k = 0; k < rackCopy.length; k++) if (rackCopy[k] && rackCopy[k].blank) { found = k; break; }
+    usedIdx.push(found);
+    var tile = rackCopy[found];
+    var cl2 = move.cells[n];
+    S.board[cl2.r][cl2.c] = { ch: need[n], val: tile.blank ? 0 : tile.val, blank: tile.blank, locked: true };
+    rackCopy[found] = null;
+  }
+  usedIdx.sort(function (a, b) { return b - a; });
+  for (var u = 0; u < usedIdx.length; u++) S.cpu.splice(usedIdx[u], 1);
+  var sc = move.score;
+  S.cpuScore += sc;
+  S.firstMove = false;
+  S.scoreless = 0;
+  drawInto(S.cpu, S.bag);
+  var wordShown = move.words || move.word;
+  if (!S.cpu.length && !S.bag.length) { endByEmpty("cpu"); return; }
+  S.turn = "you";
+  S.msg = "CPU played " + wordShown + " for " + sc + " points. Your turn.";
+  render();
+}
+function render() {
+  if (!S) return;
+  el("scorebar").textContent = "YOU " + S.youScore + "  |  CPU " + S.cpuScore + "  |  Bag: " + S.bag.length;
+  var bh = "";
+  for (var r = 0; r < 15; r++) {
+    for (var c = 0; c < 15; c++) {
+      var cell = S.board[r][c];
+      var pend = null;
+      for (var p = 0; p < S.pending.length; p++) if (S.pending[p].r === r && S.pending[p].c === c) pend = S.pending[p];
+      var prem = PREM[r][c];
+      var cls = "cell" + (prem ? " " + prem : "");
+      var label = prem === "STAR" ? "★" : prem === "TW" ? '<span class="prem">TRIPLE<br>WORD<br>SCORE</span>' : prem === "DW" ? '<span class="prem">DOUBLE<br>WORD<br>SCORE</span>' : prem === "TL" ? '<span class="prem">TRIPLE<br>LETTER<br>SCORE</span>' : prem === "DL" ? '<span class="prem">DOUBLE<br>LETTER<br>SCORE</span>' : "";
+      if (cell) bh += '<button class="' + cls + '"><span class="tile"><span>' + cell.ch + '</span>' + (cell.blank ? "" : '<span class="val">' + cell.val + "</span>") + "</span></button>";
+      else if (pend) bh += '<button class="' + cls + '"><span class="tile pending"><span>' + pend.ch + '</span>' + (pend.blank ? "" : '<span class="val">' + pend.val + "</span>") + "</span></button>";
+      else bh += '<button class="' + cls + '">' + label + "</button>";
+    }
+  }
+  el("board").innerHTML = bh;
+  var btns = el("board").querySelectorAll("button.cell");
+  for (var i = 0; i < btns.length; i++) (function (idx) { btns[idx].onclick = function () { tapBoard(Math.floor(idx / 15), idx % 15); }; })(i);
+  var msg = S.msg;
+  if (S.pending.length && S.turn === "you" && !S.over) {
+    var pv = preview();
+    if (pv && pv.ok) msg = "Word: " + pv.words + " (" + pv.total + " pts). Tap SUBMIT WORD to play it.";
+    else if (pv) msg = pv.reason;
+  }
+  if (S.exchanging) msg = "Tap rack tiles to swap, then CONFIRM EXCHANGE.";
+  if (S.turn === "cpu" && !S.over) msg = S.msg;
+  el("msg").textContent = msg;
+  var acts = "";
+  if (S.exchanging) acts += '<button class="green" id="btnConfirmEx">CONFIRM EXCHANGE</button><button class="gray" id="btnCancelEx">CANCEL</button>';
+  el("actions").innerHTML = acts;
+  var ce = el("btnConfirmEx"); if (ce) ce.onclick = confirmExchange;
+  var cx = el("btnCancelEx"); if (cx) cx.onclick = toggleExchange;
+  var rh = "";
+  for (var k = 0; k < S.you.length; k++) {
+    var tile = S.you[k];
+    var used = false;
+    for (var p2 = 0; p2 < S.pending.length; p2++) if (S.pending[p2].rackIdx === k) used = true;
+    var cls2 = "tile" + (S.sel === k ? " sel" : "") + (S.exch.indexOf(k) >= 0 ? " marked" : "") + (used ? " used" : "");
+    rh += '<button class="' + cls2 + '"><span>' + (tile.blank ? "?" : tile.ch) + "</span>" + (tile.blank ? "" : '<span class="val">' + tile.val + "</span>") + "</button>";
+  }
+  el("rack").innerHTML = rh;
+  var rbtns = el("rack").querySelectorAll("button.tile");
+  for (var q = 0; q < rbtns.length; q++) (function (idx) { rbtns[q].onclick = function () { tapRack(idx); }; })(q);
+}
+el("btnSubmit").onclick = submit;
+el("btnClear").onclick = function () { if (S) { S.pending = []; S.sel = -1; render(); } };
+el("btnPass").onclick = passTurn;
+el("btnExch").onclick = toggleExchange;
+function postClose() { try { window.ReactNativeWebView.postMessage("close"); } catch (e) {} }
+el("btnLeave").onclick = function () {
+  if (S.over || (S.firstMove && S.pending.length === 0 && S.you.length === 7)) { postClose(); }
+  else el("leaveOverlay").style.display = "flex";
+};
+el("btnLeaveYes").onclick = function () { postClose(); };
+el("btnLeaveNo").onclick = function () { el("leaveOverlay").style.display = "none"; };
+el("btnAgain").onclick = function () { el("overOverlay").style.display = "none"; newGame(); };
+el("btnOverLeave").onclick = function () { postClose(); };
+newGame();
+</script>
+</body>
+</html>
+`;

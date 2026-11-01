@@ -3461,9 +3461,9 @@ async def get_battle(battle_id: str):
 
 # ============== PLAYER HOUSES ==============
 HOUSE_TIERS = {
-    "apartment": {"name": "Street Apartment", "price": 100000, "image": "house-apartment"},
-    "cabin": {"name": "Country Cabin", "price": 500000, "image": "house-cabin"},
-    "mansion": {"name": "Luxury Mansion", "price": 1000000, "image": "house-mansion"},
+    "apartment": {"name": "Street Apartment", "price": 100000, "image": "house-apartment", "item_limit": 2},
+    "cabin": {"name": "Country Cabin", "price": 500000, "image": "house-cabin", "item_limit": 3},
+    "mansion": {"name": "Luxury Mansion", "price": 1000000, "image": "house-mansion", "item_limit": 6},
 }
 
 # ============== HOUSE ENDPOINTS ==============
@@ -3486,8 +3486,18 @@ async def buy_house(data: dict):
     price = tier_info["price"]
     if player.get("cash", 0) < price:
         raise HTTPException(status_code=400, detail="Not enough cash")
-    # One house only: replace any existing house.
+    # One house only: replace any existing house. Items in the old
+    # house(s) go back into the player's item inventory instead of
+    # being deleted — they sit there until placed in a new house.
     replaced = await db.houses.find_one({"player_id": player_id})
+    old_houses = await db.houses.find({"player_id": player_id}).to_list(20)
+    old_item_ids = []
+    for oh in old_houses:
+        for it in oh.get("items", []) or []:
+            if it.get("item_id"):
+                old_item_ids.append(it.get("item_id"))
+    if old_item_ids:
+        await db.players.update_one({"id": player_id}, {"$push": {"inventory_items": {"$each": old_item_ids}}})
     await db.houses.delete_many({"player_id": player_id})
     await db.players.update_one(
         {"id": player_id},
@@ -3504,6 +3514,7 @@ async def buy_house(data: dict):
         "latitude": float(latitude),
         "longitude": float(longitude),
         "items": [],
+        "item_limit": tier_info["item_limit"],
         "created_at": datetime.utcnow().isoformat(),
     }
     await db.houses.insert_one(house)
@@ -3512,23 +3523,44 @@ async def buy_house(data: dict):
         "house": serialize_doc(house),
         "cash": updated.get("cash", 0),
         "replaced": serialize_doc(replaced) if replaced else None,
+        "inventory_items": updated.get("inventory_items", []),
     }
 
 
 @api_router.get("/houses/player/{player_id}")
 async def get_player_house(player_id: str):
     """The player's current house, or null."""
-    house = await db.houses.find_one({"player_id": player_id})
+    house = await db.houses.find_one({"player_id": player_id, "stored": {"$ne": True}})
     return {"house": serialize_doc(house) if house else None}
 
 
 @api_router.get("/houses/nearby")
-async def get_nearby_houses(latitude: float, longitude: float, radius: float = 2000):
+async def get_nearby_houses(latitude: float, longitude: float, radius: float = 2000, player_id: str = None):
     """Houses within radius (meters) for the map."""
     center = Position(latitude=latitude, longitude=longitude)
     houses = await db.houses.find().to_list(200)
+    # Visibility: owner + friends only (when the requester is known).
+    # No requester (old app) keeps the old behavior so houses don't
+    # vanish mid-transition. Hidden owners' houses stay hidden from
+    # friends (owner still sees their own).
+    visible_owners = None
+    hidden_owners = set()
+    if player_id:
+        requester = await db.players.find_one({"id": player_id})
+        friend_ids = set(requester.get("friends", [])) if requester else set()
+        visible_owners = friend_ids | {player_id}
+        hidden_docs = await db.players.find({"hidden_from_map": True}, {"id": 1}).to_list(10000)
+        hidden_owners = {d["id"] for d in hidden_docs}
     nearby = []
     for h in houses:
+        if h.get("stored"):
+            continue
+        if visible_owners is not None:
+            if h.get("player_id") not in visible_owners:
+                continue
+            if h.get("player_id") in hidden_owners and h.get("player_id") != player_id:
+                continue
+
         try:
             d = calculate_distance(center, Position(latitude=h["latitude"], longitude=h["longitude"]))
         except Exception:
@@ -3574,6 +3606,121 @@ async def sell_house(house_id: str, data: dict):
     )
     updated = await db.players.find_one({"id": player_id})
     return {"refund": refund, "cash": updated.get("cash", 0)}
+
+
+# ============== TEST-ONLY CASH GRANT (remove after mansion test) ==============
+@api_router.post("/admin/grant-test-cash")
+async def grant_test_cash(data: dict):
+    """TEST ONLY: grant in-game cash to the test player (Mayor Veno).
+    Hardcoded to one player ID so it cannot enrich anyone else."""
+    player_id = data.get("player_id")
+    amount = data.get("amount", 1000000)
+    if player_id != "3872dca3-bf7d-4807-8fc5-47c22ba67620":
+        raise HTTPException(status_code=403, detail="Test grants only for the test player")
+    try:
+        amount = int(amount)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid amount")
+    if amount <= 0 or amount > 10000000:
+        raise HTTPException(status_code=400, detail="Amount out of range")
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    await db.players.update_one({"id": player_id}, {"$inc": {"cash": amount}})
+    updated = await db.players.find_one({"id": player_id})
+    return {"player": player.get("name"), "cash": updated.get("cash", 0), "granted": amount}
+
+
+# ============== HOUSE ITEMS ==============
+
+HOUSE_ITEM_CATALOG = {
+    "pool-table": {"name": "Pool Table", "category": "games", "price": 50000},
+    "dartboard": {"name": "Dartboard", "category": "games", "price": 10000},
+    "cardtable": {"name": "Card Table", "category": "games", "price": 20000},
+    "dominoes": {"name": "Dominoes Table", "category": "games", "price": 20000},
+    "scrabble": {"name": "Scrabble Table", "category": "games", "price": 20000},
+}
+
+
+@api_router.post("/houses/{house_id}/items/add")
+async def add_house_item(house_id: str, payload: dict):
+    item_id = payload.get("item_id")
+    if item_id not in HOUSE_ITEM_CATALOG:
+        raise HTTPException(status_code=400, detail="Unknown item")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if payload.get("player_id") != house.get("player_id"):
+        raise HTTPException(status_code=403, detail="Only the owner can buy items")
+    items = house.get("items", []) or []
+    if any(it.get("item_id") == item_id for it in items):
+        raise HTTPException(status_code=400, detail="Item already placed")
+    limit = house.get("item_limit") or HOUSE_TIERS.get(house.get("tier"), {}).get("item_limit", 2)
+    if len(items) >= limit:
+        raise HTTPException(status_code=400, detail="House is full")
+    info = HOUSE_ITEM_CATALOG[item_id]
+    price = info.get("price", 0)
+    player = await db.players.find_one({"id": payload.get("player_id")})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.get("cash", 0) < price:
+        raise HTTPException(status_code=400, detail=f"Not enough cash — the {info['name']} costs ${price:,}")
+    new_cash = player.get("cash", 0) - price
+    await db.players.update_one({"id": player["id"]}, {"$set": {"cash": new_cash}})
+    items.append({"item_id": item_id, "name": info["name"], "category": info["category"], "x": 0.5, "y": 0.5, "placed_at": datetime.utcnow().isoformat()})
+    await db.houses.update_one({"id": house_id}, {"$set": {"items": items}})
+    updated = await db.houses.find_one({"id": house_id})
+    return {"house": serialize_doc(updated), "cash": new_cash}
+
+
+@api_router.post("/houses/{house_id}/items/remove")
+async def remove_house_item(house_id: str, payload: dict):
+    item_id = payload.get("item_id")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if payload.get("player_id") != house.get("player_id"):
+        raise HTTPException(status_code=403, detail="Only the owner can remove items")
+    items = house.get("items", []) or []
+    if not any(it.get("item_id") == item_id for it in items):
+        raise HTTPException(status_code=400, detail="Item not placed")
+    items = [it for it in items if it.get("item_id") != item_id]
+    await db.houses.update_one({"id": house_id}, {"$set": {"items": items}})
+    refund = HOUSE_ITEM_CATALOG.get(item_id, {}).get("price", 0) // 2
+    player = await db.players.find_one({"id": payload.get("player_id")})
+    new_cash = None
+    if player and refund:
+        new_cash = player.get("cash", 0) + refund
+        await db.players.update_one({"id": player["id"]}, {"$set": {"cash": new_cash}})
+    updated = await db.houses.find_one({"id": house_id})
+    return {"house": serialize_doc(updated), "cash": new_cash}
+
+
+@api_router.post("/houses/{house_id}/items/move")
+async def move_house_item(house_id: str, payload: dict):
+    item_id = payload.get("item_id")
+    try:
+        x = max(0.0, min(1.0, float(payload.get("x", 0.5))))
+        y = max(0.0, min(1.0, float(payload.get("y", 0.5))))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Bad position")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if payload.get("player_id") != house.get("player_id"):
+        raise HTTPException(status_code=403, detail="Only the owner can move items")
+    items = house.get("items", []) or []
+    found = False
+    for it in items:
+        if it.get("item_id") == item_id:
+            it["x"] = x
+            it["y"] = y
+            found = True
+    if not found:
+        raise HTTPException(status_code=400, detail="Item not placed")
+    await db.houses.update_one({"id": house_id}, {"$set": {"items": items}})
+    updated = await db.houses.find_one({"id": house_id})
+    return {"house": serialize_doc(updated)}
 
 
 # ============== MISSION ENDPOINTS ==============
@@ -6415,6 +6562,13 @@ async def rob_bank(bank_id: str, player_id: str):
     # Get effective stats (luck affects success chance)
     effective_stats = await get_effective_stats(player)
     luck_val = effective_stats.get("luck", 5)
+    # Luck drops with health, SQUARED so it falls off fast: full HP =
+    # full luck, half HP = quarter luck.
+    stats = player.get("stats", {}) or {}
+    max_hp = stats.get("max_health", 100) or 100
+    cur_hp = stats.get("health", max_hp)
+    health_factor = max(0.0, min(1.0, cur_hp / max_hp)) if max_hp > 0 else 1.0
+    luck_val = luck_val * health_factor * health_factor
     
     # Calculate rewards based on player level (reduced by 50% for balance)
     base_reward = int((500 + (player_level * 100)) * 0.5)
@@ -10401,6 +10555,665 @@ async def get_godmode_status(player_id: str):
         "price_usd": GOD_POTION_PRICE_USD,
     }
 # === END GOD_POTION_IAP_v2 ===
+
+
+@api_router.post("/houses/{house_id}/move-to-inventory")
+async def move_house_to_inventory(house_id: str, payload: dict):
+    """Owner only: take the house off the map into inventory."""
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if payload.get("player_id") != house.get("player_id"):
+        raise HTTPException(status_code=403, detail="Only the owner can move this house")
+    await db.houses.update_one({"id": house_id}, {"$set": {"stored": True}})
+    updated = await db.houses.find_one({"id": house_id})
+    return {"house": serialize_doc(updated)}
+
+
+@api_router.get("/houses/inventory/{player_id}")
+async def get_house_inventory(player_id: str):
+    """Houses the player has stored (not on the map)."""
+    houses = await db.houses.find({"player_id": player_id, "stored": True}).to_list(20)
+    return {"houses": [serialize_doc(h) for h in houses]}
+
+
+@api_router.post("/houses/{house_id}/place")
+async def place_house(house_id: str, payload: dict):
+    """Owner only: drop a stored house at a new location."""
+    latitude = payload.get("latitude")
+    longitude = payload.get("longitude")
+    if latitude is None or longitude is None:
+        raise HTTPException(status_code=400, detail="Location required")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if payload.get("player_id") != house.get("player_id"):
+        raise HTTPException(status_code=403, detail="Only the owner can place this house")
+    if not house.get("stored"):
+        raise HTTPException(status_code=400, detail="House is already placed")
+    placed = await db.houses.find_one({"player_id": payload.get("player_id"), "stored": {"$ne": True}, "id": {"$ne": house_id}})
+    if placed:
+        raise HTTPException(status_code=400, detail="You already have a house placed - move or sell it first")
+    await db.houses.update_one({"id": house_id}, {"$set": {"stored": False, "latitude": float(latitude), "longitude": float(longitude)}})
+    updated = await db.houses.find_one({"id": house_id})
+    return {"house": serialize_doc(updated)}
+
+
+@api_router.post("/houses/{house_id}/items/place-from-inventory")
+async def place_house_item_from_inventory(house_id: str, payload: dict):
+    """Owner only: place an item from the player's item inventory
+    into this house. Free — the item was already bought once."""
+    player_id = payload.get("player_id")
+    item_id = payload.get("item_id")
+    if not item_id:
+        raise HTTPException(status_code=400, detail="Item required")
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if player_id != house.get("player_id"):
+        raise HTTPException(status_code=403, detail="Only the owner can place items")
+    if house.get("stored"):
+        raise HTTPException(status_code=400, detail="House is in inventory - place the house first")
+    player = await db.players.find_one({"id": player_id})
+    if not player or item_id not in (player.get("inventory_items", []) or []):
+        raise HTTPException(status_code=400, detail="Item is not in your inventory")
+    items = house.get("items", []) or []
+    if any(i.get("item_id") == item_id for i in items):
+        raise HTTPException(status_code=400, detail="Item is already in this house")
+    if len(items) >= house.get("item_limit", 6):
+        raise HTTPException(status_code=400, detail="House is full")
+    await db.houses.update_one({"id": house_id}, {"$push": {"items": {"item_id": item_id, "x": 0.5, "y": 0.5}}})
+    inv = list(player.get("inventory_items", []) or [])
+    inv.remove(item_id)
+    await db.players.update_one({"id": player_id}, {"$set": {"inventory_items": inv}})
+    updated_house = await db.houses.find_one({"id": house_id})
+    updated_player = await db.players.find_one({"id": player_id})
+    return {"house": serialize_doc(updated_house), "inventory_items": updated_player.get("inventory_items", [])}
+
+# POOL_ROOMS_V1
+class PoolRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+
+
+class PoolRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class PoolRoomShot(BaseModel):
+    player_id: str
+    state: dict
+
+
+class PoolRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class PoolRoomLeave(BaseModel):
+    player_id: str
+
+
+def _pool_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if db.pool_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/api/pool/rooms/create")
+async def pool_room_create(body: PoolRoomCreate):
+    code = _pool_room_code()
+    now = datetime.now(timezone.utc).isoformat()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None, "status": "waiting",
+            "state": None, "chat": [], "created_at": now, "updated_at": now}
+    db.pool_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/pool/rooms/join")
+async def pool_room_join(body: PoolRoomJoin):
+    room = db.pool_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        room["_id"] = str(room["_id"])
+        return room
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    db.pool_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.pool_rooms.find_one({"code": body.code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.get("/api/pool/rooms/{code}")
+async def pool_room_get(code: str):
+    room = db.pool_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/pool/rooms/{code}/shot")
+async def pool_room_shot(code: str, body: PoolRoomShot):
+    room = db.pool_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    db.pool_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.pool_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/pool/rooms/{code}/chat")
+async def pool_room_chat(code: str, body: PoolRoomChat):
+    room = db.pool_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    db.pool_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.pool_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        db.pool_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = db.pool_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/pool/rooms/{code}/leave")
+async def pool_room_leave(code: str, body: PoolRoomLeave):
+    room = db.pool_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        db.pool_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    db.pool_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
+
+# DART_ROOMS_V1
+class DartRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+
+
+class DartRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class DartRoomShot(BaseModel):
+    player_id: str
+    state: dict
+
+
+class DartRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class DartRoomLeave(BaseModel):
+    player_id: str
+
+
+def _dart_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if db.dart_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/api/darts/rooms/create")
+async def dart_room_create(body: DartRoomCreate):
+    code = _dart_room_code()
+    now = datetime.now(timezone.utc).isoformat()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None, "status": "waiting",
+            "state": None, "chat": [], "created_at": now, "updated_at": now}
+    db.dart_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/darts/rooms/join")
+async def dart_room_join(body: DartRoomJoin):
+    room = db.dart_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        room["_id"] = str(room["_id"])
+        return room
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    db.dart_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.dart_rooms.find_one({"code": body.code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.get("/api/darts/rooms/{code}")
+async def dart_room_get(code: str):
+    room = db.dart_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/darts/rooms/{code}/shot")
+async def dart_room_shot(code: str, body: DartRoomShot):
+    room = db.dart_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    db.dart_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.dart_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/darts/rooms/{code}/chat")
+async def dart_room_chat(code: str, body: DartRoomChat):
+    room = db.dart_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    db.dart_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.dart_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        db.dart_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = db.dart_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/darts/rooms/{code}/leave")
+async def dart_room_leave(code: str, body: DartRoomLeave):
+    room = db.dart_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        db.dart_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    db.dart_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
+
+# CARD_ROOMS_V1
+class CardRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    game: str = "gin"
+    seed: int = 0
+
+
+class CardRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class CardRoomShot(BaseModel):
+    player_id: str
+    state: dict
+
+
+class CardRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class CardRoomLeave(BaseModel):
+    player_id: str
+
+
+def _card_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if db.card_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/api/cards/rooms/create")
+async def card_room_create(body: CardRoomCreate):
+    code = _card_room_code()
+    seed = body.seed if body.seed else random.randint(1, 2147483647)
+    now = datetime.now(timezone.utc).isoformat()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None, "game": body.game, "seed": seed,
+            "status": "waiting",
+            "state": None, "chat": [], "created_at": now, "updated_at": now}
+    db.card_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/cards/rooms/join")
+async def card_room_join(body: CardRoomJoin):
+    room = db.card_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        room["_id"] = str(room["_id"])
+        return room
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    db.card_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.card_rooms.find_one({"code": body.code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.get("/api/cards/rooms/{code}")
+async def card_room_get(code: str):
+    room = db.card_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/cards/rooms/{code}/shot")
+async def card_room_shot(code: str, body: CardRoomShot):
+    room = db.card_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    db.card_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.card_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/cards/rooms/{code}/chat")
+async def card_room_chat(code: str, body: CardRoomChat):
+    room = db.card_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    db.card_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.card_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        db.card_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = db.card_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/cards/rooms/{code}/leave")
+async def card_room_leave(code: str, body: CardRoomLeave):
+    room = db.card_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        db.card_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    db.card_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
+
+# DOMINO_ROOMS_V1
+class DominoRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    seed: int = 0
+
+
+class DominoRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class DominoRoomShot(BaseModel):
+    player_id: str
+    state: dict
+
+
+class DominoRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class DominoRoomLeave(BaseModel):
+    player_id: str
+
+
+def _domino_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if db.domino_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/api/dominoes/rooms/create")
+async def domino_room_create(body: DominoRoomCreate):
+    code = _domino_room_code()
+    seed = body.seed if body.seed else random.randint(1, 2147483647)
+    now = datetime.now(timezone.utc).isoformat()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None, "seed": seed,
+            "status": "waiting",
+            "state": None, "chat": [], "created_at": now, "updated_at": now}
+    db.domino_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/dominoes/rooms/join")
+async def domino_room_join(body: DominoRoomJoin):
+    room = db.domino_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        room["_id"] = str(room["_id"])
+        return room
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    db.domino_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.domino_rooms.find_one({"code": body.code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.get("/api/dominoes/rooms/{code}")
+async def domino_room_get(code: str):
+    room = db.domino_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/dominoes/rooms/{code}/shot")
+async def domino_room_shot(code: str, body: DominoRoomShot):
+    room = db.domino_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    db.domino_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.domino_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/dominoes/rooms/{code}/chat")
+async def domino_room_chat(code: str, body: DominoRoomChat):
+    room = db.domino_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    db.domino_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.domino_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        db.domino_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = db.domino_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/dominoes/rooms/{code}/leave")
+async def domino_room_leave(code: str, body: DominoRoomLeave):
+    room = db.domino_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        db.domino_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    db.domino_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
+
+# SCRABBLE_ROOMS_V1
+class ScrabbleRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    seed: int = 0
+
+
+class ScrabbleRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class ScrabbleRoomShot(BaseModel):
+    player_id: str
+    state: dict
+
+
+class ScrabbleRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class ScrabbleRoomLeave(BaseModel):
+    player_id: str
+
+
+def _scrabble_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if db.scrabble_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/api/scrabble/rooms/create")
+async def scrabble_room_create(body: ScrabbleRoomCreate):
+    code = _scrabble_room_code()
+    seed = body.seed if body.seed else random.randint(1, 2147483647)
+    now = datetime.now(timezone.utc).isoformat()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None, "seed": seed,
+            "status": "waiting",
+            "state": None, "chat": [], "created_at": now, "updated_at": now}
+    db.scrabble_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/scrabble/rooms/join")
+async def scrabble_room_join(body: ScrabbleRoomJoin):
+    room = db.scrabble_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        room["_id"] = str(room["_id"])
+        return room
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    db.scrabble_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.scrabble_rooms.find_one({"code": body.code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.get("/api/scrabble/rooms/{code}")
+async def scrabble_room_get(code: str):
+    room = db.scrabble_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/scrabble/rooms/{code}/shot")
+async def scrabble_room_shot(code: str, body: ScrabbleRoomShot):
+    room = db.scrabble_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    db.scrabble_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.scrabble_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/scrabble/rooms/{code}/chat")
+async def scrabble_room_chat(code: str, body: ScrabbleRoomChat):
+    room = db.scrabble_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    db.scrabble_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = db.scrabble_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        db.scrabble_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = db.scrabble_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/api/scrabble/rooms/{code}/leave")
+async def scrabble_room_leave(code: str, body: ScrabbleRoomLeave):
+    room = db.scrabble_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        db.scrabble_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    db.scrabble_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
 
 app.include_router(api_router)
 

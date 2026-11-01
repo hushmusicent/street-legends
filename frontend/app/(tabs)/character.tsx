@@ -1040,7 +1040,7 @@ function StatusTab({ player, classColor, territories, playerId, equipped }: { pl
         <View style={styles.resourcesRow}>
           <View style={styles.resourceItem}>
             <Ionicons name="cash" size={24} color="#f39c12" />
-            <Text style={styles.resourceValue}>${player.cash}</Text>
+            <Text style={styles.resourceValue} numberOfLines={1} adjustsFontSizeToFit>${(player.cash || 0).toLocaleString()}</Text>
             <Text style={styles.resourceLabel}>Cash</Text>
           </View>
           <View style={styles.resourceItem}>

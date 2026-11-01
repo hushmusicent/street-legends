@@ -1,16 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  Pressable,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, TouchableOpacity, ScrollView, Modal, Pressable, Image, Dimensions, PanResponder, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
@@ -35,12 +24,1298 @@ import {
   followPlayer,
   unfollowPlayer,
   sendFriendRequest,
-} from '../../services/api';
+  moveHouseToInventory,
+  placeItemFromInventory,
+  toggleHouseHide,
+  sellHouse, removeHouseItem} from '../../services/api';
 import { Monster, Mission, NearbyPlayer, RelationshipStatus } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
 import { SFX } from '../../hooks/useSoundEffects';
 import { useMapEntities, usePlayerData, useInvalidateMapQueries, useMinigameCooldowns } from '../../hooks/useMapQueries';
+
+import { POOL_GAME_HTML } from '../../components/PoolGameHtml';
+import { POOL_PVP_HTML } from '../../components/PoolGamePvpHtml';
+import { DART_GAME_HTML } from '../../components/DartGameHtml';
+import { DART_PVP_HTML } from '../../components/DartGamePvpHtml';
+import { CARD_SPADES_HTML } from '../../components/CardSpadesHtml';
+import { CARD_GIN_HTML } from '../../components/CardGinHtml';
+import { CARD_PVP_HTML } from '../../components/CardPvpHtml';
+import { DOMINO_HTML } from '../../components/DominoHtml';
+import { DOMINO_PVP_HTML } from '../../components/DominoPvpHtml';
+import { SCRABBLE_HTML } from '../../components/ScrabbleHtml';
+import { SCRABBLE_PVP_HTML } from '../../components/ScrabblePvpHtml';
+
+let PoolWebView: any = null;
+try { PoolWebView = require('react-native-webview').default; } catch (e) { PoolWebView = null; }
+
+const PoolGameModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>POOL TABLE - YOU vs CPU</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: POOL_GAME_HTML }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Pool game needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const PoolTableMenuModal = ({ visible, onClose, onPlayPvc, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlayPvc: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} transparent={true} animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <View style={{ backgroundColor: '#222222', borderRadius: 12, padding: 20, width: '100%', maxWidth: 320 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>POOL TABLE</Text>
+          <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 16 }}>Play, move, or sell it.</Text>
+          <TouchableOpacity onPress={onPlayPvc} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY VS COMPUTER</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#444444', paddingVertical: 12, borderRadius: 8, marginBottom: 4 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+          </TouchableOpacity>
+          <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Move: close this menu, then drag the table.</Text>
+          <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($25,000 back)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const PoolPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boolean; onClose: () => void; room: any; playerId: string }) => {
+  const webRef = useRef<any>(null);
+  const lastStateRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/pool/rooms/' + code);
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data?.state;
+        if (st) {
+          const js = JSON.stringify(st);
+          if (js !== lastStateRef.current) {
+            lastStateRef.current = js;
+            if (webRef.current) {
+              webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("pool-state", {detail: ' + js + '})); true;');
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'pool-shot' && msg.state) {
+        lastStateRef.current = JSON.stringify(msg.state);
+        const res = await fetch(API_BASE + '/api/pool/rooms/' + code + '/shot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your shot.');
+        } else {
+          setPvpError('');
+        }
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.POOL_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>POOL - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: POOL_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Pool game needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const PoolPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Pool rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async () => {
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/pool/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created. Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/pool/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(API_BASE + '/api/pool/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/pool/rooms/' + room.code);
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>POOL - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const DartboardMenuModal = ({ visible, onClose, onPlay, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlay: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 4 }}>DARTBOARD</Text>
+        <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Play, move, or sell it.</Text>
+        <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY VS COMPUTER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 10 }}>Move: close this menu, then drag the board.</Text>
+        <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($5,000 back)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+};
+
+const DartGameModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>DARTBOARD - YOU vs CPU</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: DART_GAME_HTML }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Darts needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const DartPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boolean; onClose: () => void; room: any; playerId: string }) => {
+  const webRef = useRef<any>(null);
+  const lastStateRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/darts/rooms/' + code);
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data?.state;
+        if (st) {
+          const js = JSON.stringify(st);
+          if (js !== lastStateRef.current) {
+            lastStateRef.current = js;
+            if (webRef.current) {
+              webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("dart-state", {detail: ' + js + '})); true;');
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'dart-shot' && msg.state) {
+        lastStateRef.current = JSON.stringify(msg.state);
+        const res = await fetch(API_BASE + '/api/darts/rooms/' + code + '/shot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your shot.');
+        } else {
+          setPvpError('');
+        }
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.DART_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>DARTBOARD - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: DART_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Darts game needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Darts rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async () => {
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/darts/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created. Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/darts/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(API_BASE + '/api/darts/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/darts/rooms/' + room.code);
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>DARTBOARD - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const CardTableMenuModal = ({ visible, onClose, onPlaySpades, onPlayGin, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlaySpades: () => void; onPlayGin: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 4 }}>CARD TABLE</Text>
+        <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Play Spades or Gin Rummy, move it, or sell it.</Text>
+        <TouchableOpacity onPress={onPlaySpades} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SPADES</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onPlayGin} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>GIN RUMMY</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 10 }}>Move: close this menu, then drag the table.</Text>
+        <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($10,000 back)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+};
+
+const CardGameModal = ({ visible, onClose, game }: { visible: boolean; onClose: () => void; game: string }) => {
+  const title = game === 'spades' ? 'CARD TABLE - SPADES - YOU vs CPU' : 'CARD TABLE - GIN RUMMY - YOU vs CPU';
+  const html = game === 'spades' ? CARD_SPADES_HTML : CARD_GIN_HTML;
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>{title}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: html }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Card games need WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const CardPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boolean; onClose: () => void; room: any; playerId: string }) => {
+  const webRef = useRef<any>(null);
+  const lastStateRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  const game = room?.game || 'gin';
+  const seed = room?.seed || 0;
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/cards/rooms/' + code);
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data?.state;
+        if (st) {
+          const js = JSON.stringify(st);
+          if (js !== lastStateRef.current) {
+            lastStateRef.current = js;
+            if (webRef.current) {
+              webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("card-state", {detail: ' + js + '})); true;');
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'card-shot' && msg.state) {
+        lastStateRef.current = JSON.stringify(msg.state);
+        const res = await fetch(API_BASE + '/api/cards/rooms/' + code + '/shot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your move.');
+        } else {
+          setPvpError('');
+        }
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.CARD_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, game: game, seed: seed }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>CARD TABLE - {game === 'spades' ? 'SPADES' : 'GIN RUMMY'} - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: CARD_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Card games need WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const CardPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Card rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async (game: string) => {
+    setBusy(true); setInfo('');
+    try {
+      const seed = Math.floor(Math.random() * 2147483647) || 1;
+      const res = await fetch(API_BASE + '/api/cards/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, game: game, seed: seed }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created (' + (game === 'spades' ? 'Spades' : 'Gin Rummy') + '). Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/cards/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(API_BASE + '/api/cards/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/cards/rooms/' + room.code);
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  const gameName = room?.game === 'spades' ? 'Spades' : 'Gin Rummy';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>CARD TABLE - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <TouchableOpacity onPress={() => createRoom('spades')} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE SPADES ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => createRoom('gin')} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE GIN RUMMY ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {gameName} - {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const DominoTableMenuModal = ({ visible, onClose, onPlay, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlay: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 4 }}>DOMINOES TABLE</Text>
+        <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Play Dominoes, move it, or sell it.</Text>
+        <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY VS COMPUTER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 10 }}>Move: close this menu, then drag the table.</Text>
+        <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($10,000 back)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+};
+
+const DominoGameModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>DOMINOES - YOU vs CPU</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: DOMINO_HTML }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Dominoes needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const DominoPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boolean; onClose: () => void; room: any; playerId: string }) => {
+  const webRef = useRef<any>(null);
+  const lastStateRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  const seed = room?.seed || 0;
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/dominoes/rooms/' + code);
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data?.state;
+        if (st) {
+          const js = JSON.stringify(st);
+          if (js !== lastStateRef.current) {
+            lastStateRef.current = js;
+            if (webRef.current) {
+              webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("domino-state", {detail: ' + js + '})); true;');
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'domino-shot' && msg.state) {
+        lastStateRef.current = JSON.stringify(msg.state);
+        const res = await fetch(API_BASE + '/api/dominoes/rooms/' + code + '/shot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your move.');
+        } else {
+          setPvpError('');
+        }
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.DOMINO_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, seed: seed }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>DOMINOES - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: DOMINO_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Dominoes needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Domino rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async () => {
+    setBusy(true); setInfo('');
+    try {
+      const seed = Math.floor(Math.random() * 2147483647) || 1;
+      const res = await fetch(API_BASE + '/api/dominoes/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, seed: seed }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created. Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/dominoes/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(API_BASE + '/api/dominoes/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/dominoes/rooms/' + room.code);
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>DOMINOES - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const ScrabbleTableMenuModal = ({ visible, onClose, onPlay, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlay: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 4 }}>SCRABBLE TABLE</Text>
+        <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Play Scrabble, move it, or sell it.</Text>
+        <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY VS COMPUTER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 10 }}>Move: close this menu, then drag the table.</Text>
+        <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($10,000 back)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+};
+
+const ScrabbleGameModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>SCRABBLE - YOU vs CPU</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: SCRABBLE_HTML }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Scrabble needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const ScrabblePvpGameModal = ({ visible, onClose, room, playerId }: { visible: boolean; onClose: () => void; room: any; playerId: string }) => {
+  const webRef = useRef<any>(null);
+  const lastStateRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  const seed = room?.seed || 0;
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/scrabble/rooms/' + code);
+        if (!res.ok) return;
+        const data = await res.json();
+        const st = data?.state;
+        if (st) {
+          const js = JSON.stringify(st);
+          if (js !== lastStateRef.current) {
+            lastStateRef.current = js;
+            if (webRef.current) {
+              webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("scrabble-state", {detail: ' + js + '})); true;');
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'scrabble-shot' && msg.state) {
+        lastStateRef.current = JSON.stringify(msg.state);
+        const res = await fetch(API_BASE + '/api/scrabble/rooms/' + code + '/shot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your move.');
+        } else {
+          setPvpError('');
+        }
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.SCRABBLE_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, seed: seed }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>SCRABBLE - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: SCRABBLE_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Scrabble needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Scrabble rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async () => {
+    setBusy(true); setInfo('');
+    try {
+      const seed = Math.floor(Math.random() * 2147483647) || 1;
+      const res = await fetch(API_BASE + '/api/scrabble/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, seed: seed }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created. Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(API_BASE + '/api/scrabble/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(API_BASE + '/api/scrabble/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/scrabble/rooms/' + room.code);
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>SCRABBLE - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
 
 export default function MapScreen() {
   const {
@@ -64,6 +1339,295 @@ export default function MapScreen() {
   const [heading, setHeading] = useState<number>(0);
   const [selectedTerritory, setSelectedTerritory] = useState<any | null>(null);
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
+  const [interiorHouse, setInteriorHouse] = useState<any | null>(null);
+  const [poolMenuOpen, setPoolMenuOpen] = useState(false);
+  const [dartMenuOpen, setDartMenuOpen] = useState(false);
+  const [cardMenuOpen, setCardMenuOpen] = useState(false);
+  const [scrabbleMenuOpen, setScrabbleMenuOpen] = useState(false);
+  const [scrabbleGameOpen, setScrabbleGameOpen] = useState(false);
+  const sellScrabble = async () => {
+    setScrabbleMenuOpen(false);
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'scrabble');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'scrabble') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  const [scrabblePvpOpen, setScrabblePvpOpen] = useState(false);
+  const [scrabblePvpGameOpen, setScrabblePvpGameOpen] = useState(false);
+  const [scrabblePvpRoom, setScrabblePvpRoom] = useState<any | null>(null);
+  const handleScrabblePvpLeave = async () => {
+    if (scrabblePvpRoom?.code) {
+      try { await fetch(API_BASE + '/api/scrabble/rooms/' + scrabblePvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setScrabblePvpRoom(null);
+    setScrabblePvpOpen(false);
+    setScrabblePvpGameOpen(false);
+  };
+  const [dominoMenuOpen, setDominoMenuOpen] = useState(false);
+  const [dominoGameOpen, setDominoGameOpen] = useState(false);
+  const sellDominoes = async () => {
+    setDominoMenuOpen(false);
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'dominoes');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'dominoes') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  const [dominoPvpOpen, setDominoPvpOpen] = useState(false);
+  const [dominoPvpGameOpen, setDominoPvpGameOpen] = useState(false);
+  const [dominoPvpRoom, setDominoPvpRoom] = useState<any | null>(null);
+  const handleDominoPvpLeave = async () => {
+    if (dominoPvpRoom?.code) {
+      try { await fetch(API_BASE + '/api/dominoes/rooms/' + dominoPvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setDominoPvpRoom(null);
+    setDominoPvpOpen(false);
+    setDominoPvpGameOpen(false);
+  };
+  const [cardGameOpen, setCardGameOpen] = useState(false);
+  const sellCardTable = async () => {
+    setCardMenuOpen(false);
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'cardtable');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'cardtable') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  const [cardGame, setCardGame] = useState('spades');
+  const [cardPvpOpen, setCardPvpOpen] = useState(false);
+  const [cardPvpGameOpen, setCardPvpGameOpen] = useState(false);
+  const [cardPvpRoom, setCardPvpRoom] = useState<any | null>(null);
+  const handleCardPvpLeave = async () => {
+    if (cardPvpRoom?.code) {
+      try { await fetch(API_BASE + '/api/cards/rooms/' + cardPvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setCardPvpRoom(null);
+    setCardPvpOpen(false);
+    setCardPvpGameOpen(false);
+  };
+  const [dartPvpOpen, setDartPvpOpen] = useState(false);
+  const [dartPvpGameOpen, setDartPvpGameOpen] = useState(false);
+  const [dartPvpRoom, setDartPvpRoom] = useState<any | null>(null);
+  const handleDartPvpLeave = async () => {
+    if (dartPvpRoom?.code) {
+      try { await fetch(API_BASE + '/api/darts/rooms/' + dartPvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setDartPvpRoom(null);
+    setDartPvpOpen(false);
+    setDartPvpGameOpen(false);
+  };
+  const [dartGameOpen, setDartGameOpen] = useState(false);
+  const sellDartboard = () => {
+    Alert.alert('Sell Dartboard?', 'Sell the Dartboard for $5,000 back?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sell', onPress: () => sellDartboardDo() },
+    ]);
+  };
+  const sellDartboardDo = async () => {
+    setDartMenuOpen(false);
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'dartboard');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'dartboard') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  const [poolPvpOpen, setPoolPvpOpen] = useState(false);
+  const [poolPvpGameOpen, setPoolPvpGameOpen] = useState(false);
+  const [poolPvpRoom, setPoolPvpRoom] = useState<any | null>(null);
+  const handlePvpLeave = async () => {
+    if (poolPvpRoom?.code) {
+      try { await fetch(API_BASE + '/api/pool/rooms/' + poolPvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setPoolPvpRoom(null);
+    setPoolPvpOpen(false);
+    setPoolPvpGameOpen(false);
+  };
+  const sellPoolTable = () => {
+    Alert.alert('Sell Pool Table?', 'Sell the Pool Table for $25,000 back?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sell', onPress: () => sellPoolTableDo() },
+    ]);
+  };
+  const sellPoolTableDo = async () => {
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'pool-table');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'pool-table') });
+      }
+      setPoolMenuOpen(false);
+    } catch (e: any) {
+      Alert.alert('Sell', e?.response?.data?.detail || e?.message || 'Could not sell the pool table.');
+    }
+  };
+  const [poolGameOpen, setPoolGameOpen] = useState(false);
+  const [houseItemCategory, setHouseItemCategory] = useState<string | null>(null);
+  const [selectedHouseItem, setSelectedHouseItem] = useState<any | null>(null);
+  const [itemPositions, setItemPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [roomScrollEnabled, setRoomScrollEnabled] = useState(true);
+  const itemPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const interiorHouseRef = useRef<any | null>(null);
+  const dragStartRef = useRef<Record<string, { x: number; y: number }>>({});
+  const itemRespondersRef = useRef<Record<string, any>>({});
+  const roomHeight = Dimensions.get('window').height;
+  const roomWidth = roomHeight * (1280 / 853);
+  useEffect(() => {
+    interiorHouseRef.current = interiorHouse;
+  }, [interiorHouse]);
+  useEffect(() => {
+    const pos: Record<string, { x: number; y: number }> = {};
+    (interiorHouse?.items || []).forEach((it: any) => {
+      pos[it.item_id] = { x: typeof it.x === 'number' ? it.x : 0.5, y: typeof it.y === 'number' ? it.y : 0.5 };
+    });
+    itemPositionsRef.current = pos;
+    setItemPositions(pos);
+  }, [interiorHouse]);
+  const getItemResponder = (itemId: string) => {
+    if (!itemRespondersRef.current[itemId]) {
+      itemRespondersRef.current[itemId] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          setRoomScrollEnabled(false);
+          dragStartRef.current[itemId] = itemPositionsRef.current[itemId] || { x: 0.5, y: 0.5 };
+        },
+        onPanResponderMove: (evt: any, gesture: any) => {
+          const s = dragStartRef.current[itemId] || { x: 0.5, y: 0.5 };
+          const nx = Math.min(0.94, Math.max(0.06, s.x + gesture.dx / roomWidth));
+          const ny = Math.min(0.94, Math.max(0.06, s.y + gesture.dy / roomHeight));
+          itemPositionsRef.current = { ...itemPositionsRef.current, [itemId]: { x: nx, y: ny } };
+          setItemPositions(itemPositionsRef.current);
+        },
+        onPanResponderRelease: (evt: any, gesture: any) => {
+          setRoomScrollEnabled(true);
+          const tapDist = Math.hypot(gesture.dx, gesture.dy);
+          if (tapDist < 12) {
+            if (itemId === 'pool-table') setPoolMenuOpen(true);
+            if (itemId === 'dartboard') setDartMenuOpen(true);
+            if (itemId === 'cardtable') setCardMenuOpen(true);
+            if (itemId === 'dominoes') setDominoMenuOpen(true);
+            if (itemId === 'scrabble') setScrabbleMenuOpen(true);
+            return;
+          }
+          const s = dragStartRef.current[itemId] || { x: 0.5, y: 0.5 };
+          const fx = Math.min(0.94, Math.max(0.06, s.x + gesture.dx / roomWidth));
+          const fy = Math.min(0.94, Math.max(0.06, s.y + gesture.dy / roomHeight));
+          const house = interiorHouseRef.current;
+          if (house && playerId) {
+            fetch(`https://gta-quest-map.emergent.host/api/houses/${house.id}/items/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, item_id: itemId, x: fx, y: fy }) }).then((r: any) => { if (!r.ok) throw new Error('move failed'); return r.json(); }).then((res: any) => {
+              if (res?.house) setInteriorHouse(res.house);
+            }).catch(() => {
+              Alert.alert('Item', 'Could not save position.');
+            });
+          }
+        },
+        onPanResponderTerminate: () => {
+          setRoomScrollEnabled(true);
+        },
+      });
+    }
+    return itemRespondersRef.current[itemId];
+  };
+  const handleHouseItemToggle = (item: any) => {
+    const placed = (interiorHouse?.items || []).some((it: any) => it.item_id === item.id);
+    const knownPrice: any = { 'pool-table': 50000, 'dartboard': 10000 };
+    const price = item.price ?? knownPrice[item.id];
+    const title = placed ? 'Sell ' + item.name + '?' : 'Buy ' + item.name + '?';
+    const msg = placed
+      ? (price ? 'Sell ' + item.name + ' for $' + Math.floor(price / 2).toLocaleString() + ' back?' : 'Remove ' + item.name + ' from your house?')
+      : (price ? 'Buy ' + item.name + ' for $' + price.toLocaleString() + '?' : 'Place ' + item.name + ' in your house?');
+    Alert.alert(title, msg, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: placed ? 'Sell' : 'Buy', onPress: () => handleHouseItemToggleDo(item) },
+    ]);
+  };
+  const handleHouseItemToggleDo = async (item: any) => {
+    if (!interiorHouse || !playerId) return;
+    const postItem = async (action: string) => {
+      const r = await fetch(`https://gta-quest-map.emergent.host/api/houses/${interiorHouse.id}/items/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: playerId, item_id: item.id }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data?.detail || 'Request failed');
+      return data;
+    };
+    const placed = (interiorHouse.items || []).some((it: any) => it.item_id === item.id);
+    const invCount = (player?.inventory_items || []).filter((id: string) => id === item.id).length;
+    try {
+      const res = placed
+        ? await postItem('remove')
+        : invCount > 0
+          ? await postItem('place-from-inventory')
+          : await postItem('add');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+        if (player) {
+          const next: any = { ...player };
+          if (typeof res.cash === 'number') next.cash = res.cash;
+          if (Array.isArray(res.inventory_items)) next.inventory_items = res.inventory_items;
+          setPlayer(next);
+        }
+      } else {
+        const next = (interiorHouse.items || []).filter((it: any) => it.item_id !== item.id);
+        if (!placed) next.push({ item_id: item.id, name: item.name, x: 0.5, y: 0.5 });
+        setInteriorHouse({ ...interiorHouse, items: next });
+        if (!placed && invCount > 0 && player) {
+          const inv = [...(player.inventory_items || [])];
+          const idx = inv.indexOf(item.id);
+          if (idx >= 0) inv.splice(idx, 1);
+          setPlayer({ ...player, inventory_items: inv });
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Item', e?.response?.data?.detail || e?.message || 'Could not update item.');
+    }
+  };
+  const [houseHidden, setHouseHidden] = useState(false);
+
+const HOUSE_IMAGES: Record<string, any> = {
+  apartment: require('../../assets/houses/house-apartment.jpg'),
+  cabin: require('../../assets/houses/house-cabin.jpg'),
+  mansion: require('../../assets/houses/house-mansion.jpg'),
+};
+// House shop items by category — empty for now, filled in a later step.
+const HOUSE_ITEMS: Record<string, any[]> = {
+  games: [{ id: 'pool-table', name: 'Pool Table', image: require('../../assets/houses/items/pool-table.png'), price: 50000 }, { id: 'dartboard', name: 'Dartboard', image: require('../../assets/houses/items/dartboard.png'), price: 10000 }, { id: 'cardtable', name: 'Card Table', image: require('../../assets/houses/items/cardtable.png'), price: 20000 }, { id: 'dominoes', name: 'Dominoes Table', image: require('../../assets/houses/items/dominoes.png'), price: 20000 }, { id: 'scrabble', name: 'Scrabble Table', image: require('../../assets/houses/items/scrabble.png'), price: 20000 }],
+  appliances: [],
+  utilities: [],
+};
   const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
   const [selectedCarChase, setSelectedCarChase] = useState<any | null>(null);
   const [selectedRunaway, setSelectedRunaway] = useState<any | null>(null);
@@ -162,6 +1726,7 @@ export default function MapScreen() {
   const nearbyRestaurants = useMemo(() => entitiesData?.restaurants || [], [entitiesData?.restaurants]);
   const nearbyNightclubs = useMemo(() => entitiesData?.nightclubs || [], [entitiesData?.nightclubs]);
   const nearbyBanks = useMemo(() => entitiesData?.banks || [], [entitiesData?.banks]);
+  const nearbyHouses = useMemo(() => entitiesData?.houses || [], [entitiesData?.houses]);
   const nearbyCasinos = useMemo(() => entitiesData?.casinos || [], [entitiesData?.casinos]);
   const nearbyCastles = useMemo(() => entitiesData?.castles || [], [entitiesData?.castles]);
   const nearbyCarChases = useMemo(() => entitiesData?.carChases || [], [entitiesData?.carChases]);
@@ -688,6 +2253,13 @@ export default function MapScreen() {
       name: b.name,
       icon: '🏦',
     })),
+    ...nearbyHouses.map((h) => ({
+      id: h.id,
+      coordinate: { latitude: h.latitude, longitude: h.longitude },
+      type: 'house' as const,
+      name: h.name,
+      icon: '🏠',
+    })),
     ...nearbyCasinos.map((c) => ({
       id: c.id,
       coordinate: { latitude: c.latitude, longitude: c.longitude },
@@ -788,6 +2360,14 @@ export default function MapScreen() {
     } else if (marker.type === 'bank') {
       const bank = nearbyBanks.find((b) => b.id === marker.id);
       if (bank) setSelectedBank(bank);
+    } else if (marker.type === 'house') {
+      const house = nearbyHouses.find((h) => h.id === marker.id);
+      if (house) {
+        setSelectedMarker({ type: 'house', data: house });
+        if (house.player_id === playerId && playerId) {
+          getPlayer(playerId).then((p: any) => setHouseHidden(!!p.hidden_from_map)).catch(() => {});
+        }
+      }
     } else if (marker.type === 'casino') {
       const casino = nearbyCasinos.find((c) => c.id === marker.id);
       if (casino) {
@@ -809,7 +2389,7 @@ export default function MapScreen() {
       const shootout = nearbyShootouts.find((s) => s.id === marker.id);
       if (shootout) setSelectedShootout(shootout);
     }
-  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCasinos, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, nearbyShootouts]);
+  }, [nearbyMonsters, nearbyMissions, nearbyPlayers, nearbyShops, nearbyRestaurants, nearbyNightclubs, nearbyBanks, nearbyCasinos, nearbyCastles, nearbyCarChases, nearbyRunaways, nearbyPackageGrabs, nearbyShootouts, nearbyHouses]);
 
   if (loading) {
     return (
@@ -860,7 +2440,7 @@ export default function MapScreen() {
         <View style={styles.hudRight}>
           <TouchableOpacity style={styles.shopButton} onPress={() => router.push('/shop')}>
             <Ionicons name="storefront" size={16} color="#f39c12" />
-            <Text style={styles.shopCash}>${player?.cash || 0}</Text>
+            <Text style={styles.shopCash} numberOfLines={1} adjustsFontSizeToFit>${(player?.cash || 0).toLocaleString()}</Text>
           </TouchableOpacity>
           <View style={[styles.gpsIndicator, isTracking && styles.gpsActive]}>
             <Ionicons name="navigate" size={14} color={isTracking ? '#34A853' : '#888'} />
@@ -1047,7 +2627,7 @@ export default function MapScreen() {
                 </View>
                 <View style={styles.rewardItem}>
                   <Ionicons name="cash" size={14} color="#34A853" />
-                  <Text style={styles.rewardText}>Your cash: ${player?.cash || 0}</Text>
+                  <Text style={styles.rewardText}>Your cash: ${(player?.cash || 0).toLocaleString()}</Text>
                 </View>
               </View>
               <TouchableOpacity 
@@ -1162,8 +2742,221 @@ export default function MapScreen() {
               </TouchableOpacity>
             </View>
           )}
+          {selectedMarker.type === 'house' && (
+            <View>
+              <View style={styles.popupHeader}>
+                <Text style={{ fontSize: 28 }}>🏠</Text>
+                <View style={styles.popupHeaderText}>
+                  <Text style={styles.popupTitle}>{selectedMarker.data.name}</Text>
+                  <Text style={styles.popupSubtitle}>Owned by {selectedMarker.data.player_name || 'someone'}</Text>
+                </View>
+              </View>
+              {selectedMarker.data.player_id === playerId ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#4caf50' }]}
+                    onPress={() => setInteriorHouse(selectedMarker.data)}
+                  >
+                    <Text style={styles.actionButtonText}>ENTER HOUSE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#666' }]}
+                    onPress={async () => {
+                      if (!playerId) return;
+                      try {
+                        const res = await toggleHouseHide(selectedMarker.data.id, playerId);
+                        setHouseHidden(res.hidden);
+                        showGameToast({ type: 'info', title: res.hidden ? 'Hidden' : 'Visible', message: res.hidden ? 'Other players can no longer see you on the map.' : 'Other players can see you again.', duration: 3000 });
+                      } catch (err: any) {
+                        showGameToast({ type: 'warning', title: 'Error', message: err?.response?.data?.detail || 'Could not toggle hide', duration: 3000 });
+                      }
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>{houseHidden ? 'UNHIDE ME' : 'HIDE ME FROM MAP'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#f39c12' }]}
+                    onPress={() => {
+                      Alert.alert('Move House?', `${selectedMarker.data.name} will go into your inventory. You can place it again anytime from the Shop House tab.`, [
+                        { text: 'Keep It Here', style: 'cancel' },
+                        { text: 'Move', onPress: async () => {
+                          if (!playerId) return;
+                          try {
+                            await moveHouseToInventory(selectedMarker.data.id, playerId);
+                            showGameToast({ type: 'success', title: 'House Moved', message: 'Your house is in your inventory. Place it again from the Shop House tab.', duration: 3000 });
+                            setSelectedMarker(null);
+                            refetchEntities();
+                            refetchPlayer();
+                          } catch (err: any) {
+                            showGameToast({ type: 'warning', title: 'Error', message: err?.response?.data?.detail || 'Could not move house', duration: 3000 });
+                          }
+                        } },
+                      ]);
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>MOVE TO INVENTORY</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#e74c3c' }]}
+                    onPress={() => {
+                      const refund = Math.floor((selectedMarker.data.price || 0) / 2);
+                      Alert.alert('Sell House?', `Sell ${selectedMarker.data.name} for $${refund.toLocaleString()} (half of what you paid)?`, [
+                        { text: 'Keep It', style: 'cancel' },
+                        { text: 'Sell', style: 'destructive', onPress: async () => {
+                          if (!playerId) return;
+                          try {
+                            const res = await sellHouse(selectedMarker.data.id, playerId);
+                            showGameToast({ type: 'success', title: 'House Sold', message: `+$${res.refund.toLocaleString()} cash back.`, duration: 3000 });
+                            setSelectedMarker(null);
+                            refetchEntities();
+                            refetchPlayer();
+                          } catch (err: any) {
+                            showGameToast({ type: 'warning', title: 'Error', message: err?.response?.data?.detail || 'Could not sell', duration: 3000 });
+                          }
+                        } },
+                      ]);
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>SELL FOR ${Math.floor((selectedMarker.data.price || 0) / 2).toLocaleString()}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <Text style={styles.popupSubtitle}>This house belongs to another player.</Text>
+              )}
+            </View>
+          )}
         </View>
       )}
+
+      {poolMenuOpen ? (
+        <PoolTableMenuModal visible={poolMenuOpen} onClose={() => setPoolMenuOpen(false)} onPlayPvc={() => { setPoolMenuOpen(false); setPoolGameOpen(true); }} onPlayPvp={() => { setPoolMenuOpen(false); setPoolPvpOpen(true); }} onMove={() => setPoolMenuOpen(false)} onSell={sellPoolTable} />
+      ) : null}
+
+      {poolGameOpen ? (
+        <PoolGameModal visible={poolGameOpen} onClose={() => setPoolGameOpen(false)} />
+      ) : null}
+
+{poolPvpOpen ? (<PoolPvpModal visible={poolPvpOpen} onClose={() => setPoolPvpOpen(false)} playerId={playerId} playerName={'Player'} room={poolPvpRoom} setRoom={setPoolPvpRoom} onPlay={() => { setPoolPvpOpen(false); setPoolPvpGameOpen(true); }} onLeave={handlePvpLeave} />) : null}
+      {poolPvpGameOpen && poolPvpRoom ? (<PoolPvpGameModal visible={poolPvpGameOpen} onClose={() => { setPoolPvpGameOpen(false); setPoolPvpOpen(true); }} room={poolPvpRoom} playerId={playerId} />) : null}
+      {dartMenuOpen ? (<DartboardMenuModal visible={dartMenuOpen} onClose={() => setDartMenuOpen(false)} onPlay={() => { setDartMenuOpen(false); setDartGameOpen(true); }} onMove={() => setDartMenuOpen(false)} onPlayPvp={() => { setDartMenuOpen(false); setDartPvpOpen(true); }} onSell={sellDartboard} />) : null}
+      {dartGameOpen ? (<DartGameModal visible={dartGameOpen} onClose={() => setDartGameOpen(false)} />) : null}
+      {dartPvpOpen ? (<DartPvpModal visible={dartPvpOpen} onClose={() => setDartPvpOpen(false)} playerId={playerId} playerName={'Player'} room={dartPvpRoom} setRoom={setDartPvpRoom} onPlay={() => { setDartPvpOpen(false); setDartPvpGameOpen(true); }} onLeave={handleDartPvpLeave} />) : null}
+      {dartPvpGameOpen && dartPvpRoom ? (<DartPvpGameModal visible={dartPvpGameOpen} onClose={() => { setDartPvpGameOpen(false); setDartPvpOpen(true); }} room={dartPvpRoom} playerId={playerId} />) : null}
+      {cardMenuOpen ? (<CardTableMenuModal visible={cardMenuOpen} onClose={() => setCardMenuOpen(false)} onPlaySpades={() => { setCardMenuOpen(false); setCardGame('spades'); setCardGameOpen(true); }} onPlayGin={() => { setCardMenuOpen(false); setCardGame('gin'); setCardGameOpen(true); }} onPlayPvp={() => { setCardMenuOpen(false); setCardPvpOpen(true); }} onMove={() => setCardMenuOpen(false)} onSell={sellCardTable} />) : null}
+      {cardGameOpen ? (<CardGameModal visible={cardGameOpen} onClose={() => setCardGameOpen(false)} game={cardGame} />) : null}
+      {cardPvpOpen ? (<CardPvpModal visible={cardPvpOpen} onClose={() => setCardPvpOpen(false)} playerId={playerId} playerName={'Player'} room={cardPvpRoom} setRoom={setCardPvpRoom} onPlay={() => { setCardPvpOpen(false); setCardPvpGameOpen(true); }} onLeave={handleCardPvpLeave} />) : null}
+      {cardPvpGameOpen && cardPvpRoom ? (<CardPvpGameModal visible={cardPvpGameOpen} onClose={() => { setCardPvpGameOpen(false); setCardPvpOpen(true); }} room={cardPvpRoom} playerId={playerId} />) : null}
+      {dominoMenuOpen ? (<DominoTableMenuModal visible={dominoMenuOpen} onClose={() => setDominoMenuOpen(false)} onPlay={() => { setDominoMenuOpen(false); setDominoGameOpen(true); }} onPlayPvp={() => { setDominoMenuOpen(false); setDominoPvpOpen(true); }} onMove={() => setDominoMenuOpen(false)} onSell={sellDominoes} />) : null}
+      {dominoGameOpen ? (<DominoGameModal visible={dominoGameOpen} onClose={() => setDominoGameOpen(false)} />) : null}
+      {dominoPvpOpen ? (<DominoPvpModal visible={dominoPvpOpen} onClose={() => setDominoPvpOpen(false)} playerId={playerId} playerName={'Player'} room={dominoPvpRoom} setRoom={setDominoPvpRoom} onPlay={() => { setDominoPvpOpen(false); setDominoPvpGameOpen(true); }} onLeave={handleDominoPvpLeave} />) : null}
+      {dominoPvpGameOpen && dominoPvpRoom ? (<DominoPvpGameModal visible={dominoPvpGameOpen} onClose={() => { setDominoPvpGameOpen(false); setDominoPvpOpen(true); }} room={dominoPvpRoom} playerId={playerId} />) : null}
+      {scrabbleMenuOpen ? (<ScrabbleTableMenuModal visible={scrabbleMenuOpen} onClose={() => setScrabbleMenuOpen(false)} onPlay={() => { setScrabbleMenuOpen(false); setScrabbleGameOpen(true); }} onPlayPvp={() => { setScrabbleMenuOpen(false); setScrabblePvpOpen(true); }} onMove={() => setScrabbleMenuOpen(false)} onSell={sellScrabble} />) : null}
+      {scrabbleGameOpen ? (<ScrabbleGameModal visible={scrabbleGameOpen} onClose={() => setScrabbleGameOpen(false)} />) : null}
+      {scrabblePvpOpen ? (<ScrabblePvpModal visible={scrabblePvpOpen} onClose={() => setScrabblePvpOpen(false)} playerId={playerId} playerName={'Player'} room={scrabblePvpRoom} setRoom={setScrabblePvpRoom} onPlay={() => { setScrabblePvpOpen(false); setScrabblePvpGameOpen(true); }} onLeave={handleScrabblePvpLeave} />) : null}
+      {scrabblePvpGameOpen && scrabblePvpRoom ? (<ScrabblePvpGameModal visible={scrabblePvpGameOpen} onClose={() => { setScrabblePvpGameOpen(false); setScrabblePvpOpen(true); }} room={scrabblePvpRoom} playerId={playerId} />) : null}
+            {/* House Interior Modal */}
+      <Modal
+        visible={!!interiorHouse}
+        animationType="slide"
+        onRequestClose={() => setInteriorHouse(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          {interiorHouse && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flex: 1 }}
+              scrollEnabled={roomScrollEnabled}
+            >
+              <View style={{ height: roomHeight, width: roomWidth }}>
+                <Image
+                  source={HOUSE_IMAGES[interiorHouse.tier] || HOUSE_IMAGES.apartment}
+                  style={{ height: roomHeight, width: roomWidth }}
+                  resizeMode="cover"
+                />
+                {(interiorHouse?.items || []).map((placed: any) => {
+                  const def = (HOUSE_ITEMS[placed.category] || []).find((it: any) => it.id === placed.item_id) || { name: placed.name };
+                  const pos = itemPositions[placed.item_id] || { x: 0.5, y: 0.5 };
+                  const iw = placed.item_id === 'pool-table' ? 280 : 180;
+                  const ih = placed.item_id === 'pool-table' ? 187 : 120;
+                  return (
+                    <View
+                      key={placed.item_id}
+                      {...getItemResponder(placed.item_id).panHandlers}
+                      style={{ position: 'absolute', left: pos.x * roomWidth - iw / 2, top: pos.y * roomHeight - ih / 2, width: iw, height: ih }}
+                    >
+                      {def.image ? (
+                        <Image source={def.image} style={{ width: iw, height: ih, borderRadius: 8 }} resizeMode={placed.item_id === 'pool-table' ? "contain" : "cover"} />
+                      ) : (
+                        <Text style={{ color: '#fff', fontWeight: '700' }}>{def.name}</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          )}
+          {/* House item tabs (top) + dropdown */}
+          <View style={{ position: 'absolute', top: 96, left: 16, right: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{interiorHouse?.name || ''}</Text>
+              <Text style={{ color: '#f39c12', fontWeight: '700', fontSize: 12 }}>{(interiorHouse?.items?.length || 0)}/{interiorHouse?.item_limit || 6} items</Text>
+            </View>
+            <Text style={{ color: '#f39c12', fontWeight: '800', fontSize: 14, marginBottom: 8 }}>💰 ${(player?.cash || 0).toLocaleString()}</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {([
+                { key: 'games', icon: '🎮', label: 'Games' },
+                { key: 'appliances', icon: '📺', label: 'Appliances' },
+                { key: 'utilities', icon: '💡', label: 'Utilities' },
+              ]).map((c) => (
+                <TouchableOpacity
+                  key={c.key}
+                  onPress={() => setHouseItemCategory(houseItemCategory === c.key ? null : c.key)}
+                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: houseItemCategory === c.key ? '#f39c12' : 'rgba(0,0,0,0.6)' }}
+                >
+                  <Text style={{ fontSize: 22 }}>{c.icon}</Text>
+                  <Text style={{ color: houseItemCategory === c.key ? '#000' : '#fff', fontWeight: '800', fontSize: 11, marginTop: 2 }}>{c.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {houseItemCategory && (
+              <View style={{ marginTop: 8, backgroundColor: 'rgba(0,0,0,0.88)', borderRadius: 12, borderWidth: 1, borderColor: '#222', padding: 12, maxHeight: 280 }}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {(HOUSE_ITEMS[houseItemCategory] || []).length === 0 ? (
+                    <Text style={{ color: '#888', fontSize: 13, textAlign: 'center' }}>
+                      {houseItemCategory === 'games' ? 'No games yet.' : houseItemCategory === 'appliances' ? 'No appliances yet.' : 'No utilities yet.'}
+                    </Text>
+                  ) : (
+                    (HOUSE_ITEMS[houseItemCategory] || []).map((item: any) => {
+                      const placed = (interiorHouse?.items || []).some((it: any) => it.item_id === item.id);
+                      const invCount = (player?.inventory_items || []).filter((id: string) => id === item.id).length;
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          onPress={() => handleHouseItemToggle(item)}
+                          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222', gap: 10 }}
+                        >
+                          {item.image ? (
+                            <Image source={item.image} style={{ width: 44, height: 44, borderRadius: 8 }} resizeMode="cover" />
+                          ) : null}
+                          <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }}>{item.name}</Text>
+                          <Text style={{ color: placed ? '#4caf50' : invCount > 0 ? '#5dade2' : '#f39c12', fontWeight: '800', fontSize: 12 }}>{placed ? '✓ PLACED' : invCount > 0 ? `IN INVENTORY${invCount > 1 ? ` (${invCount})` : ''} — TAP TO PLACE` : (item.price ? `BUY $${item.price.toLocaleString()}` : 'TAP TO PLACE')}</Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 48, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 }}
+            onPress={() => setInteriorHouse(null)}
+          >
+            <Text style={{ color: '#fff', fontWeight: '800' }}>LEAVE HOUSE ✕</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* Territory Modal */}
       <Modal

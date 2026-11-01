@@ -148,8 +148,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
 
     // Existing entity markers stored by ID
     var entityMarkers = {};
-    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513', carChase: '#e74c3c', runaway: '#00b894', packageGrab: '#e67e22', shootout: '#c0392b', casino: '#d4af37' };
-    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔', packageGrab: '📦', shootout: '🔫', casino: '🎰' };
+    var markerColors = { monster: '#EA4335', mission: '#FBBC04', bounty: '#4CAF50', player: '#4285F4', shop: '#FF6F00', restaurant: '#FF5722', nightclub: '#9b59b6', bank: '#2E7D32', castle: '#8B4513', carChase: '#e74c3c', runaway: '#00b894', packageGrab: '#e67e22', shootout: '#c0392b', casino: '#d4af37', house: '#FF9800' };
+    var markerIcons = { monster: '\\u{1F480}', mission: '\\u{260E}\\u{FE0F}', bounty: '\\u{1F4B2}', player: '\\u{1F464}', shop: '\\u{1F3EA}', restaurant: '\\u{1F354}', nightclub: '🎵', bank: '\\u{1F3E6}', castle: '\\u{1F3F0}', carChase: '🚗', runaway: '🚔', packageGrab: '📦', shootout: '🔫', casino: '🎰', house: '🏠' };
     var ENEMY_IMGS = JSON.parse('${enemyImagesJSON}');
     
     // Mini-game marker settings - only show ONE random mini-game at a time
@@ -491,6 +491,8 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 '<div style="position:absolute;top:-8px;right:-4px;background:#e74c3c;color:#fff;padding:1px 5px;border-radius:8px;font-size:9px;font-weight:bold;border:2px solid #fff;">🎯' + shootoutLevel + '</div>' +
                 '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(192,57,43,0.95);color:#fff;padding:2px 8px;border-radius:5px;font-size:7px;font-weight:bold;white-space:nowrap;z-index:10;border:1px solid #fff;">' + shootoutName + '</div>' +
                 '</div>';
+            } else if (m.type === 'house') {
+              markerHTML = '<div style="font-size:64px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.6));cursor:pointer;">🏠</div>';
             } else if (enemyImg) {
               var isBoss = m.isBoss || false;
               var lvlBadge = m.level ? '<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:' + (isBoss ? '#FFD700' : '#ff6b35') + ';color:' + (isBoss ? '#000' : '#fff') + ';padding:1px 5px;border-radius:6px;font-size:9px;font-weight:bold;white-space:nowrap;border:1px solid #fff;z-index:10;">' + m.level + '</div>' : '';
@@ -508,6 +510,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             }
             
             var isBossMarker = (m.type === 'monster' && m.isBoss);
+            var isHouseMarker = (m.type === 'house');
             var isLocationMarker = (m.type === 'restaurant' || m.type === 'nightclub');
             var isBankMarker = (m.type === 'bank');
             var isCasinoMarker = (m.type === 'casino');
@@ -516,9 +519,9 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var isRunawayMarker = (m.type === 'runaway');
             var isPackageGrabMarker = (m.type === 'packageGrab');
             var isShootoutMarker = (m.type === 'shootout');
-            var markerWidth = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 56 : (isLocationMarker ? 48 : ((isBankMarker || isCasinoMarker) ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32))));
-            var markerHeight = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 72 : (isLocationMarker ? 62 : ((isBankMarker || isCasinoMarker) ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32))));
-            var iconAnchorY = (isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : ((isBankMarker || isCasinoMarker) ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16))));
+            var markerWidth = isHouseMarker ? 72 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 56 : (isLocationMarker ? 48 : ((isBankMarker || isCasinoMarker) ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32)))));
+            var markerHeight = isHouseMarker ? 72 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 72 : (isLocationMarker ? 62 : ((isBankMarker || isCasinoMarker) ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32)))));
+            var iconAnchorY = isHouseMarker ? 36 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : ((isBankMarker || isCasinoMarker) ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16)))));
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,
