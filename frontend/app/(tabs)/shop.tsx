@@ -422,8 +422,33 @@ export default function ShopTabScreen() {
                     <Text style={HOUSE_STYLES.houseWarn}>You already own {myHouse.name} — buying replaces it.</Text>
                   )}
                   {owned ? (
-                    <View style={HOUSE_STYLES.houseOwnedBadge}>
-                      <Text style={HOUSE_STYLES.houseOwnedText}>YOUR HOUSE</Text>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                      <View style={HOUSE_STYLES.houseOwnedBadge}>
+                        <Text style={HOUSE_STYLES.houseOwnedText}>YOUR HOUSE</Text>
+                      </View>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <TouchableOpacity
+                          style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                          onPress={() => {
+                            if (!(myHouse.id) || !playerId) { Alert.alert('Move House', 'No house to move.'); return; }
+                            Alert.alert('Move House?', `Your house will go into your inventory. You can place it again anytime from the Shop House tab.`, [
+                              { text: 'Keep It Here', style: 'cancel' },
+                              { text: 'Move', onPress: async () => {
+                                try {
+                                  await moveHouseToInventory(myHouse.id, playerId);
+                                  Alert.alert('House Moved', 'Your house is in your inventory. Place it again from the INVENTORY section in the Shop House tab.');
+                                } catch (err: any) {
+                                  Alert.alert('Move Failed', err?.response?.data?.detail || err?.message || 'Could not move house.');
+                                }
+                              } },
+                            ]);
+                          }}
+                        >
+                          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ) : (
                     <TouchableOpacity

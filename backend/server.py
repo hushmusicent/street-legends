@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 import math
 from passlib.context import CryptContext
@@ -268,7 +268,7 @@ DURABILITY_LOSS = {
     "weapon": {"per_battle": 16, "on_hit": 4},       # Loses durability per battle + extra on hits
     "armor": {"per_battle": 10, "on_damage": 6},     # Loses durability per battle + extra when damaged
     "accessory": {"per_battle": 4, "passive": 2},    # Small loss per battle + passive decay
-    "vehicle": {"per_use": 20, "per_territory": 30}, # Loses on movement/territory capture
+    "vehicle": {"per_use": 20, "per_territory": 30, "per_km": 1}, # Loses on movement/territory capture
 }
 
 # Repair cost multiplier by rarity (cost = base_value * multiplier * damage_percent)
@@ -480,7 +480,7 @@ async def apply_battle_durability_loss(player_id: str, dealt_damage: bool, took_
     )
 
 
-async def apply_vehicle_durability_loss(player_id: str, action_type: str = "use"):
+async def apply_vehicle_durability_loss(player_id: str, action_type: str = "use", distance_km: float = 0):
     """Apply durability loss to equipped vehicle for movement/territory actions"""
     player = await db.players.find_one({"id": player_id})
     if not player:
@@ -502,7 +502,7 @@ async def apply_vehicle_durability_loss(player_id: str, action_type: str = "use"
             if action_type == "territory":
                 loss = DURABILITY_LOSS["vehicle"]["per_territory"]
             else:
-                loss = DURABILITY_LOSS["vehicle"]["per_use"]
+                loss = int(distance_km) if action_type == "travel" else DURABILITY_LOSS["vehicle"]["per_use"]
             
             new_dur = max(0, current_dur - loss)
             inventory[idx]["durability"] = new_dur
@@ -2487,10 +2487,29 @@ async def get_player(player_id: str):
 @api_router.put("/players/{player_id}/position")
 async def update_player_position(player_id: str, position: Position):
     """Update player's GPS position"""
+    player = await db.players.find_one({"_id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    _vehicle_remainder_km = float(player.get("vehicle_travel_remainder_km", 0.0) or 0.0)
+    _vehicle_whole_km = 0
+    try:
+        _prev = player.get("position") or {}
+        if _prev.get("latitude") is not None and _prev.get("longitude") is not None:
+            _dist_m = calculate_distance(Position(latitude=_prev["latitude"], longitude=_prev["longitude"]), position)
+            _total_km = _vehicle_remainder_km + (_dist_m / 1000.0)
+            _vehicle_whole_km = int(_total_km)
+            _vehicle_remainder_km = _total_km - _vehicle_whole_km
+    except Exception:
+        pass
     result = await db.players.update_one(
         {"id": player_id},
-        {"$set": {"position": position.dict(), "last_active": datetime.utcnow()}}
+        {"$set": {"position": position.dict(), "last_active": datetime.utcnow(), "vehicle_travel_remainder_km": _vehicle_remainder_km}}
     )
+    if _vehicle_whole_km >= 1:
+        try:
+            await apply_vehicle_durability_loss(player_id, "travel", distance_km=_vehicle_whole_km)
+        except Exception:
+            pass
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     return {"status": "position updated"}
