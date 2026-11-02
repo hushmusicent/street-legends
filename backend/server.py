@@ -11144,31 +11144,31 @@ class ScrabbleRoomLeave(BaseModel):
     player_id: str
 
 
-def _scrabble_room_code():
+async def _scrabble_room_code():
     for _ in range(50):
         code = str(random.randint(1000, 9999))
-        if db.scrabble_rooms.count_documents({"code": code}) == 0:
+        if await db.scrabble_rooms.count_documents({"code": code}) == 0:
             return code
     return str(random.randint(1000, 9999))
 
 
-@api_router.post("/api/scrabble/rooms/create")
+@api_router.post("/scrabble/rooms/create")
 async def scrabble_room_create(body: ScrabbleRoomCreate):
-    code = _scrabble_room_code()
+    code = await _scrabble_room_code()
     seed = body.seed if body.seed else random.randint(1, 2147483647)
     now = datetime.now(timezone.utc).isoformat()
     room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
             "guest_id": None, "guest_name": None, "seed": seed,
             "status": "waiting",
             "state": None, "chat": [], "created_at": now, "updated_at": now}
-    db.scrabble_rooms.insert_one(room)
+    await db.scrabble_rooms.insert_one(room)
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/scrabble/rooms/join")
+@api_router.post("/scrabble/rooms/join")
 async def scrabble_room_join(body: ScrabbleRoomJoin):
-    room = db.scrabble_rooms.find_one({"code": body.code})
+    room = await db.scrabble_rooms.find_one({"code": body.code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
@@ -11176,61 +11176,61 @@ async def scrabble_room_join(body: ScrabbleRoomJoin):
         return room
     if room["status"] != "waiting":
         raise HTTPException(status_code=400, detail="Room is not waiting")
-    db.scrabble_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.scrabble_rooms.find_one({"code": body.code})
+    await db.scrabble_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.scrabble_rooms.find_one({"code": body.code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.get("/api/scrabble/rooms/{code}")
+@api_router.get("/scrabble/rooms/{code}")
 async def scrabble_room_get(code: str):
-    room = db.scrabble_rooms.find_one({"code": code})
+    room = await db.scrabble_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/scrabble/rooms/{code}/shot")
+@api_router.post("/scrabble/rooms/{code}/shot")
 async def scrabble_room_shot(code: str, body: ScrabbleRoomShot):
-    room = db.scrabble_rooms.find_one({"code": code})
+    room = await db.scrabble_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
-    db.scrabble_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.scrabble_rooms.find_one({"code": code})
+    await db.scrabble_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.scrabble_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/scrabble/rooms/{code}/chat")
+@api_router.post("/scrabble/rooms/{code}/chat")
 async def scrabble_room_chat(code: str, body: ScrabbleRoomChat):
-    room = db.scrabble_rooms.find_one({"code": code})
+    room = await db.scrabble_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
-    db.scrabble_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.scrabble_rooms.find_one({"code": code})
+    await db.scrabble_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.scrabble_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
-        db.scrabble_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
-        room = db.scrabble_rooms.find_one({"code": code})
+        await db.scrabble_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.scrabble_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/scrabble/rooms/{code}/leave")
+@api_router.post("/scrabble/rooms/{code}/leave")
 async def scrabble_room_leave(code: str, body: ScrabbleRoomLeave):
-    room = db.scrabble_rooms.find_one({"code": code})
+    room = await db.scrabble_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["status"] == "waiting":
-        db.scrabble_rooms.delete_one({"code": code})
+        await db.scrabble_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
-    db.scrabble_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await db.scrabble_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
 
