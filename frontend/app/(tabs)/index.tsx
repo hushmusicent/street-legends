@@ -45,6 +45,10 @@ import { DOMINO_HTML } from '../../components/DominoHtml';
 import { DOMINO_PVP_HTML } from '../../components/DominoPvpHtml';
 import { SCRABBLE_HTML } from '../../components/ScrabbleHtml';
 import { SCRABBLE_PVP_HTML } from '../../components/ScrabblePvpHtml';
+import { CHESS_CHECKERS_HTML } from '../../components/ChessCheckersHtml';
+import { CHESS_CHECKERS_PVP_HTML } from '../../components/ChessCheckersPvpHtml';
+import { TEXAS_HOLDEM_HTML } from '../../components/TexasHoldemHtml';
+import { TEXAS_HOLDEM_PVP_HTML } from '../../components/TexasHoldemPvpHtml';
 
 let PoolWebView: any = null;
 try { PoolWebView = require('react-native-webview').default; } catch (e) { PoolWebView = null; }
@@ -254,7 +258,7 @@ const PoolPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
-            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room:</Text>
             <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
             <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
@@ -504,7 +508,7 @@ const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
-            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room:</Text>
             <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
             <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
@@ -766,7 +770,7 @@ const CardPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
             <TouchableOpacity onPress={() => createRoom('gin')} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE GIN RUMMY ROOM</Text>
             </TouchableOpacity>
-            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room:</Text>
             <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
             <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
@@ -1018,7 +1022,7 @@ const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom,
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
-            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room:</Text>
             <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
             <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
@@ -1270,7 +1274,549 @@ const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoo
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
-            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend's room:</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room:</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const CC_API_BASE = "https://gta-quest-map.emergent.host";
+
+const ChessCheckersTableMenuModal = ({ visible, onClose, onPlay, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlay: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 4 }}>CHESS &amp; CHECKERS TABLE</Text>
+        <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Play Chess or Checkers, move it, or sell it.</Text>
+        <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY VS COMPUTER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 10 }}>Move: close this menu, then drag the table.</Text>
+        <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($15,000 back)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+};
+
+const ChessCheckersGameModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>CHESS &amp; CHECKERS - YOU vs CPU</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: CHESS_CHECKERS_HTML }}
+            injectedJavaScriptBeforeContentLoaded="window.CHESS_CHECKERS_APP=1; true;"
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Chess &amp; Checkers needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerName }: { visible: boolean; onClose: () => void; room: any; playerId: string; playerName: string }) => {
+  const webRef = useRef<any>(null);
+  const lastRoomRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  const game = room?.game || 'chess';
+  const myColor = me === hostId ? (game === 'checkers' ? 'r' : 'w') : 'b';
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + code);
+        if (!res.ok) return;
+        const data = await res.json();
+        const js = JSON.stringify(data);
+        if (js !== lastRoomRef.current) {
+          lastRoomRef.current = js;
+          if (webRef.current) {
+            webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("chess-checkers-room", {detail: ' + js + '})); true;');
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'chess-checkers-state' && msg.state) {
+        const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + code + '/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state, status: msg.state.status || '', winner: msg.state.winner || '' }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your move.');
+        } else {
+          setPvpError('');
+          const data = await res.json().catch(() => null);
+          if (data) lastRoomRef.current = JSON.stringify(data);
+        }
+      } else if (msg?.type === 'chess-checkers-chat' && msg.text) {
+        const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + code + '/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, player_name: playerName, text: msg.text }),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data) lastRoomRef.current = JSON.stringify(data);
+        }
+      } else if (msg?.type === 'chess-checkers-leave') {
+        try { await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: me }) }); } catch (e) {}
+        onClose();
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.CHESS_CHECKERS_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, game: game, myColor: myColor }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>CHESS &amp; CHECKERS - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: CHESS_CHECKERS_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Chess &amp; Checkers needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [pvpGame, setPvpGame] = useState('chess');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Chess & Checkers rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async () => {
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, game: pvpGame }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created. Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + room.code);
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>CHESS &amp; CHECKERS - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>Pick a game for the new room:</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <TouchableOpacity onPress={() => setPvpGame('chess')} style={{ flex: 1, backgroundColor: pvpGame === 'chess' ? '#2e7d32' : '#666666', paddingVertical: 12, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CHESS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setPvpGame('checkers')} style={{ flex: 1, backgroundColor: pvpGame === 'checkers' ? '#2e7d32' : '#666666', paddingVertical: 12, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CHECKERS</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room (uses the host&apos;s game):</Text>
+            <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
+            <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 28, textAlign: 'center' }}>Room {room.code}</Text>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+              {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
+            </Text>
+            {canPlay ? (
+              <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
+              </TouchableOpacity>
+            ) : null}
+            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
+            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+              {(room.chat || []).map((m: any, i: number) => (
+                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
+                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
+                </Text>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onLeave} style={{ backgroundColor: '#e74c3c', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>LEAVE ROOM</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const TH_API_BASE = "https://gta-quest-map.emergent.host";
+
+const TexasHoldemTableMenuModal = ({ visible, onClose, onPlay, onPlayPvp, onMove, onSell }: { visible: boolean; onClose: () => void; onPlay: () => void; onPlayPvp?: () => void; onMove: () => void; onSell: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 20, textAlign: 'center', marginBottom: 4 }}>TEXAS HOLD&apos;EM TABLE</Text>
+        <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Play Texas Hold&apos;em, move it, or sell it.</Text>
+        <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY VS COMPUTER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { if (onPlayPvp) { onPlayPvp(); } else { onClose(); } }} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAYER VS PLAYER</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMove} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>MOVE</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#999999', fontSize: 11, textAlign: 'center', marginBottom: 10 }}>Move: close this menu, then drag the table.</Text>
+        <TouchableOpacity onPress={onSell} style={{ backgroundColor: '#b7950b', paddingVertical: 12, borderRadius: 8, marginBottom: 10 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>SELL ($10,000 back)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+};
+
+const TexasHoldemGameModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>TEXAS HOLD&apos;EM - YOU vs CPU</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: TEXAS_HOLDEM_HTML }}
+            injectedJavaScriptBeforeContentLoaded="window.TEXAS_HOLDEM_APP=1; true;"
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            onMessage={(event: any) => { if (event?.nativeEvent?.data === 'close') onClose(); }}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Texas Hold&apos;em needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName }: { visible: boolean; onClose: () => void; room: any; playerId: string; playerName: string }) => {
+  const webRef = useRef<any>(null);
+  const lastRoomRef = useRef<string>('');
+  const [pvpError, setPvpError] = useState('');
+  const me = playerId;
+  const hostId = room?.host_id;
+  const guestId = room?.guest_id;
+  const foeId = me === hostId ? (guestId || '') : (hostId || '');
+  const foeName = me === hostId ? (room?.guest_name || 'Player') : (room?.host_name || 'Player');
+  const code = room?.code;
+  const myIndex = me === hostId ? 0 : 1;
+  useEffect(() => {
+    if (!visible || !code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + code + '?player_id=' + encodeURIComponent(me));
+        if (!res.ok) return;
+        const data = await res.json();
+        const js = JSON.stringify(data);
+        if (js !== lastRoomRef.current) {
+          lastRoomRef.current = js;
+          if (webRef.current) {
+            webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("texas-holdem-room", {detail: ' + js + '})); true;');
+          }
+        }
+      } catch (e) {}
+    };
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, code]);
+  const handlePvpMessage = async (event: any) => {
+    const raw = event?.nativeEvent?.data;
+    if (raw === 'close') { onClose(); return; }
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.type === 'texas-holdem-state' && msg.state) {
+        const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + code + '/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, state: msg.state, status: msg.status || msg.state.status || '', winner: msg.winner || '', new_hand: msg.new_hand || false }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setPvpError(d?.detail || 'Could not send your move.');
+        } else {
+          setPvpError('');
+          const data = await res.json().catch(() => null);
+          if (data) lastRoomRef.current = JSON.stringify(data);
+        }
+      } else if (msg?.type === 'texas-holdem-chat' && msg.text) {
+        const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + code + '/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: me, player_name: playerName, text: msg.text }),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data) lastRoomRef.current = JSON.stringify(data);
+        }
+      } else if (msg?.type === 'texas-holdem-leave') {
+        try { await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: me }) }); } catch (e) {}
+        onClose();
+      }
+    } catch (e) {}
+  };
+  const pvpConfig = 'window.TEXAS_HOLDEM_ROOM = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, myIndex: myIndex }) + '; true;';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>TEXAS HOLD&apos;EM - YOU vs {foeName}</Text>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+        {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
+        {PoolWebView ? (
+          <PoolWebView
+            source={{ html: TEXAS_HOLDEM_PVP_HTML }}
+            injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
+            style={{ flex: 1 }}
+            ref={webRef}
+            onMessage={handlePvpMessage}
+          />
+        ) : (
+          <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Texas Hold&apos;em needs WebView, which is not available in this build.</Text>
+        )}
+      </View>
+    </Modal>
+  );
+};
+
+const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
+  const [codeInput, setCodeInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const showNotLive = () => setInfo('Texas Holdem rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
+  const createRoom = async () => {
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not create a room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+      setInfo('Room ' + data.code + ' created. Share the code with your friend.');
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const joinRoom = async () => {
+    const code = codeInput.trim();
+    if (code.length !== 4) { setInfo('Enter the 4-digit room code.'); return; }
+    setBusy(true); setInfo('');
+    try {
+      const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code, player_id: playerId, player_name: playerName }) });
+      if (res.status === 404) { showNotLive(); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
+      const data = await res.json();
+      setRoom(data);
+    } catch (e) { showNotLive(); } finally { setBusy(false); }
+  };
+  const sendChat = async () => {
+    if (!room?.code || !chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + room.code + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId, player_name: playerName, text: text }) });
+      if (res.ok) { const data = await res.json(); setRoom(data); }
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!visible || !room?.code) return;
+    const poll = async () => {
+      try {
+        const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + room.code + '?player_id=' + encodeURIComponent(playerId));
+        if (res.ok) { const data = await res.json(); setRoom(data); }
+      } catch (e) {}
+    };
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
+  }, [visible, room?.code]);
+  const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
+  const canPlay = room && room.status === 'playing';
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
+        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 18, textAlign: 'center', marginBottom: 4 }}>TEXAS HOLD&apos;EM - PLAYER VS PLAYER</Text>
+        {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
+        {!room ? (
+          <View>
+            <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 12 }}>Heads-up No-Limit Texas Hold&apos;em. The host deals the first hand as button / small blind.</Text>
+            <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+              <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 6 }}>Or join a friend&apos;s room (uses the host&apos;s game):</Text>
             <TextInput value={codeInput} onChangeText={setCodeInput} keyboardType="number-pad" maxLength={4} placeholder="4-digit code" placeholderTextColor="#888888" style={{ backgroundColor: '#222222', color: '#ffffff', padding: 12, borderRadius: 8, marginBottom: 10, textAlign: 'center', fontSize: 18, fontWeight: '800' }} />
             <TouchableOpacity onPress={joinRoom} disabled={busy} style={{ backgroundColor: '#1e88e5', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>JOIN ROOM</Text>
@@ -1344,6 +1890,62 @@ export default function MapScreen() {
   const [dartMenuOpen, setDartMenuOpen] = useState(false);
   const [cardMenuOpen, setCardMenuOpen] = useState(false);
   const [scrabbleMenuOpen, setScrabbleMenuOpen] = useState(false);
+  const [chessCheckersMenuOpen, setChessCheckersMenuOpen] = useState(false);
+  const [texasHoldemMenuOpen, setTexasHoldemMenuOpen] = useState(false);
+  const [texasHoldemGameOpen, setTexasHoldemGameOpen] = useState(false);
+  const sellTexasHoldem = async () => {
+    setTexasHoldemMenuOpen(false);
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'texas_holdem');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'texas_holdem') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  const [texasHoldemPvpOpen, setTexasHoldemPvpOpen] = useState(false);
+  const [texasHoldemPvpGameOpen, setTexasHoldemPvpGameOpen] = useState(false);
+  const [texasHoldemPvpRoom, setTexasHoldemPvpRoom] = useState<any | null>(null);
+  const handleTexasHoldemPvpLeave = async () => {
+    if (texasHoldemPvpRoom?.code) {
+      try { await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + texasHoldemPvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setTexasHoldemPvpRoom(null);
+    setTexasHoldemPvpOpen(false);
+    setTexasHoldemPvpGameOpen(false);
+  };
+  const [chessCheckersGameOpen, setChessCheckersGameOpen] = useState(false);
+  const sellChessCheckers = async () => {
+    setChessCheckersMenuOpen(false);
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'chess_checkers');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'chess_checkers') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  const [chessCheckersPvpOpen, setChessCheckersPvpOpen] = useState(false);
+  const [chessCheckersPvpGameOpen, setChessCheckersPvpGameOpen] = useState(false);
+  const [chessCheckersPvpRoom, setChessCheckersPvpRoom] = useState<any | null>(null);
+  const handleChessCheckersPvpLeave = async () => {
+    if (chessCheckersPvpRoom?.code) {
+      try { await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + chessCheckersPvpRoom.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: playerId }) }); } catch (e) {}
+    }
+    setChessCheckersPvpRoom(null);
+    setChessCheckersPvpOpen(false);
+    setChessCheckersPvpGameOpen(false);
+  };
   const [scrabbleGameOpen, setScrabbleGameOpen] = useState(false);
   const sellScrabble = async () => {
     setScrabbleMenuOpen(false);
@@ -1538,6 +2140,8 @@ export default function MapScreen() {
             if (itemId === 'cardtable') setCardMenuOpen(true);
             if (itemId === 'dominoes') setDominoMenuOpen(true);
             if (itemId === 'scrabble') setScrabbleMenuOpen(true);
+            if (itemId === 'chess_checkers') setChessCheckersMenuOpen(true);
+            if (itemId === 'texas_holdem') setTexasHoldemMenuOpen(true);
             return;
           }
           const s = dragStartRef.current[itemId] || { x: 0.5, y: 0.5 };
@@ -1624,7 +2228,7 @@ const HOUSE_IMAGES: Record<string, any> = {
 };
 // House shop items by category — empty for now, filled in a later step.
 const HOUSE_ITEMS: Record<string, any[]> = {
-  games: [{ id: 'pool-table', name: 'Pool Table', image: require('../../assets/houses/items/pool-table.png'), price: 50000 }, { id: 'dartboard', name: 'Dartboard', image: require('../../assets/houses/items/dartboard.png'), price: 10000 }, { id: 'cardtable', name: 'Card Table', image: require('../../assets/houses/items/cardtable.png'), price: 20000 }, { id: 'dominoes', name: 'Dominoes Table', image: require('../../assets/houses/items/dominoes.png'), price: 20000 }, { id: 'scrabble', name: 'Scrabble Table', image: require('../../assets/houses/items/scrabble.png'), price: 20000 }],
+  games: [{ id: 'pool-table', name: 'Pool Table', image: require('../../assets/houses/items/pool-table.png'), price: 50000 }, { id: 'dartboard', name: 'Dartboard', image: require('../../assets/houses/items/dartboard.png'), price: 10000 }, { id: 'cardtable', name: 'Card Table', image: require('../../assets/houses/items/cardtable.png'), price: 20000 }, { id: 'dominoes', name: 'Dominoes Table', image: require('../../assets/houses/items/dominoes.png'), price: 20000 }, { id: 'scrabble', name: 'Scrabble Table', image: require('../../assets/houses/items/scrabble.png'), price: 20000 }, { id: 'chess_checkers', name: 'Chess & Checkers Table', image: require('../../assets/houses/items/chess-checkers.png'), price: 30000 }, { id: 'texas_holdem', name: "Texas Hold'em Table", image: require('../../assets/houses/items/texas-holdem.png'), price: 20000 }],
   appliances: [],
   utilities: [],
 };
@@ -2854,6 +3458,14 @@ const HOUSE_ITEMS: Record<string, any[]> = {
       {scrabbleGameOpen ? (<ScrabbleGameModal visible={scrabbleGameOpen} onClose={() => setScrabbleGameOpen(false)} />) : null}
       {scrabblePvpOpen ? (<ScrabblePvpModal visible={scrabblePvpOpen} onClose={() => setScrabblePvpOpen(false)} playerId={playerId} playerName={'Player'} room={scrabblePvpRoom} setRoom={setScrabblePvpRoom} onPlay={() => { setScrabblePvpOpen(false); setScrabblePvpGameOpen(true); }} onLeave={handleScrabblePvpLeave} />) : null}
       {scrabblePvpGameOpen && scrabblePvpRoom ? (<ScrabblePvpGameModal visible={scrabblePvpGameOpen} onClose={() => { setScrabblePvpGameOpen(false); setScrabblePvpOpen(true); }} room={scrabblePvpRoom} playerId={playerId} />) : null}
+      {chessCheckersMenuOpen ? (<ChessCheckersTableMenuModal visible={chessCheckersMenuOpen} onClose={() => setChessCheckersMenuOpen(false)} onPlay={() => { setChessCheckersMenuOpen(false); setChessCheckersGameOpen(true); }} onPlayPvp={() => { setChessCheckersMenuOpen(false); setChessCheckersPvpOpen(true); }} onMove={() => setChessCheckersMenuOpen(false)} onSell={sellChessCheckers} />) : null}
+      {chessCheckersGameOpen ? (<ChessCheckersGameModal visible={chessCheckersGameOpen} onClose={() => setChessCheckersGameOpen(false)} />) : null}
+      {chessCheckersPvpOpen ? (<ChessCheckersPvpModal visible={chessCheckersPvpOpen} onClose={() => setChessCheckersPvpOpen(false)} playerId={playerId} playerName={player?.name || 'Player'} room={chessCheckersPvpRoom} setRoom={setChessCheckersPvpRoom} onPlay={() => { setChessCheckersPvpOpen(false); setChessCheckersPvpGameOpen(true); }} onLeave={handleChessCheckersPvpLeave} />) : null}
+      {chessCheckersPvpGameOpen && chessCheckersPvpRoom ? (<ChessCheckersPvpGameModal visible={chessCheckersPvpGameOpen} onClose={() => { setChessCheckersPvpGameOpen(false); setChessCheckersPvpOpen(true); }} room={chessCheckersPvpRoom} playerId={playerId} playerName={player?.name || 'Player'} />) : null}
+      {texasHoldemMenuOpen ? (<TexasHoldemTableMenuModal visible={texasHoldemMenuOpen} onClose={() => setTexasHoldemMenuOpen(false)} onPlay={() => { setTexasHoldemMenuOpen(false); setTexasHoldemGameOpen(true); }} onPlayPvp={() => { setTexasHoldemMenuOpen(false); setTexasHoldemPvpOpen(true); }} onMove={() => setTexasHoldemMenuOpen(false)} onSell={sellTexasHoldem} />) : null}
+      {texasHoldemGameOpen ? (<TexasHoldemGameModal visible={texasHoldemGameOpen} onClose={() => setTexasHoldemGameOpen(false)} />) : null}
+      {texasHoldemPvpOpen ? (<TexasHoldemPvpModal visible={texasHoldemPvpOpen} onClose={() => setTexasHoldemPvpOpen(false)} playerId={playerId} playerName={player?.name || 'Player'} room={texasHoldemPvpRoom} setRoom={setTexasHoldemPvpRoom} onPlay={() => { setTexasHoldemPvpOpen(false); setTexasHoldemPvpGameOpen(true); }} onLeave={handleTexasHoldemPvpLeave} />) : null}
+      {texasHoldemPvpGameOpen && texasHoldemPvpRoom ? (<TexasHoldemPvpGameModal visible={texasHoldemPvpGameOpen} onClose={() => { setTexasHoldemPvpGameOpen(false); setTexasHoldemPvpOpen(true); }} room={texasHoldemPvpRoom} playerId={playerId} playerName={player?.name || 'Player'} />) : null}
             {/* House Interior Modal */}
       <Modal
         visible={!!interiorHouse}
@@ -2921,7 +3533,7 @@ const HOUSE_ITEMS: Record<string, any[]> = {
             </View>
             {houseItemCategory && (
               <View style={{ marginTop: 8, backgroundColor: 'rgba(0,0,0,0.88)', borderRadius: 12, borderWidth: 1, borderColor: '#222', padding: 12, maxHeight: 280 }}>
-                <ScrollView showsVerticalScrollIndicator={false}>
+                <ScrollView showsVerticalScrollIndicator={true} persistentScrollbar={true}>
                   {(HOUSE_ITEMS[houseItemCategory] || []).length === 0 ? (
                     <Text style={{ color: '#888', fontSize: 13, textAlign: 'center' }}>
                       {houseItemCategory === 'games' ? 'No games yet.' : houseItemCategory === 'appliances' ? 'No appliances yet.' : 'No utilities yet.'}

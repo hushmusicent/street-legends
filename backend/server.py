@@ -24,6 +24,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse
 import secrets
 from item_icons import ITEM_ICON_URLS, CONSUMABLE_ICON_URLS, SKILL_ICON_URLS, ACCESSORY_ICON_URLS
+import copy
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -3658,6 +3659,8 @@ HOUSE_ITEM_CATALOG = {
     "cardtable": {"name": "Card Table", "category": "games", "price": 20000},
     "dominoes": {"name": "Dominoes Table", "category": "games", "price": 20000},
     "scrabble": {"name": "Scrabble Table", "category": "games", "price": 20000},
+    "chess_checkers": {"name": "Chess & Checkers Table", "category": "games", "price": 30000},
+    "texas_holdem": {"name": "Texas Hold'em Table", "category": "games", "price": 20000},
 }
 
 
@@ -11231,6 +11234,349 @@ async def scrabble_room_leave(code: str, body: ScrabbleRoomLeave):
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
     await db.scrabble_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
+
+# CHESS_CHECKERS_ROOMS_V1
+class ChessCheckersRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    game: str = "chess"
+
+
+class ChessCheckersRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class ChessCheckersRoomState(BaseModel):
+    player_id: str
+    state: dict
+    status: str = ""
+    winner: str = ""
+
+
+class ChessCheckersRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class ChessCheckersRoomLeave(BaseModel):
+    player_id: str
+
+
+def _cc_chess_initial():
+    back = ["r", "n", "b", "q", "k", "b", "n", "r"]
+    board = [[None for _ in range(8)] for _ in range(8)]
+    for c in range(8):
+        board[0][c] = {"t": back[c], "c": "b"}
+        board[1][c] = {"t": "p", "c": "b"}
+        board[6][c] = {"t": "p", "c": "w"}
+        board[7][c] = {"t": back[c], "c": "w"}
+    return {"game": "chess", "board": board, "turn": "w",
+            "castling": {"wK": True, "wQ": True, "bK": True, "bQ": True},
+            "ep": None, "status": "waiting", "winner": None}
+
+
+def _cc_checkers_initial():
+    board = [[None for _ in range(8)] for _ in range(8)]
+    for r in range(8):
+        for c in range(8):
+            if (r + c) % 2 != 1:
+                continue
+            if r <= 2:
+                board[r][c] = {"c": "b", "k": False}
+            if r >= 5:
+                board[r][c] = {"c": "r", "k": False}
+    return {"game": "checkers", "board": board, "turn": "r",
+            "status": "waiting", "winner": None}
+
+
+async def _cc_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if await db.chess_checkers_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/chess_checkers/rooms/create")
+async def chess_checkers_room_create(body: ChessCheckersRoomCreate):
+    game = body.game if body.game in ("chess", "checkers") else "chess"
+    code = await _cc_room_code()
+    now = datetime.now(timezone.utc).isoformat()
+    state = _cc_chess_initial() if game == "chess" else _cc_checkers_initial()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None, "game": game,
+            "status": "waiting",
+            "state": state, "chat": [], "created_at": now, "updated_at": now}
+    await db.chess_checkers_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/chess_checkers/rooms/join")
+async def chess_checkers_room_join(body: ChessCheckersRoomJoin):
+    room = await db.chess_checkers_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        room["_id"] = str(room["_id"])
+        return room
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    await db.chess_checkers_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.chess_checkers_rooms.find_one({"code": body.code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.get("/chess_checkers/rooms/{code}")
+async def chess_checkers_room_get(code: str):
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/chess_checkers/rooms/{code}/state")
+async def chess_checkers_room_state(code: str, body: ChessCheckersRoomState):
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    update = {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.status:
+        update["status"] = body.status
+    if body.winner:
+        update["winner"] = body.winner
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$set": update})
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/chess_checkers/rooms/{code}/chat")
+async def chess_checkers_room_chat(code: str, body: ChessCheckersRoomChat):
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room["guest_id"]):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.chess_checkers_rooms.find_one({"code": code})
+    room["_id"] = str(room["_id"])
+    return room
+
+
+@api_router.post("/chess_checkers/rooms/{code}/leave")
+async def chess_checkers_room_leave(code: str, body: ChessCheckersRoomLeave):
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        await db.chess_checkers_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "finished": True, "winner": winner}
+
+
+# TEXAS_HOLDEM_ROOMS_V1
+class TexasHoldemRoomCreate(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+
+
+class TexasHoldemRoomJoin(BaseModel):
+    code: str
+    player_id: str
+    player_name: str = "Player"
+
+
+class TexasHoldemRoomState(BaseModel):
+    player_id: str
+    state: dict
+    status: str = ""
+    winner: str = ""
+    new_hand: bool = False
+
+
+class TexasHoldemRoomChat(BaseModel):
+    player_id: str
+    player_name: str = "Player"
+    text: str
+
+
+class TexasHoldemRoomLeave(BaseModel):
+    player_id: str
+
+
+def _th_filter_room(room, player_id):
+    # Return a copy of room with hole cards filtered for player_id.
+    # Members get their own cards. Finished + showdown rooms reveal both
+    # hands to members (official showdown). Finished via fold stays
+    # filtered (the folder mucks). Missing player_id -> public view.
+    # Callers check non-member player_id (403) before calling this.
+    out = copy.deepcopy(room)
+    out["_id"] = str(out["_id"])
+    st = out.get("state")
+    if not isinstance(st, dict):
+        return out
+    status = out.get("status", "")
+    host_id = out.get("host_id")
+    guest_id = out.get("guest_id")
+    is_member = player_id in (host_id, guest_id)
+    if status == "finished" and st.get("showdown") and is_member:
+        return out
+    my_idx = None
+    if player_id == host_id:
+        my_idx = 0
+    elif player_id == guest_id:
+        my_idx = 1
+    players = st.get("p")
+    if not isinstance(players, list):
+        return out
+    new_p = []
+    for i, pl in enumerate(players):
+        if not isinstance(pl, dict):
+            new_p.append(pl)
+            continue
+        pl2 = dict(pl)
+        if i != my_idx:
+            hole = pl2.get("hole")
+            if isinstance(hole, list) and len(hole) > 0:
+                pl2["hole"] = [{"hidden": True} for _ in hole]
+        new_p.append(pl2)
+    st["p"] = new_p
+    out["state"] = st
+    return out
+
+
+async def _th_room_code():
+    for _ in range(50):
+        code = str(random.randint(1000, 9999))
+        if await db.texas_holdem_rooms.count_documents({"code": code}) == 0:
+            return code
+    return str(random.randint(1000, 9999))
+
+
+@api_router.post("/texas_holdem/rooms/create")
+async def texas_holdem_room_create(body: TexasHoldemRoomCreate):
+    code = await _th_room_code()
+    now = datetime.now(timezone.utc).isoformat()
+    room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
+            "guest_id": None, "guest_name": None,
+            "status": "waiting",
+            "state": {}, "chat": [], "created_at": now, "updated_at": now}
+    await db.texas_holdem_rooms.insert_one(room)
+    room["_id"] = str(room["_id"])
+    return _th_filter_room(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/join")
+async def texas_holdem_room_join(body: TexasHoldemRoomJoin):
+    room = await db.texas_holdem_rooms.find_one({"code": body.code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+        return _th_filter_room(room, body.player_id)
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Room is not waiting")
+    await db.texas_holdem_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.texas_holdem_rooms.find_one({"code": body.code})
+    return _th_filter_room(room, body.player_id)
+
+
+@api_router.get("/texas_holdem/rooms/{code}")
+async def texas_holdem_room_get(code: str, player_id: str = ""):
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if player_id and player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    return _th_filter_room(room, player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/state")
+async def texas_holdem_room_state(code: str, body: TexasHoldemRoomState):
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    stored = room.get("state") or {}
+    posted = body.state or {}
+    if body.new_hand:
+        new_state = copy.deepcopy(posted)
+    elif body.status == "finished" and posted.get("showdown") and posted.get("awarded"):
+        # Showdown award post: the sender received the FULL state (finished
+        # + showdown reveals both hands), so a wholesale replace is safe
+        # and required — a merge would drop the non-sender's awarded
+        # stack, since merge only writes the sender's player object.
+        # (The completer's showdownPending post has awarded unset, so it
+        # still takes the merge path and cannot clobber real cards with
+        # hidden placeholders.)
+        new_state = copy.deepcopy(posted)
+    else:
+        new_state = copy.deepcopy(stored) if isinstance(stored, dict) else {}
+        s_idx = 0 if body.player_id == room["host_id"] else 1
+        for k, v in posted.items():
+            if k != "p":
+                new_state[k] = v
+        posted_p = posted.get("p")
+        if isinstance(posted_p, list) and len(posted_p) > s_idx:
+            stored_p = new_state.get("p")
+            if not isinstance(stored_p, list):
+                stored_p = []
+            while len(stored_p) <= s_idx:
+                stored_p.append({})
+            stored_p[s_idx] = copy.deepcopy(posted_p[s_idx])
+            new_state["p"] = stored_p
+    update = {"state": new_state, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.status:
+        update["status"] = body.status
+    if body.winner:
+        update["winner"] = body.winner
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$set": update})
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    return _th_filter_room(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/chat")
+async def texas_holdem_room_chat(code: str, body: TexasHoldemRoomChat):
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    if room and len(room.get("chat", [])) > 100:
+        await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.texas_holdem_rooms.find_one({"code": code})
+    return _th_filter_room(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/leave")
+async def texas_holdem_room_leave(code: str, body: TexasHoldemRoomLeave):
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] == "waiting":
+        await db.texas_holdem_rooms.delete_one({"code": code})
+        return {"ok": True, "deleted": True}
+    winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
 
