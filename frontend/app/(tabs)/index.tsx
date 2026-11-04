@@ -6,8 +6,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
 import { getEnemyBattleImage } from '../../assets/enemyImages';
-import {
-  getPlayer,
+import {getPlayer,
   updatePlayerPosition,
   startBattle,
   getProfilePic,
@@ -27,7 +26,7 @@ import {
   moveHouseToInventory,
   placeItemFromInventory,
   toggleHouseHide,
-  sellHouse, removeHouseItem} from '../../services/api';
+  sellHouse, removeHouseItem, houseEnterPresence, houseLeavePresence, houseHeartbeatPresence, getHousePresence} from '../../services/api';
 import { Monster, Mission, NearbyPlayer, RelationshipStatus } from '../../types/game';
 import { GameMap } from '../../components/GameMap';
 import { showGameToast } from '../../components/GameToast';
@@ -51,6 +50,8 @@ import { TEXAS_HOLDEM_HTML } from '../../components/TexasHoldemHtml';
 import { TEXAS_HOLDEM_PVP_HTML } from '../../components/TexasHoldemPvpHtml';
 import { createAudioPlayer } from 'expo-audio';
 import { WebView } from 'react-native-webview';
+// POOL_API_BASE_DEFINED
+const API_BASE = "https://gta-quest-map.emergent.host";
 
 let PoolWebView: any = null;
 try { PoolWebView = require('react-native-webview').default; } catch (e) { PoolWebView = null; }
@@ -130,6 +131,15 @@ const PoolPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
         const res = await fetch(API_BASE + '/api/pool/rooms/' + code);
         if (!res.ok) return;
         const data = await res.json();
+        // POOL_TURN_FIX: learn the guest once they join (the host's game
+        // opened with the create-time room, where guest_id was null, so its
+        // FOE was '' and the first shot passed the turn to nobody).
+        const __gId = data?.guest_id;
+        const __gName = data?.guest_name || 'Player';
+        if (__gId && webRef.current) {
+          const __fixJs = 'try { var __g = ' + JSON.stringify(__gId) + '; var __gn = ' + JSON.stringify(__gName) + '; if (typeof FOE !== "undefined" && FOE !== __g) { FOE = __g; FOENAME = __gn; try { window.POOL_PVP.foe = __g; window.POOL_PVP.foeName = __gn; } catch (e) {} if (turn === "" || (turn !== ME && turn !== FOE)) { turn = FOE; } updateHeader(); if (turn === FOE) { setMsg("Waiting for " + FOENAME + "..."); } postPvpState(); } } catch (e) {} true;';
+          webRef.current.injectJavaScript(__fixJs);
+        }
         const st = data?.state;
         if (st) {
           const js = JSON.stringify(st);
@@ -168,6 +178,8 @@ const PoolPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
     } catch (e) {}
   };
   const pvpConfig = 'window.POOL_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId }) + '; true;';
+  // POOL_PVP_SPEC_CFG: bake real ids into the page itself.
+  const pvpHtml = POOL_PVP_HTML.replace("{ me: 'you', foe: 'friend', foeName: 'FRIEND', hostId: 'you' }", JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId }));
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
@@ -180,8 +192,9 @@ const PoolPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
         {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
         {PoolWebView ? (
           <PoolWebView
-            source={{ html: POOL_PVP_HTML }}
+            source={{ html: pvpHtml }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            injectedJavaScript={pvpConfig + '/* POOL_CFG_REINIT */ try { ME = window.POOL_PVP.me; FOE = window.POOL_PVP.foe; FOENAME = window.POOL_PVP.foeName; HOST = window.POOL_PVP.hostId; if (turn === "you" || turn === "friend") { turn = HOST; } updateHeader(); if (turn === ME) { setMsg("Your turn."); } else { setMsg("Waiting for " + FOENAME + "..."); } } catch (e) {} true;'}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             allowsInlineMediaPlayback={true}
@@ -214,7 +227,7 @@ const PoolPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
       const data = await res.json();
       setRoom(data);
       setInfo('Room ' + data.code + ' created. Share the code with your friend.');
-    } catch (e) { showNotLive(); } finally { setBusy(false); }
+    } catch (e) { setInfo('Could not reach the server. Check your connection.'); } finally { setBusy(false); }
   };
   const joinRoom = async () => {
     const code = codeInput.trim();
@@ -226,7 +239,9 @@ const PoolPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
-    } catch (e) { showNotLive(); } finally { setBusy(false); }
+      // POOL_PVP_SPEC_AUTOPLAY_JOIN: game starts once the code is in.
+      onPlay();
+    } catch (e) { setInfo('Could not reach the server. Check your connection.'); } finally { setBusy(false); }
   };
   const sendChat = async () => {
     if (!room?.code || !chatInput.trim()) return;
@@ -250,6 +265,14 @@ const PoolPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // POOL_PVP_SPEC_AUTOPLAY_HOST: host's game opens when the
+  // room flips waiting -> playing (not on reopen from the game).
+  const prevStatusRef = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
@@ -280,20 +303,8 @@ const PoolPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* POOL_PVP_SPEC_NOCHAT: chat removed by request */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -418,6 +429,9 @@ const DartPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
     } catch (e) {}
   };
   const pvpConfig = 'window.DART_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId }) + '; true;';
+
+  // PVP_ALL_BAKED_DARTS: real ids baked into the page source.
+  const dartsBakedHtml = DART_PVP_HTML.replace("{ me: 'you', foe: 'friend', foeName: 'FRIEND', hostId: 'you' }", JSON.stringify({me: me, foe: foeId, foeName: foeName, hostId: hostId}));
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
@@ -430,7 +444,7 @@ const DartPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
         {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
         {PoolWebView ? (
           <PoolWebView
-            source={{ html: DART_PVP_HTML }}
+            source={{ html: dartsBakedHtml }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -454,6 +468,20 @@ const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
   const [chatInput, setChatInput] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  // PVP_ALL_REJOIN_DARTS: offer the player's live room back after a boot-out.
+  const [activeRoomDarts, setActiveRoomDarts] = useState<any | null>(null);
+  useEffect(() => {
+    if (!visible || room) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/darts/rooms/active/' + playerId);
+        if (!cancelled && res.ok) { const d = await res.json(); setActiveRoomDarts(d); }
+        else if (!cancelled) { setActiveRoomDarts(null); }
+      } catch (e) { if (!cancelled) setActiveRoomDarts(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, room?.code]);
   const showNotLive = () => setInfo('Darts rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
   const createRoom = async () => {
     setBusy(true); setInfo('');
@@ -476,6 +504,8 @@ const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
+      // PVP_ALL_AUTOPLAY_JOIN_DARTS: game opens on successful join.
+      onPlay();
     } catch (e) { showNotLive(); } finally { setBusy(false); }
   };
   const sendChat = async () => {
@@ -500,6 +530,13 @@ const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // PVP_ALL_AUTOPLAY_HOST_DARTS: host's game opens on waiting->playing flip.
+  const prevStatusRefDarts = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRefDarts.current;
+    prevStatusRefDarts.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
@@ -507,6 +544,11 @@ const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
         {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
         {!room ? (
           <View>
+            {activeRoomDarts ? (
+              <TouchableOpacity onPress={() => { setRoom(activeRoomDarts); if (activeRoomDarts.status === 'playing') { onPlay(); } }} style={{ backgroundColor: '#f39c12', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#111111', fontWeight: '800', textAlign: 'center' }}>REJOIN ROOM {activeRoomDarts.code}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
@@ -530,20 +572,8 @@ const DartPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* PVP_ALL_NOCHAT: chat removed */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -675,6 +705,9 @@ const CardPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
     } catch (e) {}
   };
   const pvpConfig = 'window.CARD_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, game: game, seed: seed }) + '; true;';
+
+  // PVP_ALL_BAKED_CARDS: real ids baked into the page source.
+  const cardsBakedHtml = CARD_PVP_HTML.replace("{ me: 'you', foe: 'friend', foeName: 'FRIEND', hostId: 'you', game: 'gin', seed: 12345 }", JSON.stringify({me: me, foe: foeId, foeName: foeName, hostId: hostId, game: game, seed: seed}));
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
@@ -687,7 +720,7 @@ const CardPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boole
         {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
         {PoolWebView ? (
           <PoolWebView
-            source={{ html: CARD_PVP_HTML }}
+            source={{ html: cardsBakedHtml }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -711,6 +744,20 @@ const CardPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
   const [chatInput, setChatInput] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  // PVP_ALL_REJOIN_CARDS: offer the player's live room back after a boot-out.
+  const [activeRoomCards, setActiveRoomCards] = useState<any | null>(null);
+  useEffect(() => {
+    if (!visible || room) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/cards/rooms/active/' + playerId);
+        if (!cancelled && res.ok) { const d = await res.json(); setActiveRoomCards(d); }
+        else if (!cancelled) { setActiveRoomCards(null); }
+      } catch (e) { if (!cancelled) setActiveRoomCards(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, room?.code]);
   const showNotLive = () => setInfo('Card rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
   const createRoom = async (game: string) => {
     setBusy(true); setInfo('');
@@ -734,6 +781,8 @@ const CardPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
+      // PVP_ALL_AUTOPLAY_JOIN_CARDS: game opens on successful join.
+      onPlay();
     } catch (e) { showNotLive(); } finally { setBusy(false); }
   };
   const sendChat = async () => {
@@ -758,6 +807,13 @@ const CardPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // PVP_ALL_AUTOPLAY_HOST_CARDS: host's game opens on waiting->playing flip.
+  const prevStatusRefCards = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRefCards.current;
+    prevStatusRefCards.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   const gameName = room?.game === 'spades' ? 'Spades' : 'Gin Rummy';
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -792,20 +848,8 @@ const CardPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, o
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* PVP_ALL_NOCHAT: chat removed */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -931,6 +975,9 @@ const DominoPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boo
     } catch (e) {}
   };
   const pvpConfig = 'window.DOMINO_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, seed: seed }) + '; true;';
+
+  // PVP_ALL_BAKED_DOMINOES: real ids baked into the page source.
+  const dominoesBakedHtml = DOMINO_PVP_HTML.replace("{me: 'host', foe: 'guest', foeName: 'FRIEND', hostId: 'host', seed: 12345}", JSON.stringify({me: me, foe: foeId, foeName: foeName, hostId: hostId, seed: seed}));
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
@@ -943,7 +990,7 @@ const DominoPvpGameModal = ({ visible, onClose, room, playerId }: { visible: boo
         {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
         {PoolWebView ? (
           <PoolWebView
-            source={{ html: DOMINO_PVP_HTML }}
+            source={{ html: dominoesBakedHtml }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -967,6 +1014,20 @@ const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom,
   const [chatInput, setChatInput] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  // PVP_ALL_REJOIN_DOMINOES: offer the player's live room back after a boot-out.
+  const [activeRoomDominoes, setActiveRoomDominoes] = useState<any | null>(null);
+  useEffect(() => {
+    if (!visible || room) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/dominoes/rooms/active/' + playerId);
+        if (!cancelled && res.ok) { const d = await res.json(); setActiveRoomDominoes(d); }
+        else if (!cancelled) { setActiveRoomDominoes(null); }
+      } catch (e) { if (!cancelled) setActiveRoomDominoes(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, room?.code]);
   const showNotLive = () => setInfo('Domino rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
   const createRoom = async () => {
     setBusy(true); setInfo('');
@@ -990,6 +1051,8 @@ const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom,
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
+      // PVP_ALL_AUTOPLAY_JOIN_DOMINOES: game opens on successful join.
+      onPlay();
     } catch (e) { showNotLive(); } finally { setBusy(false); }
   };
   const sendChat = async () => {
@@ -1014,6 +1077,13 @@ const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom,
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // PVP_ALL_AUTOPLAY_HOST_DOMINOES: host's game opens on waiting->playing flip.
+  const prevStatusRefDominoes = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRefDominoes.current;
+    prevStatusRefDominoes.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
@@ -1021,6 +1091,11 @@ const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom,
         {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
         {!room ? (
           <View>
+            {activeRoomDominoes ? (
+              <TouchableOpacity onPress={() => { setRoom(activeRoomDominoes); if (activeRoomDominoes.status === 'playing') { onPlay(); } }} style={{ backgroundColor: '#f39c12', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#111111', fontWeight: '800', textAlign: 'center' }}>REJOIN ROOM {activeRoomDominoes.code}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
@@ -1044,20 +1119,8 @@ const DominoPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom,
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* PVP_ALL_NOCHAT: chat removed */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -1183,6 +1246,9 @@ const ScrabblePvpGameModal = ({ visible, onClose, room, playerId }: { visible: b
     } catch (e) {}
   };
   const pvpConfig = 'window.SCRABBLE_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, seed: seed }) + '; true;';
+
+  // PVP_ALL_BAKED_SCRABBLE: real ids baked into the page source.
+  const scrabbleBakedHtml = SCRABBLE_PVP_HTML.replace('{ me: "host", foe: "guest", foeName: "FRIEND", hostId: "host", seed: 12345 }', JSON.stringify({me: me, foe: foeId, foeName: foeName, hostId: hostId, seed: seed}));
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
@@ -1195,7 +1261,7 @@ const ScrabblePvpGameModal = ({ visible, onClose, room, playerId }: { visible: b
         {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
         {PoolWebView ? (
           <PoolWebView
-            source={{ html: SCRABBLE_PVP_HTML }}
+            source={{ html: scrabbleBakedHtml }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -1219,6 +1285,20 @@ const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoo
   const [chatInput, setChatInput] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  // PVP_ALL_REJOIN_SCRABBLE: offer the player's live room back after a boot-out.
+  const [activeRoomScrabble, setActiveRoomScrabble] = useState<any | null>(null);
+  useEffect(() => {
+    if (!visible || room) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/scrabble/rooms/active/' + playerId);
+        if (!cancelled && res.ok) { const d = await res.json(); setActiveRoomScrabble(d); }
+        else if (!cancelled) { setActiveRoomScrabble(null); }
+      } catch (e) { if (!cancelled) setActiveRoomScrabble(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, room?.code]);
   const showNotLive = () => setInfo('Scrabble rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
   const createRoom = async () => {
     setBusy(true); setInfo('');
@@ -1242,6 +1322,8 @@ const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoo
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
+      // PVP_ALL_AUTOPLAY_JOIN_SCRABBLE: game opens on successful join.
+      onPlay();
     } catch (e) { showNotLive(); } finally { setBusy(false); }
   };
   const sendChat = async () => {
@@ -1266,6 +1348,13 @@ const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoo
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // PVP_ALL_AUTOPLAY_HOST_SCRABBLE: host's game opens on waiting->playing flip.
+  const prevStatusRefScrabble = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRefScrabble.current;
+    prevStatusRefScrabble.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
@@ -1273,6 +1362,11 @@ const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoo
         {info ? (<Text style={{ color: '#f39c12', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>{info}</Text>) : null}
         {!room ? (
           <View>
+            {activeRoomScrabble ? (
+              <TouchableOpacity onPress={() => { setRoom(activeRoomScrabble); if (activeRoomScrabble.status === 'playing') { onPlay(); } }} style={{ backgroundColor: '#f39c12', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#111111', fontWeight: '800', textAlign: 'center' }}>REJOIN ROOM {activeRoomScrabble.code}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
@@ -1296,20 +1390,8 @@ const ScrabblePvpModal = ({ visible, onClose, playerId, playerName, room, setRoo
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* PVP_ALL_NOCHAT: chat removed */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -1470,6 +1552,9 @@ const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerNam
     } catch (e) {}
   };
   const pvpConfig = 'window.CHESS_CHECKERS_PVP = ' + JSON.stringify({ me: me, foe: foeId, foeName: foeName, hostId: hostId, game: game, myColor: myColor }) + '; true;';
+
+  // PVP_ALL_BAKED_CHESS: real ids baked into the page source.
+  const chessBakedHtml = CHESS_CHECKERS_PVP_HTML.replace('var PVP = (typeof window !== "undefined" && window.CHESS_CHECKERS_PVP) ? window.CHESS_CHECKERS_PVP : {};', 'var PVP = ' + JSON.stringify({me: me, foe: foeId, foeName: foeName, hostId: hostId, game: game, myColor: myColor}) + ';');
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
@@ -1482,7 +1567,7 @@ const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerNam
         {pvpError ? (<Text style={{ color: '#ff6666', textAlign: 'center', fontSize: 12, marginBottom: 6 }}>{pvpError}</Text>) : null}
         {PoolWebView ? (
           <PoolWebView
-            source={{ html: CHESS_CHECKERS_PVP_HTML }}
+            source={{ html: chessBakedHtml }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -1508,6 +1593,20 @@ const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, s
   const [pvpGame, setPvpGame] = useState('chess');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  // PVP_ALL_REJOIN_CHESS: offer the player's live room back after a boot-out.
+  const [activeRoomChess, setActiveRoomChess] = useState<any | null>(null);
+  useEffect(() => {
+    if (!visible || room) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/active/' + playerId);
+        if (!cancelled && res.ok) { const d = await res.json(); setActiveRoomChess(d); }
+        else if (!cancelled) { setActiveRoomChess(null); }
+      } catch (e) { if (!cancelled) setActiveRoomChess(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, room?.code]);
   const [wagerAmount, setWagerAmount] = useState('');
   const [wagerInfo, setWagerInfo] = useState('');
   const wagerPost = async (action: string, body: any) => {
@@ -1557,6 +1656,8 @@ const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, s
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
+      // PVP_ALL_AUTOPLAY_JOIN_CHESS: game opens on successful join.
+      onPlay();
     } catch (e) { showNotLive(); } finally { setBusy(false); }
   };
   const sendChat = async () => {
@@ -1581,6 +1682,13 @@ const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, s
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // PVP_ALL_AUTOPLAY_HOST_CHESS: host's game opens on waiting->playing flip.
+  const prevStatusRefChess = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRefChess.current;
+    prevStatusRefChess.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
@@ -1597,6 +1705,11 @@ const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, s
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CHECKERS</Text>
               </TouchableOpacity>
             </View>
+            {activeRoomChess ? (
+              <TouchableOpacity onPress={() => { setRoom(activeRoomChess); if (activeRoomChess.status === 'playing') { onPlay(); } }} style={{ backgroundColor: '#f39c12', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#111111', fontWeight: '800', textAlign: 'center' }}>REJOIN ROOM {activeRoomChess.code}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
@@ -1664,20 +1777,8 @@ const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, s
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* PVP_ALL_NOCHAT: chat removed */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -1850,6 +1951,7 @@ const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName 
           <PoolWebView
             source={{ html: TEXAS_HOLDEM_PVP_HTML }}
             injectedJavaScriptBeforeContentLoaded={pvpConfig}
+            injectedJavaScript={pvpConfig + '/* PVP_ALL_TEXAS_REAPPLY */'}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             allowsInlineMediaPlayback={true}
@@ -1873,6 +1975,20 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
   const [chatInput, setChatInput] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  // PVP_ALL_REJOIN_TEXAS: offer the player's live room back after a boot-out.
+  const [activeRoomTexas, setActiveRoomTexas] = useState<any | null>(null);
+  useEffect(() => {
+    if (!visible || room) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/active/' + playerId);
+        if (!cancelled && res.ok) { const d = await res.json(); setActiveRoomTexas(d); }
+        else if (!cancelled) { setActiveRoomTexas(null); }
+      } catch (e) { if (!cancelled) setActiveRoomTexas(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, room?.code]);
   const [wagerAmount, setWagerAmount] = useState('');
   const [wagerInfo, setWagerInfo] = useState('');
   const wagerPost = async (action: string, body: any) => {
@@ -1922,6 +2038,8 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
       if (!res.ok) { const d = await res.json().catch(() => ({})); setInfo(d?.detail || 'Could not join the room.'); return; }
       const data = await res.json();
       setRoom(data);
+      // PVP_ALL_AUTOPLAY_JOIN_TEXAS: game opens on successful join.
+      onPlay();
     } catch (e) { showNotLive(); } finally { setBusy(false); }
   };
   const sendChat = async () => {
@@ -1946,6 +2064,13 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
   }, [visible, room?.code]);
   const foeName = room ? (playerId === room.host_id ? (room.guest_name || 'Friend') : (room.host_name || 'Friend')) : '';
   const canPlay = room && room.status === 'playing';
+  // PVP_ALL_AUTOPLAY_HOST_TEXAS: host's game opens on waiting->playing flip.
+  const prevStatusRefTexas = useRef<string>(room?.status || '');
+  useEffect(() => {
+    const prev = prevStatusRefTexas.current;
+    prevStatusRefTexas.current = room?.status || '';
+    if (room?.status === 'playing' && prev === 'waiting') { onPlay(); }
+  }, [room?.status]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111', padding: 16 }}>
@@ -1954,6 +2079,11 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
         {!room ? (
           <View>
             <Text style={{ color: '#cccccc', fontSize: 13, textAlign: 'center', marginBottom: 12 }}>Heads-up No-Limit Texas Hold&apos;em. The host deals the first hand as button / small blind.</Text>
+            {activeRoomTexas ? (
+              <TouchableOpacity onPress={() => { setRoom(activeRoomTexas); if (activeRoomTexas.status === 'playing') { onPlay(); } }} style={{ backgroundColor: '#f39c12', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#111111', fontWeight: '800', textAlign: 'center' }}>REJOIN ROOM {activeRoomTexas.code}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={createRoom} disabled={busy} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>CREATE ROOM</Text>
             </TouchableOpacity>
@@ -2021,20 +2151,8 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>CHAT</Text>
-            <ScrollView style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-              {(room.chat || []).map((m: any, i: number) => (
-                <Text key={i} style={{ color: m.sender_id === playerId ? '#f39c12' : '#ffffff', fontSize: 13, marginBottom: 4 }}>
-                  {m.sender_id === playerId ? 'YOU' : (m.sender_name || 'Friend')}: {m.text}
-                </Text>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput value={chatInput} onChangeText={setChatInput} placeholder="Say something..." placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
-              <TouchableOpacity onPress={sendChat} style={{ backgroundColor: '#1e88e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
-                <Text style={{ color: '#ffffff', fontWeight: '800' }}>SEND</Text>
-              </TouchableOpacity>
-            </View>
+            {/* PVP_ALL_NOCHAT: chat removed */}
+
             <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#666666', paddingVertical: 12, borderRadius: 8, marginTop: 12 }}>
               <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>BACK</Text>
             </TouchableOpacity>
@@ -2096,6 +2214,34 @@ export default function MapScreen() {
   // HOUSE_VISIT: guest mode + presence (inside the house only).
   const [houseOccupants, setHouseOccupants] = useState<any[]>([]);
   const isGuestVisit = !!(interiorHouse && (interiorHouse as any).player_id && (interiorHouse as any).player_id !== playerId);
+  // HOUSE_VISIT_PRESENCE_FIX: presence lifecycle - enter/poll/heartbeat/leave
+  useEffect(() => {
+    if (!interiorHouse || !playerId) return;
+    let stopped = false;
+    const visitName = (playerRelationship as any)?.name || 'Player';
+    const loadOccupants = async () => {
+      try {
+        const res: any = await getHousePresence(interiorHouse.id);
+        if (!stopped && res?.occupants) setHouseOccupants(res.occupants);
+      } catch (_) {}
+    };
+    (async () => {
+      try {
+        const res: any = await houseEnterPresence(interiorHouse.id, playerId, visitName);
+        if (!stopped && res?.occupants) setHouseOccupants(res.occupants);
+      } catch (_) {}
+    })();
+    const hb = setInterval(async () => {
+      try { await houseHeartbeatPresence(interiorHouse.id, playerId, visitName); } catch (_) {}
+    }, 30000);
+    const poll = setInterval(loadOccupants, 15000);
+    return () => {
+      stopped = true;
+      clearInterval(hb);
+      clearInterval(poll);
+      houseLeavePresence(interiorHouse.id, playerId).catch(() => {});
+    };
+  }, [interiorHouse?.id, playerId]);
   const stopTv = useCallback(() => { setTvOn(false); }, []);
   const toggleTv = useCallback(() => { setTvOn((p: boolean) => !p); }, []);
   const sellTv = async () => {
@@ -3827,6 +3973,9 @@ const HOUSE_ITEMS: Record<string, any[]> = {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{interiorHouse?.name || ''}</Text>
               <Text style={{ color: '#f39c12', fontWeight: '700', fontSize: 12 }}>{(interiorHouse?.items?.length || 0)}/{interiorHouse?.item_limit || 6} items</Text>
+              {houseOccupants.length > 0 ? (
+                <Text style={{ color: '#fff', fontSize: 12 }}>In this house now: {houseOccupants.map((o: any) => (o.player_id === playerId ? ((o.player_name || 'Player') + ' (you)') : (o.player_name || 'Player'))).join(', ')}</Text>
+              ) : null}
             </View>
             <Text style={{ color: '#f39c12', fontWeight: '800', fontSize: 14, marginBottom: 8 }}>💰 ${(player?.cash || 0).toLocaleString()}</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>

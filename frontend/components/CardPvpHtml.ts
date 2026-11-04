@@ -598,6 +598,7 @@ function spEndTrickPvp() {
   SP.took[w]++;
   SP.tricks[w % 2 === 0 ? 0 : 1]++;
   SP.msg = spSeatName(w) + ' takes the trick.';
+  SP.lastTrick = SP.trick.slice();
   SP.trick = [];
   SP.ledSuit = null;
   SP.turn = w;
@@ -626,6 +627,8 @@ function spScoreHandPvp() {
   if (SP.themBags >= 10) { themPts -= 100; SP.themBags -= 10; log.push('Opponents hit 10 bags: -100.'); }
   SP.us += usPts; SP.them += themPts;
   SP.endText = 'Hand over. You bid ' + usBid + ' took ' + usT + ' (' + (usPts >= 0 ? '+' : '') + usPts + '). Opponents bid ' + themBid + ' took ' + themT + ' (' + (themPts >= 0 ? '+' : '') + themPts + '). ' + log.join(' ');
+  // SPADES_LAST_CARD_PVP_TEXT
+  if (SP.lastTrick && SP.lastTrick.length) { var lp = SP.lastTrick[SP.lastTrick.length - 1]; SP.endText += ' Last card played: ' + rlab(lp.c.r) + SUITS[lp.c.s] + ' by ' + spSeatName(lp.p) + '.'; }
 }
 function spReplay() {
   var meSeat = AMHOST ? 0 : 2;
@@ -743,7 +746,8 @@ function spRenderPvp() {
   for (var i = 0; i < 4; i++) {
     var slot = document.createElement('div');
     slot.className = 'slot';
-    var played = SP.trick.find(function (t) { return t.p === i; });
+    var shownTrick = (SP.phase === 'over' && SP.lastTrick) ? SP.lastTrick : SP.trick;
+    var played = shownTrick.find(function (t) { return t.p === i; });
     slot.innerHTML = '<div class="who">' + spSeatName(i) + (SP.turn === i && SP.phase === 'play' ? ' ●' : '') + '</div>';
     if (played) slot.appendChild(cardEl(played.c, 'small'));
     tr.appendChild(slot);

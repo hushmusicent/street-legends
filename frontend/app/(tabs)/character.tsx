@@ -33,6 +33,12 @@ import {
   getOwnedTerritories,
   deleteItem,
   sellItem,
+  consumeRockCandyItem,
+  sellRockCandyItem,
+  consumePillsItem,
+  sellPillsItem,
+  consumeGrassItem,
+  sellGrassItem,
   collectTerritoryIncome,
   getTerritoryIncomePreview,
   equipSkill,
@@ -424,6 +430,75 @@ export default function CharacterScreen() {
     ]);
   };
 
+// GRASS_ITEM_FRONTEND_HANDLERS: use/sell Grass, mirroring handleSellItem.
+  const handleUseGrass = async () => {
+    if (!playerId) return;
+    try {
+      const result = await consumeGrassItem(playerId);
+      await loadAllData();
+      Alert.alert('Grass used!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to use Grass');
+    }
+  };
+
+  const handleSellGrass = async () => {
+    if (!playerId) return;
+    try {
+      const result = await sellGrassItem(playerId, 1);
+      await loadAllData();
+      Alert.alert('Sold!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to sell Grass');
+    }
+  };
+
+// PILLS_ITEM_FRONTEND_HANDLERS: use/sell Pills, mirroring handleSellItem.
+  const handleUsePills = async () => {
+    if (!playerId) return;
+    try {
+      const result = await consumePillsItem(playerId);
+      await loadAllData();
+      Alert.alert('Pills used!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to use Pills');
+    }
+  };
+
+  const handleSellPills = async () => {
+    if (!playerId) return;
+    try {
+      const result = await sellPillsItem(playerId, 1);
+      await loadAllData();
+      Alert.alert('Sold!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to sell Pills');
+    }
+  };
+
+// ROCK_CANDY_ITEM_FRONTEND_HANDLERS: use/sell Rock Candy, mirroring handleSellItem.
+  const handleUseRockCandy = async () => {
+    if (!playerId) return;
+    try {
+      const result = await consumeRockCandyItem(playerId);
+      await loadAllData();
+      Alert.alert('Rock Candy used!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to use Rock Candy');
+    }
+  };
+
+  const handleSellRockCandy = async () => {
+    if (!playerId) return;
+    try {
+      const result = await sellRockCandyItem(playerId, 1);
+      await loadAllData();
+      Alert.alert('Sold!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to sell Rock Candy');
+    }
+  };
+
   const handleRepairItem = async (item: EquipmentItem) => {
     if (!playerId || item.inventory_index === undefined) return;
     
@@ -751,6 +826,12 @@ export default function CharacterScreen() {
             onDelete={handleDeleteItem}
             onSell={handleSellItem}
             onRepair={handleRepairItem}
+            onUseRockCandy={handleUseRockCandy}
+            onSellRockCandy={handleSellRockCandy}
+            onUsePills={handleUsePills}
+            onSellPills={handleSellPills}
+            onUseGrass={handleUseGrass}
+            onSellGrass={handleSellGrass}
             playerLevel={player.level}
             playerCash={player.cash}
           />
@@ -1345,6 +1426,12 @@ function ItemsTab({
   onDelete,
   onSell,
   onRepair,
+  onUseRockCandy,
+  onSellRockCandy,
+  onUsePills,
+  onSellPills,
+  onUseGrass,
+  onSellGrass,
   playerLevel,
   playerCash,
 }: {
@@ -1354,6 +1441,15 @@ function ItemsTab({
   onDelete: (item: EquipmentItem) => void;
   onSell: (item: EquipmentItem) => void;
   onRepair: (item: EquipmentItem) => void;
+  onUseRockCandy: () => void;
+  onSellRockCandy: () => void;
+  // ROCK_CANDY_ITEM_FRONTEND_PROPS
+  onUsePills: () => void;
+  onSellPills: () => void;
+  // PILLS_ITEM_FRONTEND_PROPS
+  onUseGrass: () => void;
+  onSellGrass: () => void;
+  // GRASS_ITEM_FRONTEND_PROPS
   playerLevel: number;
   playerCash: number;
 }) {
@@ -1450,6 +1546,61 @@ function ItemsTab({
                 <Text style={styles.levelReqText}>Requires Lv.{item.level_requirement}</Text>
               )}
               {/* Action buttons row */}
+{/* GRASS_ITEM_FRONTEND_ROW */}
+{item.id === 'grass' ? (
+            <View style={styles.itemActions}>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.equipActionBtn]}
+                onPress={() => onUseGrass()}
+              >
+                <Ionicons name="leaf" size={14} color="#4caf50" />
+                <Text style={[styles.itemActionText, { color: '#4caf50' }]}>USE (+50% HP 60s)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.sellActionBtn]}
+                onPress={() => onSellGrass()}
+              >
+                <Ionicons name="cash" size={14} color="#f39c12" />
+                <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL 1 OZ ($100)</Text>
+              </TouchableOpacity>
+            </View>
+          ) : item.id === 'pills' ? (
+            /* PILLS_ITEM_FRONTEND_ROW */
+            <View style={styles.itemActions}>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.equipActionBtn]}
+                onPress={() => onUsePills()}
+              >
+                <Ionicons name="medkit" size={14} color="#4caf50" />
+                <Text style={[styles.itemActionText, { color: '#4caf50' }]}>USE (+50% ENERGY 60s)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.sellActionBtn]}
+                onPress={() => onSellPills()}
+              >
+                <Ionicons name="cash" size={14} color="#f39c12" />
+                <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL 1 OZ ($200)</Text>
+              </TouchableOpacity>
+            </View>
+          ) : item.id === 'rock_candy' ? (
+            /* ROCK_CANDY_ITEM_FRONTEND_ROW */
+            <View style={styles.itemActions}>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.equipActionBtn]}
+                onPress={() => onUseRockCandy()}
+              >
+                <Ionicons name="diamond" size={14} color="#ce93d8" />
+                <Text style={[styles.itemActionText, { color: '#ce93d8' }]}>USE (+50% ATTACK 60s)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.sellActionBtn]}
+                onPress={() => onSellRockCandy()}
+              >
+                <Ionicons name="cash" size={14} color="#f39c12" />
+                <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL 1 OZ ($300)</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
               <View style={styles.itemActions}>
                 {needsRepair ? (
                   <TouchableOpacity
@@ -1487,6 +1638,8 @@ function ItemsTab({
                   <Text style={[styles.itemActionText, { color: '#e74c3c' }]}>DROP</Text>
                 </TouchableOpacity>
               </View>
+          )}
+
             </View>
           </View>
         );

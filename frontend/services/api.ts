@@ -645,6 +645,36 @@ export const sellItem = async (playerId: string, itemId: string) => {
   const response = await api.post(`/players/${playerId}/inventory/${itemId}/sell`);
   return response.data;
 };
+export const consumeRockCandyItem = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/rock-candy/use`);
+  return response.data;
+};
+
+export const sellRockCandyItem = async (playerId: string, qty: number = 1) => {
+  const response = await api.post(`/players/${playerId}/rock-candy/sell?qty=${qty}`);
+  return response.data;
+};
+
+export const consumePillsItem = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/pills/use`);
+  return response.data;
+};
+
+export const sellPillsItem = async (playerId: string, qty: number = 1) => {
+  const response = await api.post(`/players/${playerId}/pills/sell?qty=${qty}`);
+  return response.data;
+};
+
+export const consumeGrassItem = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/grass/use`);
+  return response.data;
+};
+
+export const sellGrassItem = async (playerId: string, qty: number = 1) => {
+  const response = await api.post(`/players/${playerId}/grass/sell?qty=${qty}`);
+  return response.data;
+};
+
 
 // Fitness APIs
 export const getFitnessData = async (playerId: string) => {

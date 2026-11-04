@@ -35,7 +35,7 @@ body { margin: 0; background: #111111; color: #ffffff; font-family: sans-serif; 
 <button id="btnSound">SOUND ON</button>
 <button id="btnLeave" class="leave">LEAVE TABLE</button>
 </div>
-<div id="hint">Play against your friend. Pocket your group, then the 8, to win. Chat lives on the room screen.</div>
+<div id="hint">Play against your friend. Pocket your group, then the 8, to win.</div>
 </div>
 <script>
 (function () {
