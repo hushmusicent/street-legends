@@ -49,6 +49,8 @@ import { CHESS_CHECKERS_HTML } from '../../components/ChessCheckersHtml';
 import { CHESS_CHECKERS_PVP_HTML } from '../../components/ChessCheckersPvpHtml';
 import { TEXAS_HOLDEM_HTML } from '../../components/TexasHoldemHtml';
 import { TEXAS_HOLDEM_PVP_HTML } from '../../components/TexasHoldemPvpHtml';
+import { createAudioPlayer } from 'expo-audio';
+import { WebView } from 'react-native-webview';
 
 let PoolWebView: any = null;
 try { PoolWebView = require('react-native-webview').default; } catch (e) { PoolWebView = null; }
@@ -1383,6 +1385,7 @@ const ChessCheckersGameModal = ({ visible, onClose }: { visible: boolean; onClos
 const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerName }: { visible: boolean; onClose: () => void; room: any; playerId: string; playerName: string }) => {
   const webRef = useRef<any>(null);
   const lastRoomRef = useRef<string>('');
+  const settleDoneRef = useRef(false);
   const [pvpError, setPvpError] = useState('');
   const me = playerId;
   const hostId = room?.host_id;
@@ -1404,6 +1407,7 @@ const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerNam
           lastRoomRef.current = js;
           if (webRef.current) {
             webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("chess-checkers-room", {detail: ' + js + '})); true;');
+            if (data.wager_status === 'held' && data.status === 'finished' && data.state) { settleWagerChess(data.state.winner || null); }
           }
         }
       } catch (e) {}
@@ -1412,6 +1416,23 @@ const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerNam
     const t = setInterval(poll, 2000);
     return () => clearInterval(t);
   }, [visible, code]);
+  useEffect(() => {
+    if (!visible || !code || room?.wager_status !== 'agreed') return;
+    const startWager = async () => {
+      try {
+        const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/rooms/' + code + '/wager/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: me }) });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); if (d?.detail) setPvpError(d.detail); }
+      } catch (e) {}
+    };
+    startWager();
+  }, [visible, code]);
+  const settleWagerChess = async (winnerColor: string | null) => {
+    if (settleDoneRef.current) return;
+    settleDoneRef.current = true;
+    const hostColor = game === 'checkers' ? 'r' : 'w';
+    const winId = !winnerColor ? '' : (winnerColor === hostColor ? hostId : guestId);
+    try { await fetch(CC_API_BASE + '/api/chess_checkers/rooms/rooms/' + code + '/wager/settle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: me, outcome: winId ? 'win' : 'draw', winner_id: winId }) }); } catch (e) {}
+  };
   const handlePvpMessage = async (event: any) => {
     const raw = event?.nativeEvent?.data;
     if (raw === 'close') { onClose(); return; }
@@ -1430,6 +1451,7 @@ const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerNam
           setPvpError('');
           const data = await res.json().catch(() => null);
           if (data) lastRoomRef.current = JSON.stringify(data);
+          if (msg.state.status === 'finished') { settleWagerChess(msg.state.winner || null); }
         }
       } else if (msg?.type === 'chess-checkers-chat' && msg.text) {
         const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/' + code + '/chat', {
@@ -1479,12 +1501,40 @@ const ChessCheckersPvpGameModal = ({ visible, onClose, room, playerId, playerNam
   );
 };
 
+// WAGER_CHESS_CHECKERS_FRONTEND_V1
 const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
   const [codeInput, setCodeInput] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [pvpGame, setPvpGame] = useState('chess');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [wagerAmount, setWagerAmount] = useState('');
+  const [wagerInfo, setWagerInfo] = useState('');
+  const wagerPost = async (action: string, body: any) => {
+    if (!room?.code) return null;
+    try {
+      const res = await fetch(CC_API_BASE + '/api/chess_checkers/rooms/rooms/' + room.code + '/wager/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setWagerInfo(data?.detail || 'Wager request failed.'); return null; }
+      setRoom(data); return data;
+    } catch (e) { setWagerInfo('Wager rooms are not live yet - the backend still needs a Deploy.'); return null; }
+  };
+  const proposeWager = async () => {
+    const amount = parseInt(wagerAmount, 10);
+    if (!amount || amount <= 0) { setWagerInfo('Enter a cash amount above 0.'); return; }
+    setWagerInfo('');
+    const data = await wagerPost('propose', { player_id: playerId, amount: amount });
+    if (data) setWagerInfo('Wager proposed: $' + amount + '. Waiting for your friend to agree.');
+  };
+  const agreeWager = async () => {
+    setWagerInfo('');
+    const data = await wagerPost('agree', { player_id: playerId });
+    if (data) setWagerInfo('Wager agreed: $' + data.wager_amount + '. Cash is taken when the game starts.');
+  };
+  const declineWager = async () => {
+    setWagerInfo('');
+    await wagerPost('decline', { player_id: playerId });
+  };
   const showNotLive = () => setInfo('Chess & Checkers rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
   const createRoom = async () => {
     setBusy(true); setInfo('');
@@ -1565,6 +1615,50 @@ const ChessCheckersPvpModal = ({ visible, onClose, playerId, playerName, room, s
             <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
               {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
             </Text>
+            {room && room.status !== 'finished' ? (
+              <View style={{ backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>💰 CASH WAGER - Street Legends cash, not real money</Text>
+                {room.wager_status === 'held' ? (
+                  <Text style={{ color: '#f39c12', fontSize: 13 }}>Wager held: ${room.wager_amount} each. Winner takes ${room.wager_amount * 2}.</Text>
+                ) : room.wager_status === 'agreed' ? (
+                  <Text style={{ color: '#f39c12', fontSize: 13 }}>Wager agreed: ${room.wager_amount}. Cash is taken from both players when the game starts.</Text>
+                ) : room.wager_status === 'proposed' ? (
+                  playerId === room.host_id ? (
+                    <Text style={{ color: '#cccccc', fontSize: 13 }}>Wager proposed: ${room.wager_amount}. Waiting for {foeName} to agree or decline.</Text>
+                  ) : (
+                    <View>
+                      <Text style={{ color: '#ffffff', fontSize: 13, marginBottom: 6 }}>{foeName} proposes a ${room.wager_amount} cash wager. Make sure you have at least that much cash before agreeing.</Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity onPress={agreeWager} style={{ flex: 1, backgroundColor: '#2e7d32', paddingVertical: 10, borderRadius: 8 }}>
+                          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>AGREE</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={declineWager} style={{ flex: 1, backgroundColor: '#666666', paddingVertical: 10, borderRadius: 8 }}>
+                          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>DECLINE</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )
+                ) : room.wager_status === 'paid' ? (
+                  <Text style={{ color: '#2e7d32', fontSize: 13, fontWeight: '800' }}>{room.wager_winner_id === playerId ? ('You won the wager: $' + (room.wager_amount * 2) + ' cash!') : (foeName + ' won the wager.')}</Text>
+                ) : room.wager_status === 'refunded' ? (
+                  <Text style={{ color: '#cccccc', fontSize: 13 }}>Wager refunded - the game was a draw.</Text>
+                ) : playerId === room.host_id ? (
+                  <View>
+                    <Text style={{ color: '#cccccc', fontSize: 12, marginBottom: 6 }}>Propose a cash wager. Both players must agree, and both need at least this much cash.</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TextInput value={wagerAmount} onChangeText={setWagerAmount} keyboardType="number-pad" placeholder="Cash amount" placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+                      <TouchableOpacity onPress={proposeWager} style={{ backgroundColor: '#2e7d32', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                        <Text style={{ color: '#ffffff', fontWeight: '800' }}>PROPOSE</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={{ color: '#cccccc', fontSize: 13 }}>No wager yet - the host can propose one.</Text>
+                )}
+                {wagerInfo ? (<Text style={{ color: '#f39c12', fontSize: 12, marginTop: 6 }}>{wagerInfo}</Text>) : null}
+              </View>
+            ) : null}
+
             {canPlay ? (
               <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
@@ -1659,6 +1753,7 @@ const TexasHoldemGameModal = ({ visible, onClose }: { visible: boolean; onClose:
 const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName }: { visible: boolean; onClose: () => void; room: any; playerId: string; playerName: string }) => {
   const webRef = useRef<any>(null);
   const lastRoomRef = useRef<string>('');
+  const settleDoneRef = useRef(false);
   const [pvpError, setPvpError] = useState('');
   const me = playerId;
   const hostId = room?.host_id;
@@ -1679,6 +1774,7 @@ const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName 
           lastRoomRef.current = js;
           if (webRef.current) {
             webRef.current.injectJavaScript('window.dispatchEvent(new CustomEvent("texas-holdem-room", {detail: ' + js + '})); true;');
+            if (data.wager_status === 'held' && data.state && data.state.sessionOver === true && typeof data.state.sessionWinner === 'number') { settleWagerTexas(data.state.sessionWinner); }
           }
         }
       } catch (e) {}
@@ -1687,6 +1783,22 @@ const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName 
     const t = setInterval(poll, 2000);
     return () => clearInterval(t);
   }, [visible, code]);
+  useEffect(() => {
+    if (!visible || !code || room?.wager_status !== 'agreed') return;
+    const startWager = async () => {
+      try {
+        const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/rooms/' + code + '/wager/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: me }) });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); if (d?.detail) setPvpError(d.detail); }
+      } catch (e) {}
+    };
+    startWager();
+  }, [visible, code]);
+  const settleWagerTexas = async (sessionWinnerIdx: number) => {
+    if (settleDoneRef.current) return;
+    settleDoneRef.current = true;
+    const winId = sessionWinnerIdx === 0 ? hostId : guestId;
+    try { await fetch(TH_API_BASE + '/api/texas_holdem/rooms/rooms/' + code + '/wager/settle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ player_id: me, outcome: 'win', winner_id: winId }) }); } catch (e) {}
+  };
   const handlePvpMessage = async (event: any) => {
     const raw = event?.nativeEvent?.data;
     if (raw === 'close') { onClose(); return; }
@@ -1705,6 +1817,7 @@ const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName 
           setPvpError('');
           const data = await res.json().catch(() => null);
           if (data) lastRoomRef.current = JSON.stringify(data);
+          if (msg.state && msg.state.sessionOver === true && typeof msg.state.sessionWinner === 'number') { settleWagerTexas(msg.state.sessionWinner); }
         }
       } else if (msg?.type === 'texas-holdem-chat' && msg.text) {
         const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/' + code + '/chat', {
@@ -1754,11 +1867,39 @@ const TexasHoldemPvpGameModal = ({ visible, onClose, room, playerId, playerName 
   );
 };
 
+// WAGER_TEXAS_HOLDEM_FRONTEND_V1
 const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, setRoom, onPlay, onLeave }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; room: any; setRoom: (r: any) => void; onPlay: () => void; onLeave: () => void }) => {
   const [codeInput, setCodeInput] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [wagerAmount, setWagerAmount] = useState('');
+  const [wagerInfo, setWagerInfo] = useState('');
+  const wagerPost = async (action: string, body: any) => {
+    if (!room?.code) return null;
+    try {
+      const res = await fetch(TH_API_BASE + '/api/texas_holdem/rooms/rooms/' + room.code + '/wager/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setWagerInfo(data?.detail || 'Wager request failed.'); return null; }
+      setRoom(data); return data;
+    } catch (e) { setWagerInfo('Wager rooms are not live yet - the backend still needs a Deploy.'); return null; }
+  };
+  const proposeWager = async () => {
+    const amount = parseInt(wagerAmount, 10);
+    if (!amount || amount <= 0) { setWagerInfo('Enter a cash amount above 0.'); return; }
+    setWagerInfo('');
+    const data = await wagerPost('propose', { player_id: playerId, amount: amount });
+    if (data) setWagerInfo('Wager proposed: $' + amount + '. Waiting for your friend to agree.');
+  };
+  const agreeWager = async () => {
+    setWagerInfo('');
+    const data = await wagerPost('agree', { player_id: playerId });
+    if (data) setWagerInfo('Wager agreed: $' + data.wager_amount + '. Cash is taken when the game starts.');
+  };
+  const declineWager = async () => {
+    setWagerInfo('');
+    await wagerPost('decline', { player_id: playerId });
+  };
   const showNotLive = () => setInfo('Texas Holdem rooms are not live yet - the backend still needs a Deploy that picks up the rooms code.');
   const createRoom = async () => {
     setBusy(true); setInfo('');
@@ -1831,6 +1972,50 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
             <Text style={{ color: '#cccccc', fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
               {room.status === 'waiting' ? 'Waiting for your friend to join...' : room.status === 'playing' ? (foeName + ' joined!') : 'Game over.'}
             </Text>
+            {room && room.status !== 'finished' ? (
+              <View style={{ backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', marginBottom: 6 }}>💰 CASH WAGER - Street Legends cash, not real money</Text>
+                {room.wager_status === 'held' ? (
+                  <Text style={{ color: '#f39c12', fontSize: 13 }}>Wager held: ${room.wager_amount} each. Winner takes ${room.wager_amount * 2}.</Text>
+                ) : room.wager_status === 'agreed' ? (
+                  <Text style={{ color: '#f39c12', fontSize: 13 }}>Wager agreed: ${room.wager_amount}. Cash is taken from both players when the game starts.</Text>
+                ) : room.wager_status === 'proposed' ? (
+                  playerId === room.host_id ? (
+                    <Text style={{ color: '#cccccc', fontSize: 13 }}>Wager proposed: ${room.wager_amount}. Waiting for {foeName} to agree or decline.</Text>
+                  ) : (
+                    <View>
+                      <Text style={{ color: '#ffffff', fontSize: 13, marginBottom: 6 }}>{foeName} proposes a ${room.wager_amount} cash wager. Make sure you have at least that much cash before agreeing.</Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity onPress={agreeWager} style={{ flex: 1, backgroundColor: '#2e7d32', paddingVertical: 10, borderRadius: 8 }}>
+                          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>AGREE</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={declineWager} style={{ flex: 1, backgroundColor: '#666666', paddingVertical: 10, borderRadius: 8 }}>
+                          <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>DECLINE</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )
+                ) : room.wager_status === 'paid' ? (
+                  <Text style={{ color: '#2e7d32', fontSize: 13, fontWeight: '800' }}>{room.wager_winner_id === playerId ? ('You won the wager: $' + (room.wager_amount * 2) + ' cash!') : (foeName + ' won the wager.')}</Text>
+                ) : room.wager_status === 'refunded' ? (
+                  <Text style={{ color: '#cccccc', fontSize: 13 }}>Wager refunded - the game was a draw.</Text>
+                ) : playerId === room.host_id ? (
+                  <View>
+                    <Text style={{ color: '#cccccc', fontSize: 12, marginBottom: 6 }}>Propose a cash wager. Both players must agree, and both need at least this much cash.</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TextInput value={wagerAmount} onChangeText={setWagerAmount} keyboardType="number-pad" placeholder="Cash amount" placeholderTextColor="#888888" style={{ flex: 1, backgroundColor: '#222222', color: '#ffffff', padding: 10, borderRadius: 8 }} />
+                      <TouchableOpacity onPress={proposeWager} style={{ backgroundColor: '#2e7d32', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+                        <Text style={{ color: '#ffffff', fontWeight: '800' }}>PROPOSE</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={{ color: '#cccccc', fontSize: 13 }}>No wager yet - the host can propose one.</Text>
+                )}
+                {wagerInfo ? (<Text style={{ color: '#f39c12', fontSize: 12, marginTop: 6 }}>{wagerInfo}</Text>) : null}
+              </View>
+            ) : null}
+
             {canPlay ? (
               <TouchableOpacity onPress={onPlay} style={{ backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}>
                 <Text style={{ color: '#ffffff', fontWeight: '800', textAlign: 'center' }}>PLAY</Text>
@@ -1863,7 +2048,118 @@ const TexasHoldemPvpModal = ({ visible, onClose, playerId, playerName, room, set
   );
 };
 
+const RADIO_STREAM_URL = 'https://streaming.live365.com/a30094';
+
+// RADIO_AUDIO: house-level radio controller. Rendered inside the house
+// interior only; unmounting stops the player (LEAVE HOUSE safety net).
+const RadioStopOnUnmount = ({ onStop }: { onStop: () => void }) => {
+  useEffect(() => {
+    return () => { onStop(); };
+  }, []);
+  return null;
+};
+
+// TV_SCHEDULE: house-level TV controller. Rendered inside the house
+// interior only; unmounting stops playback (LEAVE HOUSE safety net).
+const TvStopOnUnmount = ({ onStop }: { onStop: () => void }) => {
+  useEffect(() => {
+    return () => { onStop(); };
+  }, []);
+  return null;
+};
+
+const TV_SCHEDULE_PLAYER_HTML = `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}video{width:100%;height:100%;background:#000}</style></head><body><video id="v" playsinline controls></video><script>
+var CID='0c091d20-ef4c-4870-ac55-899a8d1cf947';
+var SCHED='https://broadcaster.emergent.host/api/schedule/live';
+var CHAN='https://broadcaster.emergent.host/api/channels/'+CID;
+var v=document.getElementById('v');
+var slots=null,mode=null,lastRandom=null,timer=null,curKey=null,errCount=0,errUrl=null;
+function esecs(){var p=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'numeric',second:'numeric',hour12:false}).formatToParts(new Date());var g={};for(var i=0;i<p.length;i++){g[p[i].type]=p[i].value;}return (parseInt(g.hour,10)%24)*3600+parseInt(g.minute,10)*60+parseInt(g.second,10);}
+function parseT(t){if(typeof t==='number'){return t;}var p=String(t).split(':').map(Number);if(p.length===3){return p[0]*3600+p[1]*60+p[2];}return p[0]*60+p[1];}
+function curSlot(){if(!slots){return null;}var now=esecs();for(var i=0;i<slots.length;i++){if(now>=parseT(slots[i].start_time)&&now<parseT(slots[i].end_time)){return {slot:slots[i],index:i,seek:now-parseT(slots[i].start_time)};} }return null;}
+function playUrl(url,seek){if(url===errUrl){errCount++;}else{errCount=0;errUrl=url;}v.src=url;v.onloadedmetadata=function(){try{if(seek>0){v.currentTime=seek;}}catch(e){}v.play().catch(function(){});};v.load();}
+function playCur(){if(mode==='random'){playRandom();return;}var c=curSlot();if(!c){playRandom();return;}var key=c.slot.video_id+'|'+c.slot.start_time;if(key!==curKey){curKey=key;playUrl(c.slot.video_url,c.seek);}}
+function playNextSlot(){var c=curSlot();if(c&&slots[c.index+1]){var nx=slots[c.index+1];curKey=nx.video_id+'|'+nx.start_time;playUrl(nx.video_url,0);}else{playRandom();}}
+function playRandom(){fetch(CHAN).then(function(r){return r.json();}).then(function(data){var pool=(data.videos||[]).filter(function(x){return x.video_url;});if(!pool.length){return;}var pick=pool[Math.floor(Math.random()*pool.length)];if(pool.length>1){var guard=0;while(pick.id===lastRandom&&guard<20){pick=pool[Math.floor(Math.random()*pool.length)];guard++;}}lastRandom=pick.id;mode='random';curKey='random|'+pick.id;playUrl(pick.video_url,0);}).catch(function(){});}
+v.onended=function(){curKey=null;playCur();};
+v.onerror=function(){if(mode==='random'){playRandom();}else if(errCount>=1){playNextSlot();}else{curKey=null;playCur();}};
+fetch(SCHED).then(function(r){return r.json();}).then(function(data){var s=(data.schedules||[]).find(function(x){return x.channel_id===CID;});if(!s||!s.videos||!s.videos.length){playRandom();return;}slots=s.videos;mode='schedule';playCur();timer=setInterval(playCur,15000);}).catch(function(){playRandom();});
+</script></body></html>`;
+
 export default function MapScreen() {
+  // TV_SCHEDULE (house-level): owned by the interior, NOT by any game
+  // modal, so opening a house game never stops it. LEAVE HOUSE stops it
+  // via the interiorHouse effects below + TvStopOnUnmount cleanup.
+  // Re-entering the house leaves the TV OFF (tvOn is only set by
+  // tapping the TV, never restored on enter).
+  const [tvOn, setTvOn] = useState(false);
+  // HOUSE_VISIT: guest mode + presence (inside the house only).
+  const [houseOccupants, setHouseOccupants] = useState<any[]>([]);
+  const isGuestVisit = !!(interiorHouse && (interiorHouse as any).player_id && (interiorHouse as any).player_id !== playerId);
+  const stopTv = useCallback(() => { setTvOn(false); }, []);
+  const toggleTv = useCallback(() => { setTvOn((p: boolean) => !p); }, []);
+  const sellTv = async () => {
+    stopTv();
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'tv');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'tv') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  useEffect(() => {
+    if (!interiorHouse) { stopTv(); }
+  }, [interiorHouse, stopTv]);
+  useEffect(() => {
+    if (tvOn && interiorHouse && !(interiorHouse.items || []).some((it: any) => it.item_id === 'tv')) { stopTv(); }
+  }, [interiorHouse, tvOn, stopTv]);
+  // RADIO_AUDIO (house-level): owned by the interior, NOT by any game
+  // modal, so opening a house game never stops it. LEAVE HOUSE stops it
+  // via the interiorHouse effect below + RadioStopOnUnmount cleanup.
+  const [radioPlaying, setRadioPlaying] = useState(false);
+  const radioPlayerRef = useRef<any>(null);
+  const stopRadio = useCallback(() => {
+    try { radioPlayerRef.current?.pause(); } catch {}
+    try { radioPlayerRef.current?.release(); } catch {}
+    radioPlayerRef.current = null;
+    setRadioPlaying(false);
+  }, []);
+  const toggleRadio = useCallback(async () => {
+    if (radioPlayerRef.current) { stopRadio(); return; }
+    try {
+      const player = createAudioPlayer({ uri: RADIO_STREAM_URL });
+      player.volume = 0.8;
+      radioPlayerRef.current = player;
+      player.play();
+      setRadioPlaying(true);
+    } catch (e) {
+      Alert.alert('Radio', 'Could not start the station. Try again.');
+    }
+  }, [stopRadio]);
+  const sellRadio = async () => {
+    stopRadio();
+    if (!interiorHouse || !playerId) return;
+    try {
+      const res = await removeHouseItem(interiorHouse.id, playerId, 'radio');
+      if (res?.house) {
+        setInteriorHouse(res.house);
+      } else {
+        setInteriorHouse({ ...interiorHouse, items: (interiorHouse.items || []).filter((it: any) => it.item_id !== 'radio') });
+      }
+      if (res && typeof res.cash === 'number' && player) setPlayer({ ...player, cash: res.cash });
+    } catch (e: any) {
+      Alert.alert('Could not sell', e?.message || 'Try again.');
+    }
+  };
+  useEffect(() => {
+    if (!interiorHouse) { stopRadio(); }
+  }, [interiorHouse, stopRadio]);
   const {
     player,
     playerId,
@@ -2136,6 +2432,8 @@ export default function MapScreen() {
           const tapDist = Math.hypot(gesture.dx, gesture.dy);
           if (tapDist < 12) {
             if (itemId === 'pool-table') setPoolMenuOpen(true);
+            if (itemId === 'tv') toggleTv();
+            if (itemId === 'radio') toggleRadio();
             if (itemId === 'dartboard') setDartMenuOpen(true);
             if (itemId === 'cardtable') setCardMenuOpen(true);
             if (itemId === 'dominoes') setDominoMenuOpen(true);
@@ -2164,6 +2462,9 @@ export default function MapScreen() {
     return itemRespondersRef.current[itemId];
   };
   const handleHouseItemToggle = (item: any) => {
+      if (item?.id === 'tv' && (interiorHouse?.items || []).some((it: any) => it.item_id === 'tv')) { toggleTv(); return; }
+      if (item?.id === 'radio' && (interiorHouse?.items || []).some((it: any) => it.item_id === 'radio')) { toggleRadio(); return; }
+      if (isGuestVisit) { return; }
     const placed = (interiorHouse?.items || []).some((it: any) => it.item_id === item.id);
     const knownPrice: any = { 'pool-table': 50000, 'dartboard': 10000 };
     const price = item.price ?? knownPrice[item.id];
@@ -2229,7 +2530,7 @@ const HOUSE_IMAGES: Record<string, any> = {
 // House shop items by category — empty for now, filled in a later step.
 const HOUSE_ITEMS: Record<string, any[]> = {
   games: [{ id: 'pool-table', name: 'Pool Table', image: require('../../assets/houses/items/pool-table.png'), price: 50000 }, { id: 'dartboard', name: 'Dartboard', image: require('../../assets/houses/items/dartboard.png'), price: 10000 }, { id: 'cardtable', name: 'Card Table', image: require('../../assets/houses/items/cardtable.png'), price: 20000 }, { id: 'dominoes', name: 'Dominoes Table', image: require('../../assets/houses/items/dominoes.png'), price: 20000 }, { id: 'scrabble', name: 'Scrabble Table', image: require('../../assets/houses/items/scrabble.png'), price: 20000 }, { id: 'chess_checkers', name: 'Chess & Checkers Table', image: require('../../assets/houses/items/chess-checkers.png'), price: 30000 }, { id: 'texas_holdem', name: "Texas Hold'em Table", image: require('../../assets/houses/items/texas-holdem.png'), price: 20000 }],
-  appliances: [],
+  appliances: [{ id: 'radio', name: 'Radio', image: require('../../assets/houses/items/radio.png'), price: 5000 }, { id: 'tv', name: 'TV', image: require('../../assets/houses/items/tv.png'), price: 5000 }],
   utilities: [],
 };
   const [selectedCastle, setSelectedCastle] = useState<any | null>(null);
@@ -3425,7 +3726,13 @@ const HOUSE_ITEMS: Record<string, any[]> = {
                   </TouchableOpacity>
                 </>
               ) : (
-                <Text style={styles.popupSubtitle}>This house belongs to another player.</Text>
+                <>
+                  <Text style={styles.popupSubtitle}>This house belongs to another player.</Text>
+                  {/* HOUSE_VISIT_ENTER_FRIEND */}
+                  <TouchableOpacity style={styles.actionButton} onPress={() => setInteriorHouse(selectedMarker.data)}>
+                    <Text style={styles.actionButtonText}>ENTER HOUSE</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           )}
@@ -3498,7 +3805,14 @@ const HOUSE_ITEMS: Record<string, any[]> = {
                       style={{ position: 'absolute', left: pos.x * roomWidth - iw / 2, top: pos.y * roomHeight - ih / 2, width: iw, height: ih }}
                     >
                       {def.image ? (
-                        <Image source={def.image} style={{ width: iw, height: ih, borderRadius: 8 }} resizeMode={placed.item_id === 'pool-table' ? "contain" : "cover"} />
+                        <><Image source={def.image} style={{ width: iw, height: ih, borderRadius: 8 }} resizeMode={placed.item_id === 'pool-table' ? "contain" : "cover"} />
+{/* TV_SCHEDULE_OVERLAY */}
+{placed.item_id === 'tv' && tvOn ? (
+  <View style={{ position: 'absolute', left: '16.9%', top: '13.4%', width: '66.1%', height: '61.3%', backgroundColor: '#000', borderRadius: 4, overflow: 'hidden' }}>
+    <WebView source={{ html: TV_SCHEDULE_PLAYER_HTML }} mediaPlaybackRequiresUserAction={false} allowsInlineMediaPlayback={true} javaScriptEnabled={true} originWhitelist={['*']} style={{ flex: 1, backgroundColor: '#000' }} />
+  </View>
+) : null}
+</>
                       ) : (
                         <Text style={{ color: '#fff', fontWeight: '700' }}>{def.name}</Text>
                       )}
@@ -3561,6 +3875,8 @@ const HOUSE_ITEMS: Record<string, any[]> = {
               </View>
             )}
           </View>
+          {radioPlaying ? (<RadioStopOnUnmount onStop={stopRadio} />) : null}
+          {tvOn ? (<TvStopOnUnmount onStop={stopTv} />) : null}
           <TouchableOpacity
             style={{ position: 'absolute', top: 48, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 }}
             onPress={() => setInteriorHouse(null)}

@@ -3661,6 +3661,8 @@ HOUSE_ITEM_CATALOG = {
     "scrabble": {"name": "Scrabble Table", "category": "games", "price": 20000},
     "chess_checkers": {"name": "Chess & Checkers Table", "category": "games", "price": 30000},
     "texas_holdem": {"name": "Texas Hold'em Table", "category": "games", "price": 20000},
+    "radio": {"name": "Radio", "category": "appliances", "price": 5000},
+    "tv": {"name": "TV", "category": "appliances", "price": 5000},
 }
 
 
@@ -10679,29 +10681,29 @@ class PoolRoomLeave(BaseModel):
     player_id: str
 
 
-def _pool_room_code():
+async def _pool_room_code():
     for _ in range(50):
         code = str(random.randint(1000, 9999))
-        if db.pool_rooms.count_documents({"code": code}) == 0:
+        if await db.pool_rooms.count_documents({"code": code}) == 0:
             return code
     return str(random.randint(1000, 9999))
 
 
-@api_router.post("/api/pool/rooms/create")
+@api_router.post("/pool/rooms/create")
 async def pool_room_create(body: PoolRoomCreate):
-    code = _pool_room_code()
+    code = await _pool_room_code()
     now = datetime.now(timezone.utc).isoformat()
     room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
             "guest_id": None, "guest_name": None, "status": "waiting",
             "state": None, "chat": [], "created_at": now, "updated_at": now}
-    db.pool_rooms.insert_one(room)
+    await db.pool_rooms.insert_one(room)
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/pool/rooms/join")
+@api_router.post("/pool/rooms/join")
 async def pool_room_join(body: PoolRoomJoin):
-    room = db.pool_rooms.find_one({"code": body.code})
+    room = await db.pool_rooms.find_one({"code": body.code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
@@ -10709,61 +10711,64 @@ async def pool_room_join(body: PoolRoomJoin):
         return room
     if room["status"] != "waiting":
         raise HTTPException(status_code=400, detail="Room is not waiting")
-    db.pool_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.pool_rooms.find_one({"code": body.code})
+    await db.pool_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.pool_rooms.find_one({"code": body.code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.get("/api/pool/rooms/{code}")
+@api_router.get("/pool/rooms/{code}")
 async def pool_room_get(code: str):
-    room = db.pool_rooms.find_one({"code": code})
+    room = await db.pool_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/pool/rooms/{code}/shot")
+@api_router.post("/pool/rooms/{code}/shot")
 async def pool_room_shot(code: str, body: PoolRoomShot):
-    room = db.pool_rooms.find_one({"code": code})
+    room = await db.pool_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
-    db.pool_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.pool_rooms.find_one({"code": code})
+    await db.pool_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.pool_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/pool/rooms/{code}/chat")
+@api_router.post("/pool/rooms/{code}/chat")
 async def pool_room_chat(code: str, body: PoolRoomChat):
-    room = db.pool_rooms.find_one({"code": code})
+    room = await db.pool_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
-    db.pool_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.pool_rooms.find_one({"code": code})
+    await db.pool_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.pool_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
-        db.pool_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
-        room = db.pool_rooms.find_one({"code": code})
+        await db.pool_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.pool_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/pool/rooms/{code}/leave")
+@api_router.post("/pool/rooms/{code}/leave")
 async def pool_room_leave(code: str, body: PoolRoomLeave):
-    room = db.pool_rooms.find_one({"code": code})
+    room = await db.pool_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["status"] == "waiting":
-        db.pool_rooms.delete_one({"code": code})
+        await db.pool_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
-    db.pool_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
+    await db.pool_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
 
@@ -10794,29 +10799,29 @@ class DartRoomLeave(BaseModel):
     player_id: str
 
 
-def _dart_room_code():
+async def _dart_room_code():
     for _ in range(50):
         code = str(random.randint(1000, 9999))
-        if db.dart_rooms.count_documents({"code": code}) == 0:
+        if await db.dart_rooms.count_documents({"code": code}) == 0:
             return code
     return str(random.randint(1000, 9999))
 
 
-@api_router.post("/api/darts/rooms/create")
+@api_router.post("/darts/rooms/create")
 async def dart_room_create(body: DartRoomCreate):
-    code = _dart_room_code()
+    code = await _dart_room_code()
     now = datetime.now(timezone.utc).isoformat()
     room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
             "guest_id": None, "guest_name": None, "status": "waiting",
             "state": None, "chat": [], "created_at": now, "updated_at": now}
-    db.dart_rooms.insert_one(room)
+    await db.dart_rooms.insert_one(room)
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/darts/rooms/join")
+@api_router.post("/darts/rooms/join")
 async def dart_room_join(body: DartRoomJoin):
-    room = db.dart_rooms.find_one({"code": body.code})
+    room = await db.dart_rooms.find_one({"code": body.code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
@@ -10824,61 +10829,64 @@ async def dart_room_join(body: DartRoomJoin):
         return room
     if room["status"] != "waiting":
         raise HTTPException(status_code=400, detail="Room is not waiting")
-    db.dart_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.dart_rooms.find_one({"code": body.code})
+    await db.dart_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.dart_rooms.find_one({"code": body.code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.get("/api/darts/rooms/{code}")
+@api_router.get("/darts/rooms/{code}")
 async def dart_room_get(code: str):
-    room = db.dart_rooms.find_one({"code": code})
+    room = await db.dart_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/darts/rooms/{code}/shot")
+@api_router.post("/darts/rooms/{code}/shot")
 async def dart_room_shot(code: str, body: DartRoomShot):
-    room = db.dart_rooms.find_one({"code": code})
+    room = await db.dart_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
-    db.dart_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.dart_rooms.find_one({"code": code})
+    await db.dart_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.dart_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/darts/rooms/{code}/chat")
+@api_router.post("/darts/rooms/{code}/chat")
 async def dart_room_chat(code: str, body: DartRoomChat):
-    room = db.dart_rooms.find_one({"code": code})
+    room = await db.dart_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
-    db.dart_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.dart_rooms.find_one({"code": code})
+    await db.dart_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.dart_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
-        db.dart_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
-        room = db.dart_rooms.find_one({"code": code})
+        await db.dart_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.dart_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/darts/rooms/{code}/leave")
+@api_router.post("/darts/rooms/{code}/leave")
 async def dart_room_leave(code: str, body: DartRoomLeave):
-    room = db.dart_rooms.find_one({"code": code})
+    room = await db.dart_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["status"] == "waiting":
-        db.dart_rooms.delete_one({"code": code})
+        await db.dart_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
-    db.dart_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
+    await db.dart_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
 
@@ -10911,31 +10919,31 @@ class CardRoomLeave(BaseModel):
     player_id: str
 
 
-def _card_room_code():
+async def _card_room_code():
     for _ in range(50):
         code = str(random.randint(1000, 9999))
-        if db.card_rooms.count_documents({"code": code}) == 0:
+        if await db.card_rooms.count_documents({"code": code}) == 0:
             return code
     return str(random.randint(1000, 9999))
 
 
-@api_router.post("/api/cards/rooms/create")
+@api_router.post("/cards/rooms/create")
 async def card_room_create(body: CardRoomCreate):
-    code = _card_room_code()
+    code = await _card_room_code()
     seed = body.seed if body.seed else random.randint(1, 2147483647)
     now = datetime.now(timezone.utc).isoformat()
     room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
             "guest_id": None, "guest_name": None, "game": body.game, "seed": seed,
             "status": "waiting",
             "state": None, "chat": [], "created_at": now, "updated_at": now}
-    db.card_rooms.insert_one(room)
+    await db.card_rooms.insert_one(room)
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/cards/rooms/join")
+@api_router.post("/cards/rooms/join")
 async def card_room_join(body: CardRoomJoin):
-    room = db.card_rooms.find_one({"code": body.code})
+    room = await db.card_rooms.find_one({"code": body.code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
@@ -10943,61 +10951,64 @@ async def card_room_join(body: CardRoomJoin):
         return room
     if room["status"] != "waiting":
         raise HTTPException(status_code=400, detail="Room is not waiting")
-    db.card_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.card_rooms.find_one({"code": body.code})
+    await db.card_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.card_rooms.find_one({"code": body.code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.get("/api/cards/rooms/{code}")
+@api_router.get("/cards/rooms/{code}")
 async def card_room_get(code: str):
-    room = db.card_rooms.find_one({"code": code})
+    room = await db.card_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/cards/rooms/{code}/shot")
+@api_router.post("/cards/rooms/{code}/shot")
 async def card_room_shot(code: str, body: CardRoomShot):
-    room = db.card_rooms.find_one({"code": code})
+    room = await db.card_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
-    db.card_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.card_rooms.find_one({"code": code})
+    await db.card_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.card_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/cards/rooms/{code}/chat")
+@api_router.post("/cards/rooms/{code}/chat")
 async def card_room_chat(code: str, body: CardRoomChat):
-    room = db.card_rooms.find_one({"code": code})
+    room = await db.card_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
-    db.card_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.card_rooms.find_one({"code": code})
+    await db.card_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.card_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
-        db.card_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
-        room = db.card_rooms.find_one({"code": code})
+        await db.card_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.card_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/cards/rooms/{code}/leave")
+@api_router.post("/cards/rooms/{code}/leave")
 async def card_room_leave(code: str, body: CardRoomLeave):
-    room = db.card_rooms.find_one({"code": code})
+    room = await db.card_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["status"] == "waiting":
-        db.card_rooms.delete_one({"code": code})
+        await db.card_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
-    db.card_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.card_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
+    await db.card_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
 
@@ -11029,31 +11040,31 @@ class DominoRoomLeave(BaseModel):
     player_id: str
 
 
-def _domino_room_code():
+async def _domino_room_code():
     for _ in range(50):
         code = str(random.randint(1000, 9999))
-        if db.domino_rooms.count_documents({"code": code}) == 0:
+        if await db.domino_rooms.count_documents({"code": code}) == 0:
             return code
     return str(random.randint(1000, 9999))
 
 
-@api_router.post("/api/dominoes/rooms/create")
+@api_router.post("/dominoes/rooms/create")
 async def domino_room_create(body: DominoRoomCreate):
-    code = _domino_room_code()
+    code = await _domino_room_code()
     seed = body.seed if body.seed else random.randint(1, 2147483647)
     now = datetime.now(timezone.utc).isoformat()
     room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
             "guest_id": None, "guest_name": None, "seed": seed,
             "status": "waiting",
             "state": None, "chat": [], "created_at": now, "updated_at": now}
-    db.domino_rooms.insert_one(room)
+    await db.domino_rooms.insert_one(room)
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/dominoes/rooms/join")
+@api_router.post("/dominoes/rooms/join")
 async def domino_room_join(body: DominoRoomJoin):
-    room = db.domino_rooms.find_one({"code": body.code})
+    room = await db.domino_rooms.find_one({"code": body.code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
@@ -11061,61 +11072,64 @@ async def domino_room_join(body: DominoRoomJoin):
         return room
     if room["status"] != "waiting":
         raise HTTPException(status_code=400, detail="Room is not waiting")
-    db.domino_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.domino_rooms.find_one({"code": body.code})
+    await db.domino_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.domino_rooms.find_one({"code": body.code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.get("/api/dominoes/rooms/{code}")
+@api_router.get("/dominoes/rooms/{code}")
 async def domino_room_get(code: str):
-    room = db.domino_rooms.find_one({"code": code})
+    room = await db.domino_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/dominoes/rooms/{code}/shot")
+@api_router.post("/dominoes/rooms/{code}/shot")
 async def domino_room_shot(code: str, body: DominoRoomShot):
-    room = db.domino_rooms.find_one({"code": code})
+    room = await db.domino_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
-    db.domino_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.domino_rooms.find_one({"code": code})
+    await db.domino_rooms.update_one({"code": code}, {"$set": {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.domino_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/dominoes/rooms/{code}/chat")
+@api_router.post("/dominoes/rooms/{code}/chat")
 async def domino_room_chat(code: str, body: DominoRoomChat):
-    room = db.domino_rooms.find_one({"code": code})
+    room = await db.domino_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
-    db.domino_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
-    room = db.domino_rooms.find_one({"code": code})
+    await db.domino_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await db.domino_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
-        db.domino_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
-        room = db.domino_rooms.find_one({"code": code})
+        await db.domino_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
+        room = await db.domino_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room
 
 
-@api_router.post("/api/dominoes/rooms/{code}/leave")
+@api_router.post("/dominoes/rooms/{code}/leave")
 async def domino_room_leave(code: str, body: DominoRoomLeave):
-    room = db.domino_rooms.find_one({"code": code})
+    room = await db.domino_rooms.find_one({"code": code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     if room["status"] == "waiting":
-        db.domino_rooms.delete_one({"code": code})
+        await db.domino_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
-    db.domino_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
+    await db.domino_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
 
@@ -11233,6 +11247,9 @@ async def scrabble_room_leave(code: str, body: ScrabbleRoomLeave):
         await db.scrabble_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
     await db.scrabble_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
@@ -11386,6 +11403,9 @@ async def chess_checkers_room_leave(code: str, body: ChessCheckersRoomLeave):
         await db.chess_checkers_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
     await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
 
@@ -11576,8 +11596,1014 @@ async def texas_holdem_room_leave(code: str, body: TexasHoldemRoomLeave):
         await db.texas_holdem_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    if room.get("status") == "playing" and room.get("wager_status") == "held" and room.get("wager_amount"):
+        await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * int(room["wager_amount"])}})
+        await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": winner}})
     await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True, "finished": True, "winner": winner}
+
+
+# WAGER_POOL_V1
+class PoolWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class PoolWagerAction(BaseModel):
+    player_id: str
+
+
+class PoolWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def pool_wager_get_room(code):
+    room = await db.pool_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def pool_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+
+    return out
+
+
+async def pool_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/pool/rooms/{code}/wager/propose")
+async def pool_wager_propose(code: str, body: PoolWagerPropose):
+    room = await pool_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await pool_wager_get_room(code)
+    return pool_wager_out(room, body.player_id)
+
+
+@api_router.post("/pool/rooms/{code}/wager/agree")
+async def pool_wager_agree(code: str, body: PoolWagerAction):
+    room = await pool_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await pool_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await pool_wager_get_room(code)
+    return pool_wager_out(room, body.player_id)
+
+
+@api_router.post("/pool/rooms/{code}/wager/decline")
+async def pool_wager_decline(code: str, body: PoolWagerAction):
+    room = await pool_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await pool_wager_get_room(code)
+    return pool_wager_out(room, body.player_id)
+
+
+@api_router.post("/pool/rooms/{code}/wager/start")
+async def pool_wager_start(code: str, body: PoolWagerAction):
+    room = await pool_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return pool_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await pool_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await pool_wager_get_room(code)
+    return pool_wager_out(room, body.player_id)
+
+
+@api_router.post("/pool/rooms/{code}/wager/settle")
+async def pool_wager_settle(code: str, body: PoolWagerSettle):
+    room = await pool_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.pool_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await pool_wager_get_room(code)
+    return pool_wager_out(room, body.player_id)
+
+
+
+# WAGER_DARTS_V1
+class DartsWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class DartsWagerAction(BaseModel):
+    player_id: str
+
+
+class DartsWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def darts_wager_get_room(code):
+    room = await db.dart_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def darts_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+
+    return out
+
+
+async def darts_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/darts/rooms/{code}/wager/propose")
+async def darts_wager_propose(code: str, body: DartsWagerPropose):
+    room = await darts_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await darts_wager_get_room(code)
+    return darts_wager_out(room, body.player_id)
+
+
+@api_router.post("/darts/rooms/{code}/wager/agree")
+async def darts_wager_agree(code: str, body: DartsWagerAction):
+    room = await darts_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await darts_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await darts_wager_get_room(code)
+    return darts_wager_out(room, body.player_id)
+
+
+@api_router.post("/darts/rooms/{code}/wager/decline")
+async def darts_wager_decline(code: str, body: DartsWagerAction):
+    room = await darts_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await darts_wager_get_room(code)
+    return darts_wager_out(room, body.player_id)
+
+
+@api_router.post("/darts/rooms/{code}/wager/start")
+async def darts_wager_start(code: str, body: DartsWagerAction):
+    room = await darts_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return darts_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await darts_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await darts_wager_get_room(code)
+    return darts_wager_out(room, body.player_id)
+
+
+@api_router.post("/darts/rooms/{code}/wager/settle")
+async def darts_wager_settle(code: str, body: DartsWagerSettle):
+    room = await darts_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.dart_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await darts_wager_get_room(code)
+    return darts_wager_out(room, body.player_id)
+
+
+
+# WAGER_CARD_V1
+class CardWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class CardWagerAction(BaseModel):
+    player_id: str
+
+
+class CardWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def card_wager_get_room(code):
+    room = await db.card_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def card_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+
+    return out
+
+
+async def card_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/cards/rooms/{code}/wager/propose")
+async def card_wager_propose(code: str, body: CardWagerPropose):
+    room = await card_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.card_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await card_wager_get_room(code)
+    return card_wager_out(room, body.player_id)
+
+
+@api_router.post("/cards/rooms/{code}/wager/agree")
+async def card_wager_agree(code: str, body: CardWagerAction):
+    room = await card_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await card_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.card_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await card_wager_get_room(code)
+    return card_wager_out(room, body.player_id)
+
+
+@api_router.post("/cards/rooms/{code}/wager/decline")
+async def card_wager_decline(code: str, body: CardWagerAction):
+    room = await card_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.card_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await card_wager_get_room(code)
+    return card_wager_out(room, body.player_id)
+
+
+@api_router.post("/cards/rooms/{code}/wager/start")
+async def card_wager_start(code: str, body: CardWagerAction):
+    room = await card_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return card_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await card_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.card_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await card_wager_get_room(code)
+    return card_wager_out(room, body.player_id)
+
+
+@api_router.post("/cards/rooms/{code}/wager/settle")
+async def card_wager_settle(code: str, body: CardWagerSettle):
+    room = await card_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.card_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.card_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await card_wager_get_room(code)
+    return card_wager_out(room, body.player_id)
+
+
+
+# WAGER_DOMINOES_V1
+class DominoesWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class DominoesWagerAction(BaseModel):
+    player_id: str
+
+
+class DominoesWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def dominoes_wager_get_room(code):
+    room = await db.domino_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def dominoes_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+
+    return out
+
+
+async def dominoes_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/dominoes/rooms/{code}/wager/propose")
+async def dominoes_wager_propose(code: str, body: DominoesWagerPropose):
+    room = await dominoes_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await dominoes_wager_get_room(code)
+    return dominoes_wager_out(room, body.player_id)
+
+
+@api_router.post("/dominoes/rooms/{code}/wager/agree")
+async def dominoes_wager_agree(code: str, body: DominoesWagerAction):
+    room = await dominoes_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await dominoes_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await dominoes_wager_get_room(code)
+    return dominoes_wager_out(room, body.player_id)
+
+
+@api_router.post("/dominoes/rooms/{code}/wager/decline")
+async def dominoes_wager_decline(code: str, body: DominoesWagerAction):
+    room = await dominoes_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await dominoes_wager_get_room(code)
+    return dominoes_wager_out(room, body.player_id)
+
+
+@api_router.post("/dominoes/rooms/{code}/wager/start")
+async def dominoes_wager_start(code: str, body: DominoesWagerAction):
+    room = await dominoes_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return dominoes_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await dominoes_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await dominoes_wager_get_room(code)
+    return dominoes_wager_out(room, body.player_id)
+
+
+@api_router.post("/dominoes/rooms/{code}/wager/settle")
+async def dominoes_wager_settle(code: str, body: DominoesWagerSettle):
+    room = await dominoes_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.domino_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await dominoes_wager_get_room(code)
+    return dominoes_wager_out(room, body.player_id)
+
+
+
+# WAGER_SCRABBLE_V1
+class ScrabbleWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class ScrabbleWagerAction(BaseModel):
+    player_id: str
+
+
+class ScrabbleWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def scrabble_wager_get_room(code):
+    room = await db.scrabble_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def scrabble_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+
+    return out
+
+
+async def scrabble_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/scrabble/rooms/{code}/wager/propose")
+async def scrabble_wager_propose(code: str, body: ScrabbleWagerPropose):
+    room = await scrabble_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await scrabble_wager_get_room(code)
+    return scrabble_wager_out(room, body.player_id)
+
+
+@api_router.post("/scrabble/rooms/{code}/wager/agree")
+async def scrabble_wager_agree(code: str, body: ScrabbleWagerAction):
+    room = await scrabble_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await scrabble_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await scrabble_wager_get_room(code)
+    return scrabble_wager_out(room, body.player_id)
+
+
+@api_router.post("/scrabble/rooms/{code}/wager/decline")
+async def scrabble_wager_decline(code: str, body: ScrabbleWagerAction):
+    room = await scrabble_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await scrabble_wager_get_room(code)
+    return scrabble_wager_out(room, body.player_id)
+
+
+@api_router.post("/scrabble/rooms/{code}/wager/start")
+async def scrabble_wager_start(code: str, body: ScrabbleWagerAction):
+    room = await scrabble_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return scrabble_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await scrabble_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await scrabble_wager_get_room(code)
+    return scrabble_wager_out(room, body.player_id)
+
+
+@api_router.post("/scrabble/rooms/{code}/wager/settle")
+async def scrabble_wager_settle(code: str, body: ScrabbleWagerSettle):
+    room = await scrabble_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.scrabble_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await scrabble_wager_get_room(code)
+    return scrabble_wager_out(room, body.player_id)
+
+
+
+# WAGER_CHESS_CHECKERS_V1
+class ChessCheckersWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class ChessCheckersWagerAction(BaseModel):
+    player_id: str
+
+
+class ChessCheckersWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def chesscheckers_wager_get_room(code):
+    room = await db.chess_checkers_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def chesscheckers_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+
+    return out
+
+
+async def chesscheckers_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/chess_checkers/rooms/{code}/wager/propose")
+async def chesscheckers_wager_propose(code: str, body: ChessCheckersWagerPropose):
+    room = await chesscheckers_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await chesscheckers_wager_get_room(code)
+    return chesscheckers_wager_out(room, body.player_id)
+
+
+@api_router.post("/chess_checkers/rooms/{code}/wager/agree")
+async def chesscheckers_wager_agree(code: str, body: ChessCheckersWagerAction):
+    room = await chesscheckers_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await chesscheckers_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await chesscheckers_wager_get_room(code)
+    return chesscheckers_wager_out(room, body.player_id)
+
+
+@api_router.post("/chess_checkers/rooms/{code}/wager/decline")
+async def chesscheckers_wager_decline(code: str, body: ChessCheckersWagerAction):
+    room = await chesscheckers_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await chesscheckers_wager_get_room(code)
+    return chesscheckers_wager_out(room, body.player_id)
+
+
+@api_router.post("/chess_checkers/rooms/{code}/wager/start")
+async def chesscheckers_wager_start(code: str, body: ChessCheckersWagerAction):
+    room = await chesscheckers_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return chesscheckers_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await chesscheckers_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await chesscheckers_wager_get_room(code)
+    return chesscheckers_wager_out(room, body.player_id)
+
+
+@api_router.post("/chess_checkers/rooms/{code}/wager/settle")
+async def chesscheckers_wager_settle(code: str, body: ChessCheckersWagerSettle):
+    room = await chesscheckers_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.chess_checkers_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await chesscheckers_wager_get_room(code)
+    return chesscheckers_wager_out(room, body.player_id)
+
+
+
+# WAGER_TEXAS_HOLDEM_V1
+class TexasHoldemWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+
+
+class TexasHoldemWagerAction(BaseModel):
+    player_id: str
+
+
+class TexasHoldemWagerSettle(BaseModel):
+    player_id: str
+    outcome: str
+    winner_id: str = ""
+
+
+async def texasholdem_wager_get_room(code):
+    room = await db.texas_holdem_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def texasholdem_wager_out(room, player_id):
+    out = dict(room)
+    if "_id" in out:
+        out["_id"] = str(out["_id"])
+    _th = globals().get("_th_filter_room")
+    if _th is not None and "_id" in out:
+        return _th(out, player_id)
+
+    return out
+
+
+async def texasholdem_wager_check_funds(room, amount):
+    host = await db.players.find_one({"id": room["host_id"]})
+    guest = await db.players.find_one({"id": room.get("guest_id")})
+    if not host or not guest:
+        return False, "Both players must be in the room before a wager can be agreed"
+    if host.get("cash", 0) < amount or guest.get("cash", 0) < amount:
+        return False, "Not enough cash for this wager (needs $" + format(amount, ",") + ")"
+    return True, ""
+
+
+@api_router.post("/texas_holdem/rooms/{code}/wager/propose")
+async def texasholdem_wager_propose(code: str, body: TexasHoldemWagerPropose):
+    room = await texasholdem_wager_get_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    status = room.get("wager_status", "none")
+    if status not in ("none", "declined", "proposed"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_amount": int(body.amount), "wager_status": "proposed", "wager_proposer_id": body.player_id, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await texasholdem_wager_get_room(code)
+    return texasholdem_wager_out(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/wager/agree")
+async def texasholdem_wager_agree(code: str, body: TexasHoldemWagerAction):
+    room = await texasholdem_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await texasholdem_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_status": "agreed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await texasholdem_wager_get_room(code)
+    return texasholdem_wager_out(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/wager/decline")
+async def texasholdem_wager_decline(code: str, body: TexasHoldemWagerAction):
+    room = await texasholdem_wager_get_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest declines the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_status": "declined", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await texasholdem_wager_get_room(code)
+    return texasholdem_wager_out(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/wager/start")
+async def texasholdem_wager_start(code: str, body: TexasHoldemWagerAction):
+    room = await texasholdem_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    status = room.get("wager_status", "none")
+    if status == "held":
+        return texasholdem_wager_out(room, body.player_id)
+    if status != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await texasholdem_wager_check_funds(room, amount)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+    await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": -amount}})
+    await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    room = await texasholdem_wager_get_room(code)
+    return texasholdem_wager_out(room, body.player_id)
+
+
+@api_router.post("/texas_holdem/rooms/{code}/wager/settle")
+async def texasholdem_wager_settle(code: str, body: TexasHoldemWagerSettle):
+    room = await texasholdem_wager_get_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "held":
+        raise HTTPException(status_code=400, detail="No held wager to settle")
+    amount = int(room.get("wager_amount", 0))
+    members = (room["host_id"], room.get("guest_id"))
+    if body.outcome == "win" or body.outcome == "forfeit":
+        if body.winner_id not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.players.update_one({"id": body.winner_id}, {"$inc": {"cash": 2 * amount}})
+        await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_status": "paid", "wager_winner_id": body.winner_id, "wager_forfeit": body.outcome == "forfeit", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    elif body.outcome == "draw":
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": amount}})
+        await db.players.update_one({"id": room.get("guest_id")}, {"$inc": {"cash": amount}})
+        await db.texas_holdem_rooms.update_one({"code": code}, {"$set": {"wager_status": "refunded", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    room = await texasholdem_wager_get_room(code)
+    return texasholdem_wager_out(room, body.player_id)
+
+
+
+
+# HOUSE_VISIT_PRESENCE: friend house presence (inside the house only).
+# New collection house_presence; never embedded in the house doc.
+HOUSE_VISIT_PRESENCE_TTL_SECONDS = 180
+
+
+def _house_visit_now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)
+
+
+async def _house_visit_prune(house_id):
+    from datetime import timedelta
+    cutoff = _house_visit_now() - timedelta(seconds=HOUSE_VISIT_PRESENCE_TTL_SECONDS)
+    await db.house_presence.delete_many({"house_id": house_id, "last_seen": {"$lt": cutoff}})
+
+
+async def _house_visit_occupants(house_id):
+    await _house_visit_prune(house_id)
+    rows = await db.house_presence.find({"house_id": house_id}).to_list(100)
+    occupants = []
+    for r in rows:
+        occupants.append({
+            "player_id": r.get("player_id"),
+            "player_name": r.get("player_name") or "Player",
+            "entered_at": r.get("entered_at").isoformat() if r.get("entered_at") else None,
+            "last_seen": r.get("last_seen").isoformat() if r.get("last_seen") else None,
+        })
+    return occupants
+
+
+async def _house_visit_allowed(house, player_id):
+    if not house or not player_id:
+        return False
+    if house.get("player_id") == player_id:
+        return True
+    owner = await db.players.find_one({"id": house.get("player_id")})
+    if not owner:
+        return False
+    return player_id in (owner.get("friends") or [])
+
+
+@api_router.post("/houses/{house_id}/enter")
+async def house_visit_enter(house_id: str, data: dict):
+    player_id = data.get("player_id")
+    player_name = data.get("player_name") or "Player"
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if not await _house_visit_allowed(house, player_id):
+        raise HTTPException(status_code=403, detail="Not your friend's house")
+    now = _house_visit_now()
+    await db.house_presence.update_one(
+        {"house_id": house_id, "player_id": player_id},
+        {"$set": {"player_name": player_name, "last_seen": now}, "$setOnInsert": {"entered_at": now}},
+        upsert=True,
+    )
+    return {"occupants": await _house_visit_occupants(house_id)}
+
+
+@api_router.post("/houses/{house_id}/leave")
+async def house_visit_leave(house_id: str, data: dict):
+    player_id = data.get("player_id")
+    await db.house_presence.delete_one({"house_id": house_id, "player_id": player_id})
+    return {"occupants": await _house_visit_occupants(house_id)}
+
+
+@api_router.post("/houses/{house_id}/heartbeat")
+async def house_visit_heartbeat(house_id: str, data: dict):
+    player_id = data.get("player_id")
+    player_name = data.get("player_name") or "Player"
+    house = await db.houses.find_one({"id": house_id})
+    if not house:
+        raise HTTPException(status_code=404, detail="House not found")
+    if not await _house_visit_allowed(house, player_id):
+        raise HTTPException(status_code=403, detail="Not your friend's house")
+    now = _house_visit_now()
+    await db.house_presence.update_one(
+        {"house_id": house_id, "player_id": player_id},
+        {"$set": {"player_name": player_name, "last_seen": now}, "$setOnInsert": {"entered_at": now}},
+        upsert=True,
+    )
+    return {"occupants": await _house_visit_occupants(house_id)}
+
+
+@api_router.get("/houses/{house_id}/presence")
+async def house_visit_presence(house_id: str):
+    return {"occupants": await _house_visit_occupants(house_id)}
 
 
 app.include_router(api_router)

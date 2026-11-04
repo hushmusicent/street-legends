@@ -15,10 +15,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGameStore } from '../../stores/gameStore';
-import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse, getInventoryHouses, placeHouse, moveHouseToInventory } from '../../services/api';
+import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse, getInventoryHouses, placeHouse, updatePlayerPosition, moveHouseToInventory } from '../../services/api';
 import api from '../../services/api';
 import { GodPotions } from '../../components/GodPotions';
 import { getBundledIcon } from '../../assets/icons/iconMap';
+import * as Location from 'expo-location';
 
 type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable' | 'house';
 const HOUSES = [
@@ -218,7 +219,7 @@ export default function ShopTabScreen() {
   };
 
   const handlePlaceHouse = (h: any) => {
-    if (!playerId || !player?.position) {
+    if (!playerId) {
       Alert.alert('Place House', 'Your location is not available yet.');
       return;
     }
@@ -227,7 +228,27 @@ export default function ShopTabScreen() {
       { text: 'Place It', onPress: async () => {
         setPlacingHouse(h.id);
         try {
-          const res = await placeHouse(h.id, playerId, player.position.latitude, player.position.longitude);
+          // PLACE_FRESH_GPS
+          let lat = player?.position?.latitude;
+          let lng = player?.position?.longitude;
+          try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') {
+              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+              lat = loc.coords.latitude;
+              lng = loc.coords.longitude;
+            }
+          } catch (_) {}
+          try {
+            if (lat != null && lng != null) {
+              await updatePlayerPosition(playerId, { latitude: lat, longitude: lng });
+            }
+          } catch (_) {}
+          if (lat == null || lng == null) {
+            Alert.alert('Place House', 'Your location is not available yet.');
+            return;
+          }
+          const res = await placeHouse(h.id, playerId, lat, lng);
           setMyHouse(res.house);
           setInventoryHouses((prev) => prev.filter((x) => x.id !== h.id));
           Alert.alert('House Placed', `${h.name} is now on the map where you stand.`);

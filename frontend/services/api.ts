@@ -1012,3 +1012,21 @@ export const placeItemFromInventory = async (houseId: string, playerId: string, 
   const response = await api.post(`/houses/${houseId}/items/place-from-inventory`, { player_id: playerId, item_id: itemId });
   return response.data;
 };
+
+// HOUSE_VISIT_PRESENCE_API: friend house presence client.
+export const houseEnterPresence = async (houseId: string, playerId: string, playerName: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/enter`, { player_id: playerId, player_name: playerName });
+  return response.data;
+};
+export const houseLeavePresence = async (houseId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/leave`, { player_id: playerId });
+  return response.data;
+};
+export const houseHeartbeatPresence = async (houseId: string, playerId: string, playerName: string): Promise<any> => {
+  const response = await api.post(`/houses/${houseId}/heartbeat`, { player_id: playerId, player_name: playerName });
+  return response.data;
+};
+export const getHousePresence = async (houseId: string): Promise<any> => {
+  const response = await api.get(`/houses/${houseId}/presence`);
+  return response.data;
+};

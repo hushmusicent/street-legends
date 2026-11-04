@@ -204,11 +204,12 @@ interface GangMemberPopup {
 }
 
 export default function ShootoutSimulatorScreen() {
-  const { shootoutId, shootoutName, difficulty, standalone } = useLocalSearchParams<{
+  const { shootoutId, shootoutName, difficulty, standalone, gameId: routeGameId } = useLocalSearchParams<{
     shootoutId: string;
     shootoutName: string;
     difficulty: string;
     standalone?: string;
+    gameId?: string;
   }>();
 
   const { playerId, player, setPlayer } = useGameStore();
@@ -229,6 +230,8 @@ export default function ShootoutSimulatorScreen() {
   const [rewards, setRewards] = useState<GameRewards | null>(null);
   const [hitEffects, setHitEffects] = useState<{ id: number; x: number; y: number; opacity: Animated.Value }[]>([]);
   const [gameId, setGameId] = useState<string | null>(null);
+  const gameIdRef = useRef<string | null>(null); // SHOOTOUT_TIMER_FIX: mirrors gameId so timer callbacks never see a stale null
+  const routeGameIdConsumedRef = useRef(false); // SHOOTOUT_TIMER_FIX: route gameId is used once only, so a rematch starts a fresh game
 
   // Refs
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
@@ -488,11 +491,18 @@ export default function ShootoutSimulatorScreen() {
     let newGameId: string | null = null;
     
     // Start shootout on backend (for cooldown tracking and game session creation)
-    if (!isStandalone && playerId && shootoutId) {
+    // SHOOTOUT_TIMER_FIX: the map handler already created this game - use its gameId, do not start a second game
+    if (routeGameId && !routeGameIdConsumedRef.current) {
+      routeGameIdConsumedRef.current = true;
+      newGameId = routeGameId;
+      setGameId(routeGameId);
+      gameIdRef.current = routeGameId;
+    } else if (!isStandalone && playerId && shootoutId) {
       try {
         const result = await apiStartShootout(shootoutId, playerId);
         newGameId = result.game_id;
         setGameId(newGameId);
+        gameIdRef.current = newGameId;
       } catch (e: any) {
         const errorMsg = e.response?.data?.detail || e.message || 'Failed to start shootout';
         showGameToast(errorMsg, 'error');
@@ -510,6 +520,7 @@ export default function ShootoutSimulatorScreen() {
         const result = await response.json();
         newGameId = result.game_id;
         setGameId(newGameId);
+        gameIdRef.current = newGameId;
       } catch (e: any) {
         console.log('Standalone mode - continuing without backend tracking');
         // In standalone mode, we can still play locally
@@ -576,9 +587,11 @@ export default function ShootoutSimulatorScreen() {
     setRewards(gameRewards);
 
     // Complete on backend and get real rewards
-    if (gameId && playerId) {
+    // SHOOTOUT_TIMER_FIX: read the ref, not state - the timer interval captures endGame from before setGameId
+    const effectiveGameId = gameIdRef.current || routeGameId || gameId;
+    if (effectiveGameId && playerId) {
       try {
-        const result = await apiCompleteShootout(gameId, currentHits, isStandalone);
+        const result = await apiCompleteShootout(effectiveGameId, currentHits, isStandalone);
         
         // Update rewards from backend response if available
         if (result.rewards) {
@@ -609,13 +622,16 @@ export default function ShootoutSimulatorScreen() {
         // Still show local rewards even if backend call fails
         showGameToast('Rewards may not have saved. Check your balance.', 'error');
       }
+    } else {
+      // SHOOTOUT_TIMER_FIX: never present local rewards as paid when no game session exists
+      showGameToast('Rewards may not have saved. Check your balance.', 'error');
     }
 
     // Show results after a short delay
     setTimeout(() => {
       setShowResults(true);
     }, 500);
-  }, [level, isStandalone, playerId, gameId, setPlayer, invalidateMapQueries, activePopups]);
+  }, [level, isStandalone, playerId, gameId, routeGameId, setPlayer, invalidateMapQueries, activePopups]);
 
   // Manual end game (for timer reaching 0)
   useEffect(() => {
