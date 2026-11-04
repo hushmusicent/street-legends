@@ -48,7 +48,7 @@ def main():
         print("WARNING: game-modal poll anchor not matched - index.tsx NOT changed")
         return 1
     new_src = src.replace(ANCHOR, BLOCK + ANCHOR, 1)
-    if new_src.count("{") != src.count("{") or new_src.count("}") != src.count("}"):
+    if (new_src.count("{") - new_src.count("}")) != (src.count("{") - src.count("}")):
         print("WARNING: brace balance changed - index.tsx NOT written")
         return 1
     IDX.write_text(new_src)
