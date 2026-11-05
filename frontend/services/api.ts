@@ -645,6 +645,7 @@ export const sellItem = async (playerId: string, itemId: string) => {
   const response = await api.post(`/players/${playerId}/inventory/${itemId}/sell`);
   return response.data;
 };
+
 export const consumeRockCandyItem = async (playerId: string) => {
   const response = await api.post(`/players/${playerId}/rock-candy/use`);
   return response.data;
