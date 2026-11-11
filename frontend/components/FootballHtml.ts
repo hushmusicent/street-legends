@@ -2192,6 +2192,16 @@ document.getElementById('pvpWBet').addEventListener('click', function(){
 });
 document.getElementById('pvpWAccept').addEventListener('click', function(){ pvpWagerPost('agree', { player_id: pvpPlayer().id }); });
 document.getElementById('pvpWDecline').addEventListener('click', function(){ pvpWagerPost('decline', { player_id: pvpPlayer().id }); });
+function pvpWagerCashWatch(){
+  // Cash moved (bet taken, won, lost or refunded): tell the app to refresh
+  // the cash shown on the map right away. Runs every refresh, even mid-game.
+  var s = (G.pvp.lastRoom && G.pvp.lastRoom.wager_status) || 'none';
+  if (s !== G.pvp.wLastStatus){
+    var moved = s === 'held' || s === 'paid' || s === 'refunded';
+    G.pvp.wLastStatus = s;
+    if (moved && window.ReactNativeWebView) window.ReactNativeWebView.postMessage('cash');
+  }
+}
 function pvpWagerRefresh(){
   var room = G.pvp.lastRoom || {}, s = room.wager_status || 'none', amt = room.wager_amount || 0;
   var me = pvpPlayer().id, isHost = G.pvp.role === 'host', r = G.pvp.round || 0;
@@ -2224,6 +2234,7 @@ document.addEventListener('click', function(e){
 function pvpExtrasRefresh(){
   var on = pvpIsOn();
   if (on) pvpWagerSettleIfOver();
+  if (on) pvpWagerCashWatch();
   var notStarted = on && pvpNotStarted();
   var waiting = notStarted && G.pvp.role === 'host' && !(G.pvp.lastRoom && G.pvp.lastRoom.guest_id);
   var over = on && pvpIsOver();
