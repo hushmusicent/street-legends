@@ -270,7 +270,7 @@ const G={
 // is posted ~4x a second and interpolated on the other side. Identity
 // comes from the app as window.PARK_PVP_PLAYER = {id, name}.
 var PVP_API='https://gta-quest-map.emergent.host/api/park_pvp/rooms';
-var PVP_POLL_MS=250;
+var PVP_POLL_MS = 100;
 function pvpPlayer(){
   try {
     var p=window.PARK_PVP_PLAYER||null;
@@ -313,6 +313,7 @@ function pvpPostState(patch){
   // ball-on, holder, and my controlled player's position ride along so
   // the other phone resyncs and sees where I am.
   if(!pvpIsOn()) return Promise.resolve(null);
+  if (!patch && G.pvp.posting) return Promise.resolve(null);
   G.pvp.seq+=1;
   var me=pvpMe();
   var h=holder();
@@ -326,7 +327,8 @@ function pvpPostState(patch){
   };
   if(patch&&patch.ev) st.ev=patch.ev;
   var who=pvpPlayer();
-  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st});
+  st.round = G.pvp.round || 0; st.rm = G.pvp.rmReq || 0;
+  var pvw = G.pvp; pvw.posting = true; return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pvw.posting = false; return r; });
 }
 function pvpStartPoll(){
   if(!G.pvp) return;
@@ -339,7 +341,8 @@ function pvpStopPoll(){
 function pvpPollOnce(){
   if(!pvpIsOn()) return;
   var code=G.pvp.code;
-  pvpGet(code).then(function(room){
+  if (G.pvp.polling) return; var pvq = G.pvp; pvq.polling = true;
+  pvpGet(code).then(function(room){ pvq.polling = false;
     if(!room) return;
     if(room.status==='finished'){
       pvpStopPoll();
@@ -353,7 +356,7 @@ function pvpPollOnce(){
     }
     // Opponent joined — the game starts on its own now (like the house
     // games: the game starts when the second player enters the code).
-    if(G.pvp.role==='host'&&room.status==='playing'&&room.guest_name&&G.mode!=='play'){
+    if(G.pvp.role==='host'&&room.status==='playing'&&room.guest_name&&G.mode!=='play'&&G.mode!=='over'){
       G.pvp.oppName=room.guest_name;
       var lbl=document.getElementById('pvpRoomLbl');
       if(lbl) lbl.textContent='CODE: '+code+' — vs '+G.pvp.oppName;
@@ -366,7 +369,7 @@ function pvpPollOnce(){
     // posts never block theirs.
     var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
     var st = (room.states && room.states[oppRole]) || null;
-    if (st && st.me && st.me.team === G.myTeam) st = null;
+    if (st && st.me && st.me.team === G.myTeam) st = null; st = pvpRematchCheck(room, st);
     // Newer seq -> apply. Much lower seq = opponent restarted (rejoin).
     if (st && typeof st.seq === 'number' && (st.seq > G.pvp.oppSeq || st.seq < G.pvp.oppSeq - 50)){
       G.pvp.oppSeq = st.seq;
@@ -380,7 +383,7 @@ function pvpApplyState(st){
   // booted out), start the game first, then resync everything from
   // the room state. A rejoining host does NOT post a fresh initial
   // state (that would reset the room).
-  var fresh=pvpIsOn()&&G.mode!=='play';
+  var fresh=pvpIsOn()&&G.mode!=='play'&&G.mode!=='over';
   if(fresh){
     if(G.pvp.role==='host') G.pvp.syncStart=true;
     startGame();
@@ -1598,7 +1601,7 @@ function update(dt){
       pvpPostState(null);
     } else {
       G.pvp.posT=(G.pvp.posT||0)+dt;
-      if(G.pvp.posT>=0.25){
+      if(G.pvp.posT >= 0.1){
         G.pvp.posT=0;
         pvpPostState(null);
       }
@@ -2090,6 +2093,75 @@ requestAnimationFrame(loop);
 /* test hook (for verification only) */
 window.__game={G:G,stick:stick,setStick:setStick,startGame:startGame,openGame:openGame,closeGame:closeGame,snap:snap,doPass:doPass,doSwitch:doSwitch,doTackle:doTackle,setupDrive:setupDrive,scoreTD:scoreTD,endGame:endGame,finishPlay:finishPlay,throwPass:throwPass,computeTarget:computeTarget,eligibleReceivers:eligibleReceivers,update:update,draw:draw,drawField:drawField,proj:proj,updateLabels:updateLabels,updateUserControl:updateUserControl,updateDownLine:updateDownLine,DIFFS:DIFFS,TARGET_TD:TARGET_TD,FIELD:{FX0:FX0,FX1:FX1,GOAL0:GOAL0,GOAL1:GOAL1,MID:MID,FZ0:FZ0,FZ1:FZ1},selectDiff:selectDiff,holder:holder,pickPlay:pickPlay,PLAYS:PLAYS,PLAY_CLOCK:PLAY_CLOCK,FOCAL:FOCAL,pvpPlayer:pvpPlayer,pvpIsOn:pvpIsOn,pvpMe:pvpMe,pvpOppCtrl:pvpOppCtrl,pvpReceiveEv:pvpReceiveEv,pvpApplyState:pvpApplyState,pvpPostState:pvpPostState,pvpStartPoll:pvpStartPoll,pvpStopPoll:pvpStopPoll,pvpPollOnce:pvpPollOnce,showPlaycall:showPlaycall};
 })();
+
+/* ---------- PvP extras: share room code + rematch (both players agree) ---------- */
+function pvpIsOver(){ return !!(G.over || G.mode === 'over'); }
+function pvpNotStarted(){ return !(G.started || G.mode === 'play' || pvpIsOver()); }
+function pvpRequestRematch(){
+  if (!pvpIsOn() || !pvpIsOver()) return;
+  G.pvp.rmReq = (G.pvp.round || 0) + 1;
+  pvpPostState({});
+  pvpExtrasRefresh();
+}
+function pvpRematchCheck(room, st){
+  // Each phone posts rm = the round it wants to play next. When both
+  // phones want round+1, both restart. Posts from an older round are
+  // dropped so an old score can never leak into the new game.
+  var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+  var opp = (room.states && room.states[oppRole]) || null;
+  var r = G.pvp.round || 0;
+  G.pvp.oppRm = (opp && typeof opp.rm === 'number') ? opp.rm : 0;
+  if (room.status !== 'finished' && G.pvp.rmReq === r + 1 && G.pvp.oppRm === r + 1){
+    G.pvp.round = r + 1;
+    G.pvp.oppMe = null;
+    G.over = false;
+    startGame();
+    pvpExtrasRefresh();
+  }
+  if (st && (st.round || 0) < (G.pvp.round || 0)) return null;
+  return st;
+}
+function pvpShareCode(){
+  if (!pvpIsOn()) return;
+  var code = String(G.pvp.code);
+  if (window.ReactNativeWebView){ window.ReactNativeWebView.postMessage('share:' + code); return; }
+  if (navigator.share){ navigator.share({ text: 'Join my game in Street Legends! Room code: ' + code }).catch(function(){}); return; }
+  try { navigator.clipboard.writeText(code); } catch(e){}
+}
+var pvpBar = document.createElement('div');
+pvpBar.id = 'pvpExtras';
+pvpBar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;display:none;flex-direction:column;align-items:center;gap:6px;background:rgba(0,0,0,.85);border:2px solid #f5c518;border-radius:12px;padding:10px 14px;font-family:Arial,Helvetica,sans-serif;max-width:92vw';
+pvpBar.innerHTML = '<div id="pvpExMsg" style="color:#ffd54f;font-size:14px;font-weight:700;text-align:center"></div>'
+  + '<div style="display:flex;gap:8px">'
+  + '<button id="pvpExShare" style="background:#2e7d32;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">SHARE CODE</button>'
+  + '<button id="pvpExRematch" style="background:#6a1b9a;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">REMATCH</button>'
+  + '</div>';
+document.body.appendChild(pvpBar);
+document.getElementById('pvpExShare').addEventListener('click', pvpShareCode);
+document.getElementById('pvpExRematch').addEventListener('click', pvpRequestRematch);
+// In PvP the game's own REMATCH button asks the other phone instead of
+// restarting only this phone.
+document.addEventListener('click', function(e){
+  var t = e.target;
+  if (t && t.id === 'rematchBtn' && pvpIsOn()){ e.stopImmediatePropagation(); e.preventDefault(); pvpRequestRematch(); }
+}, true);
+function pvpExtrasRefresh(){
+  var on = pvpIsOn();
+  var waiting = on && G.pvp.role === 'host' && pvpNotStarted();
+  var over = on && pvpIsOver();
+  pvpBar.style.display = (waiting || over) ? 'flex' : 'none';
+  if (!(waiting || over)) return;
+  var r = G.pvp.round || 0;
+  var mine = G.pvp.rmReq === r + 1, theirs = G.pvp.oppRm === r + 1;
+  document.getElementById('pvpExShare').style.display = waiting ? 'block' : 'none';
+  var rb = document.getElementById('pvpExRematch');
+  rb.style.display = over ? 'block' : 'none';
+  rb.disabled = mine; rb.style.opacity = mine ? '0.6' : '1';
+  var msg = 'Room ' + G.pvp.code + ' - send the code to your friend';
+  if (over) msg = mine ? 'Rematch asked - waiting for the other player...' : (theirs ? 'The other player wants a REMATCH!' : 'Game over - play again?');
+  document.getElementById('pvpExMsg').textContent = msg;
+}
+setInterval(pvpExtrasRefresh, 300);
 </script>
 </body>
 </html>

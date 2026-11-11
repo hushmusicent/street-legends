@@ -229,7 +229,7 @@ const G={
 // posted ~4x a second and interpolated on the other side. Identity comes
 // from the app as window.PARK_PVP_PLAYER = {id, name}.
 var PVP_API='https://gta-quest-map.emergent.host/api/park_pvp/rooms';
-var PVP_POLL_MS=100;
+var PVP_POLL_MS = 100;
 function pvpPlayer(){
   try {
     var p=window.PARK_PVP_PLAYER||null;
@@ -294,6 +294,7 @@ function pvpPostState(patch){
   if(patch&&patch.ev) st.ev=patch.ev;
   var who=pvpPlayer();
   var pv=G.pvp; pv.posting=true;
+  st.round = G.pvp.round || 0; st.rm = G.pvp.rmReq || 0;
   return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pv.posting=false; return r; });
 }
 function pvpStartPoll(){
@@ -323,7 +324,7 @@ function pvpPollOnce(){
     // games: the game starts when the second player enters the code).
     // Host: start when a guest_id is present (guest_id is always set on
     // join; guest_name alone is not a reliable trigger).
-    if(G.pvp.role==='host'&&room.guest_id&&G.mode!=='play'){
+    if(G.pvp.role==='host'&&room.guest_id&&G.mode!=='play'&&G.mode!=='over'){
       G.pvp.oppName=room.guest_name||'Opponent';
       var lbl=document.getElementById('pvpRoomLbl');
       if(lbl) lbl.textContent='CODE: '+code+' — vs '+G.pvp.oppName;
@@ -335,7 +336,7 @@ function pvpPollOnce(){
     // host's first state post — if that post is missed or late, the
     // guest would sit on "WAITING FOR HOST" forever. The host's state
     // still resyncs positions/score when it arrives.
-    if(G.pvp.role==='guest'&&room.status==='playing'&&G.mode!=='play'){
+    if(G.pvp.role==='guest'&&room.status==='playing'&&G.mode!=='play'&&G.mode!=='over'){
       var st3=document.getElementById('pvpStatus');
       if(st3) st3.textContent='Host joined! Starting the game...';
       startGame();
@@ -345,7 +346,7 @@ function pvpPollOnce(){
     // posts are never applied.
     var oppRole=G.pvp.role==='host'?'guest':'host';
     var st=(room.states&&room.states[oppRole])||null;
-    if(st&&st.me&&st.me.team===G.myTeam) st=null;
+    if(st&&st.me&&st.me.team===G.myTeam) st=null; st = pvpRematchCheck(room, st);
     if(st&&typeof st.seq==='number'&&(st.seq>G.pvp.oppSeq||st.seq<G.pvp.oppSeq-50)){
       // Newer post -> apply. A much lower seq means the opponent restarted
       // their counter (rejoin) -> accept. Older/equal (late arrival) -> skip.
@@ -360,7 +361,7 @@ function pvpApplyState(st){
   // booted out), start the game first, then resync everything from
   // the room state. A rejoining host does NOT post a fresh initial
   // state (that would reset the room).
-  var fresh=pvpIsOn()&&G.mode!=='play';
+  var fresh=pvpIsOn()&&G.mode!=='play'&&G.mode!=='over';
   if(fresh){
     if(G.pvp.role==='host') G.pvp.syncStart=true;
     startGame();
@@ -1712,6 +1713,75 @@ openGame(); // port: the app opens the game straight at difficulty + TIP OFF
 /* test hook (for verification only) */
 window.__game={G:G,stick:stick,setStick:setStick,startGame:startGame,openGame:openGame,doShoot:shootPress,shootPress:shootPress,shootRelease:shootRelease,doPass:doPass,update:update,draw:draw,drawCourt:drawCourt,proj:proj,rimScreen:rimScreen,startShot:startShot,updateLabels:updateLabels,resetPositions:resetPositions,scoreBall:scoreBall,DIFFS:DIFFS,DUNK_STYLES:DUNK_STYLES,ZOOM:ZOOM,selectDiff:selectDiff,pvpPlayer:pvpPlayer,pvpIsOn:pvpIsOn,pvpMe:pvpMe,pvpOppCtrl:pvpOppCtrl,pvpReceiveEv:pvpReceiveEv,pvpApplyState:pvpApplyState,pvpPostState:pvpPostState,pvpStartPoll:pvpStartPoll,pvpStopPoll:pvpStopPoll,pvpPollOnce:pvpPollOnce,computeMake:computeMake,doPassBall:doPassBall,doSteal:doSteal,doBlock:doBlock,holder:holder,updateUserControl:updateUserControl};
 })();
+
+/* ---------- PvP extras: share room code + rematch (both players agree) ---------- */
+function pvpIsOver(){ return !!(G.over || G.mode === 'over'); }
+function pvpNotStarted(){ return !(G.started || G.mode === 'play' || pvpIsOver()); }
+function pvpRequestRematch(){
+  if (!pvpIsOn() || !pvpIsOver()) return;
+  G.pvp.rmReq = (G.pvp.round || 0) + 1;
+  pvpPostState({});
+  pvpExtrasRefresh();
+}
+function pvpRematchCheck(room, st){
+  // Each phone posts rm = the round it wants to play next. When both
+  // phones want round+1, both restart. Posts from an older round are
+  // dropped so an old score can never leak into the new game.
+  var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+  var opp = (room.states && room.states[oppRole]) || null;
+  var r = G.pvp.round || 0;
+  G.pvp.oppRm = (opp && typeof opp.rm === 'number') ? opp.rm : 0;
+  if (room.status !== 'finished' && G.pvp.rmReq === r + 1 && G.pvp.oppRm === r + 1){
+    G.pvp.round = r + 1;
+    G.pvp.oppMe = null;
+    G.over = false;
+    startGame();
+    pvpExtrasRefresh();
+  }
+  if (st && (st.round || 0) < (G.pvp.round || 0)) return null;
+  return st;
+}
+function pvpShareCode(){
+  if (!pvpIsOn()) return;
+  var code = String(G.pvp.code);
+  if (window.ReactNativeWebView){ window.ReactNativeWebView.postMessage('share:' + code); return; }
+  if (navigator.share){ navigator.share({ text: 'Join my game in Street Legends! Room code: ' + code }).catch(function(){}); return; }
+  try { navigator.clipboard.writeText(code); } catch(e){}
+}
+var pvpBar = document.createElement('div');
+pvpBar.id = 'pvpExtras';
+pvpBar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;display:none;flex-direction:column;align-items:center;gap:6px;background:rgba(0,0,0,.85);border:2px solid #f5c518;border-radius:12px;padding:10px 14px;font-family:Arial,Helvetica,sans-serif;max-width:92vw';
+pvpBar.innerHTML = '<div id="pvpExMsg" style="color:#ffd54f;font-size:14px;font-weight:700;text-align:center"></div>'
+  + '<div style="display:flex;gap:8px">'
+  + '<button id="pvpExShare" style="background:#2e7d32;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">SHARE CODE</button>'
+  + '<button id="pvpExRematch" style="background:#6a1b9a;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">REMATCH</button>'
+  + '</div>';
+document.body.appendChild(pvpBar);
+document.getElementById('pvpExShare').addEventListener('click', pvpShareCode);
+document.getElementById('pvpExRematch').addEventListener('click', pvpRequestRematch);
+// In PvP the game's own REMATCH button asks the other phone instead of
+// restarting only this phone.
+document.addEventListener('click', function(e){
+  var t = e.target;
+  if (t && t.id === 'rematchBtn' && pvpIsOn()){ e.stopImmediatePropagation(); e.preventDefault(); pvpRequestRematch(); }
+}, true);
+function pvpExtrasRefresh(){
+  var on = pvpIsOn();
+  var waiting = on && G.pvp.role === 'host' && pvpNotStarted();
+  var over = on && pvpIsOver();
+  pvpBar.style.display = (waiting || over) ? 'flex' : 'none';
+  if (!(waiting || over)) return;
+  var r = G.pvp.round || 0;
+  var mine = G.pvp.rmReq === r + 1, theirs = G.pvp.oppRm === r + 1;
+  document.getElementById('pvpExShare').style.display = waiting ? 'block' : 'none';
+  var rb = document.getElementById('pvpExRematch');
+  rb.style.display = over ? 'block' : 'none';
+  rb.disabled = mine; rb.style.opacity = mine ? '0.6' : '1';
+  var msg = 'Room ' + G.pvp.code + ' - send the code to your friend';
+  if (over) msg = mine ? 'Rematch asked - waiting for the other player...' : (theirs ? 'The other player wants a REMATCH!' : 'Game over - play again?');
+  document.getElementById('pvpExMsg').textContent = msg;
+}
+setInterval(pvpExtrasRefresh, 300);
 </script>
 </body>
 </html>
