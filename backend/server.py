@@ -15155,7 +15155,11 @@ async def park_pvp_room_state(code: str, body: ParkPvpRoomState):
         raise HTTPException(status_code=404, detail="Room not found")
     if body.player_id not in (room["host_id"], room["guest_id"]):
         raise HTTPException(status_code=403, detail="Not in this room")
-    update = {"state": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}
+    # "state" stays as before (other park games read it). Each player's post
+    # is also stored separately under states.host / states.guest so one
+    # phone's post never overwrites the other's (basketball reads these).
+    role = "host" if body.player_id == room["host_id"] else "guest"
+    update = {"state": body.state, f"states.{role}": body.state, "updated_at": datetime.now(timezone.utc).isoformat()}
     if body.status:
         update["status"] = body.status
     if body.winner:

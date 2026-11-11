@@ -229,7 +229,7 @@ const G={
 // posted ~4x a second and interpolated on the other side. Identity comes
 // from the app as window.PARK_PVP_PLAYER = {id, name}.
 var PVP_API='https://gta-quest-map.emergent.host/api/park_pvp/rooms';
-var PVP_POLL_MS=250;
+var PVP_POLL_MS=100;
 function pvpPlayer(){
   try {
     var p=window.PARK_PVP_PLAYER||null;
@@ -255,7 +255,13 @@ function pvpIsOn(){ return !!(G.pvp&&G.pvp.code); }
 function pvpMe(){ return G.players[G.user]; }
 function pvpOppCtrl(){
   // The opponent's controlled player (the one the other human drives).
-  // It is the opponent-team player nearest the ball on their side.
+  // Use the player the opponent says they control; before their first
+  // post, fall back to the opponent-team player nearest the ball.
+  if(G.pvp&&G.pvp.oppMe){
+    var known=null;
+    G.players.forEach(function(p){ if(p.team===G.pvp.oppMe.team&&p.num===G.pvp.oppMe.num) known=p; });
+    if(known) return known;
+  }
   var b=G.ball; if(!b) return null;
   var best=null,bestD=Infinity;
   G.players.forEach(function(p){
@@ -272,6 +278,9 @@ function pvpPostState(patch){
   // and my controlled player's position ride along so the other phone
   // resyncs and sees where I am.
   if(!pvpIsOn()) return Promise.resolve(null);
+  // Position-only posts skip if one is still in flight (keeps 10/s posts
+  // from piling up on a slow network). Events always post.
+  if(!patch&&G.pvp.posting) return Promise.resolve(null);
   G.pvp.seq+=1;
   var me=pvpMe();
   var h=holder();
@@ -284,7 +293,8 @@ function pvpPostState(patch){
   };
   if(patch&&patch.ev) st.ev=patch.ev;
   var who=pvpPlayer();
-  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st});
+  var pv=G.pvp; pv.posting=true;
+  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pv.posting=false; return r; });
 }
 function pvpStartPoll(){
   if(!G.pvp) return;
@@ -296,8 +306,11 @@ function pvpStopPoll(){
 }
 function pvpPollOnce(){
   if(!pvpIsOn()) return;
+  if(G.pvp.polling) return; // previous poll still in flight
   var code=G.pvp.code;
+  var pv=G.pvp; pv.polling=true;
   pvpGet(code).then(function(room){
+    pv.polling=false;
     if(!room) return;
     if(room.status==='finished'){
       pvpStopPoll();
@@ -327,9 +340,16 @@ function pvpPollOnce(){
       if(st3) st3.textContent='Host joined! Starting the game...';
       startGame();
     }
-    var st=room.state||null;
-    if(st&&typeof st.seq==='number'&&st.seq>G.pvp.lastSeenSeq){
-      G.pvp.lastSeenSeq=st.seq;
+    // Read ONLY the opponent's own state slot (host reads states.guest,
+    // guest reads states.host), with its own seq counter. My own echoed
+    // posts are never applied.
+    var oppRole=G.pvp.role==='host'?'guest':'host';
+    var st=(room.states&&room.states[oppRole])||null;
+    if(st&&st.me&&st.me.team===G.myTeam) st=null;
+    if(st&&typeof st.seq==='number'&&(st.seq>G.pvp.oppSeq||st.seq<G.pvp.oppSeq-50)){
+      // Newer post -> apply. A much lower seq means the opponent restarted
+      // their counter (rejoin) -> accept. Older/equal (late arrival) -> skip.
+      G.pvp.oppSeq=st.seq;
       pvpApplyState(st);
     }
   });
@@ -346,18 +366,25 @@ function pvpApplyState(st){
     startGame();
     if(G.pvp) G.pvp.syncStart=false;
   }
-  if(Array.isArray(st.score)) G.score=st.score.slice();
-  if(typeof st.possession==='number') G.possession=st.possession;
+  // Score only ever goes up during a game: take the higher value per team
+  // so a late/stale post from the other phone can never reset it.
+  if(Array.isArray(st.score)){
+    for(var si=0;si<2;si++){ if(typeof st.score[si]==='number'&&st.score[si]>(G.score[si]||0)) G.score[si]=st.score[si]; }
+  }
   updateScore();
-  if(fresh) return; // skip events on the first state I apply
-  // The opponent's controlled player: glide toward their posted spot.
+  // The opponent's controlled player: remember who it is (so the AI
+  // never drives them) and glide toward their posted spot.
   if(st.me&&typeof st.me.x==='number'&&typeof st.me.z==='number'){
+    G.pvp.oppMe={team:st.me.team,num:st.me.num};
     var op=null;
     G.players.forEach(function(p){ if(p.team===st.me.team&&p.num===st.me.num) op=p; });
-    if(op){ op.tx=st.me.x; op.tz=st.me.z; }
+    if(op){ op.tx=st.me.x; op.tz=st.me.z; if(fresh){ op.x=st.me.x; op.z=st.me.z; } }
   }
-  // The holder: trust the room (the ball is the authority).
-  if(st.holder&&typeof st.holder.team==='number'){
+  if(fresh) return; // skip events on the first state I apply
+  // The holder: only trust the opponent when THEY say their team has the
+  // ball (they are the authority for their own possession). Possession
+  // follows the holder, so a stale post can't flip it back.
+  if(st.holder&&typeof st.holder.team==='number'&&st.holder.team!==G.myTeam){
     var h=null;
     G.players.forEach(function(p){ if(p.team===st.holder.team&&p.num===st.holder.num) h=p; });
     if(h&&holder()!==h){
@@ -818,7 +845,7 @@ $('pvpCreateBtn').addEventListener('click',function(){
   pvpPost('/create',{player_id:who.id,player_name:who.name,game:'basketball'}).then(function(room){
     if(!room||!room.code){ pvpSetStatus('Could not create a room — check your connection and try again.'); return; }
     G.myTeam=0; // host is HOME (red)
-    G.pvp={code:room.code,role:'host',oppName:'',seq:0,lastSeenSeq:0,pollTimer:null,posT:0};
+    G.pvp={code:room.code,role:'host',oppName:'',seq:0,oppSeq:-1,oppMe:null,pollTimer:null,posT:0};
     pvpSetStatus('Room created! Give this code to the other player:');
     pvpSetRoomLbl('CODE: '+room.code+' — waiting for them to join...');
     pvpStartPoll();
@@ -842,7 +869,7 @@ function pvpDoJoin(e){
     pvpJoining=false;
     if(!room||!room.code){ pvpSetStatus('Could not join room '+code+' — check the code (the host cannot join their own room).'); return; }
     G.myTeam=1; // guest is AWAY (blue)
-    G.pvp={code:room.code,role:'guest',oppName:room.host_name||'Opponent',seq:0,lastSeenSeq:0,pollTimer:null,posT:0};
+    G.pvp={code:room.code,role:'guest',oppName:room.host_name||'Opponent',seq:0,oppSeq:-1,oppMe:null,pollTimer:null,posT:0};
     pvpSetStatus('Joined! You are AWAY (blue).');
     pvpSetRoomLbl('CODE: '+room.code+' — vs '+G.pvp.oppName);
     pvpStartPoll();
@@ -1230,7 +1257,7 @@ function update(dt){
       pvpPostState(null);
     } else {
       G.pvp.posT=(G.pvp.posT||0)+dt;
-      if(G.pvp.posT>=0.25){
+      if(G.pvp.posT>=0.1){
         G.pvp.posT=0;
         pvpPostState(null);
       }
