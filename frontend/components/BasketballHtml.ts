@@ -310,7 +310,7 @@ function pvpPollOnce(){
     // games: the game starts when the second player enters the code).
     // Host: start when a guest_id is present (guest_id is always set on
     // join; guest_name alone is not a reliable trigger).
-    if(G.pvp.role==='host'&&room.status==='playing'&&room.guest_id&&G.mode!=='play'){
+    if(G.pvp.role==='host'&&room.guest_id&&G.mode!=='play'){
       G.pvp.oppName=room.guest_name||'Opponent';
       var lbl=document.getElementById('pvpRoomLbl');
       if(lbl) lbl.textContent='CODE: '+code+' — vs '+G.pvp.oppName;
@@ -824,21 +824,34 @@ $('pvpCreateBtn').addEventListener('click',function(){
     pvpStartPoll();
   });
 });
-$('pvpJoinBtn').addEventListener('click',function(){
-  var code=(document.getElementById('pvpCodeInput').value||'').trim();
-  if(!/^\d{4}$/.test(code)){ pvpSetStatus('Enter the 4-digit code from the other phone.'); return; }
+// JOIN fires on pointerdown (before the phone keyboard closes and the
+// layout shifts, which made the 'click' miss the button), plus click and
+// Enter as fallbacks. pvpJoining stops a double join from one tap.
+var pvpJoining=false;
+function pvpDoJoin(e){
+  if(e&&e.type==='pointerdown') e.preventDefault();
+  if(pvpJoining) return;
+  var input=document.getElementById('pvpCodeInput');
+  var code=(input.value||'').replace(/[^0-9]/g,'');
+  if(input.blur) input.blur();
+  if(!/^[0-9]{4}$/.test(code)){ pvpSetStatus('Enter the 4-digit code from the other phone.'); return; }
   var who=pvpPlayer();
+  pvpJoining=true;
   pvpSetStatus('Joining room '+code+'...');
   pvpPost('/join',{code:code,player_id:who.id,player_name:who.name}).then(function(room){
-    if(!room||!room.code){ pvpSetStatus('Room not found — check the code and try again.'); return; }
+    pvpJoining=false;
+    if(!room||!room.code){ pvpSetStatus('Could not join room '+code+' — check the code (the host cannot join their own room).'); return; }
     G.myTeam=1; // guest is AWAY (blue)
     G.pvp={code:room.code,role:'guest',oppName:room.host_name||'Opponent',seq:0,lastSeenSeq:0,pollTimer:null,posT:0};
     pvpSetStatus('Joined! You are AWAY (blue).');
     pvpSetRoomLbl('CODE: '+room.code+' — vs '+G.pvp.oppName);
     pvpStartPoll();
-    callout('WAITING FOR HOST','The host starts the game.');
+    pvpPollOnce();
   });
-});
+}
+$('pvpJoinBtn').addEventListener('pointerdown',pvpDoJoin);
+$('pvpJoinBtn').addEventListener('click',pvpDoJoin);
+$('pvpCodeInput').addEventListener('keydown',function(e){ if(e.key==='Enter') pvpDoJoin(e); });
 window.addEventListener('resize',fitCanvas);
 
 function fitCanvas(){
