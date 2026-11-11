@@ -2296,7 +2296,7 @@ document.getElementById('pvpCreateBtn').addEventListener('pointerdown', function
   pvpPost('/create', { player_id: me.id, player_name: me.name, game: 'baseball' }).then(function(room){
     if (!room || !room.code){ pvpSetStatus('Could not create a room — check your connection and try again.'); return; }
     G.myTeam = HOME; // host is HOME (Bombers)
-    G.pvp = { code: room.code, role: 'host', oppName: '', seq: 0, lastSeenSeq: 0, pollTimer: null };
+    G.pvp = { code: room.code, role: 'host', oppName: '', seq: 0, oppSeq: -1, pollTimer: null };
     pvpSetStatus('Room created! Give this code to the other player:');
     pvpSetRoomLbl('CODE: ' + room.code + ' — waiting for them to join...');
     pvpStartPoll();
@@ -2304,13 +2304,13 @@ document.getElementById('pvpCreateBtn').addEventListener('pointerdown', function
 });
 document.getElementById('pvpJoinBtn').addEventListener('pointerdown', function(){
   var code = (document.getElementById('pvpCodeInput').value || '').trim();
-  if (!/^\d{4}$/.test(code)){ pvpSetStatus('Enter the 4-digit code from the other phone.'); return; }
+  if (!/^[0-9]{4}$/.test(code)){ pvpSetStatus('Enter the 4-digit code from the other phone.'); return; }
   var me = pvpPlayer();
   pvpSetStatus('Joining room ' + code + '...');
   pvpPost('/join', { code: code, player_id: me.id, player_name: me.name }).then(function(room){
     if (!room || !room.code){ pvpSetStatus('Room not found — check the code and try again.'); return; }
     G.myTeam = AWAY; // guest is AWAY (Melonheads)
-    G.pvp = { code: room.code, role: 'guest', oppName: room.host_name || 'Opponent', seq: 0, lastSeenSeq: 0, pollTimer: null };
+    G.pvp = { code: room.code, role: 'guest', oppName: room.host_name || 'Opponent', seq: 0, oppSeq: -1, pollTimer: null };
     pvpSetStatus('Joined! You are the Melonheads (AWAY).');
     pvpSetRoomLbl('CODE: ' + room.code + ' — vs ' + G.pvp.oppName);
     pvpStartPoll();
@@ -2351,9 +2351,15 @@ function pvpPollOnce(){
     if (G.pvp.role === 'guest' && room.status === 'playing' && !G.started){
       // Host will post the first state; nothing to do until it arrives.
     }
-    var st = room.state || null;
-    if (st && typeof st.seq === 'number' && st.seq > G.pvp.lastSeenSeq){
-      G.pvp.lastSeenSeq = st.seq;
+    // Read ONLY the opponent's own state slot (host reads states.guest,
+    // guest reads states.host) with its own seq counter, so my echoed
+    // posts never block theirs.
+    var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+    var st = (room.states && room.states[oppRole]) || null;
+    if (st && st.me && st.me.team === G.myTeam) st = null;
+    // Newer seq -> apply. Much lower seq = opponent restarted (rejoin).
+    if (st && typeof st.seq === 'number' && (st.seq > G.pvp.oppSeq || st.seq < G.pvp.oppSeq - 50)){
+      G.pvp.oppSeq = st.seq;
       pvpApplyState(st);
     }
   });
@@ -2393,7 +2399,9 @@ function pvpApplyState(st){
     startGame();
     if (G.pvp) G.pvp.syncStart = false;
   }
-  if (Array.isArray(st.score)) G.score = st.score.slice();
+  // Score only goes up during a game: keep the higher value per side so
+  // a late/stale post from the other phone can never reset it.
+  if (Array.isArray(st.score)){ for (var si = 0; si < st.score.length; si++){ if (typeof st.score[si] === 'number' && st.score[si] > (G.score[si] || 0)) G.score[si] = st.score[si]; } }
   if (typeof st.inning === 'number') G.inning = st.inning;
   if (st.half === 'top' || st.half === 'bottom') G.half = st.half;
   if (typeof st.outs === 'number') G.outs = st.outs;

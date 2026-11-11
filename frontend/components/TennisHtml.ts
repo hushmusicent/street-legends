@@ -319,9 +319,15 @@ function pvpPollOnce(){
       if (st2) st2.textContent = 'They joined! Starting the game...';
       startGame();
     }
-    var st = room.state || null;
-    if (st && typeof st.seq === 'number' && st.seq > G.pvp.lastSeenSeq){
-      G.pvp.lastSeenSeq = st.seq;
+    // Read ONLY the opponent's own state slot (host reads states.guest,
+    // guest reads states.host) with its own seq counter, so my echoed
+    // posts never block theirs.
+    var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+    var st = (room.states && room.states[oppRole]) || null;
+    if (st && st.me && st.me.team === G.myTeam) st = null;
+    // Newer seq -> apply. Much lower seq = opponent restarted (rejoin).
+    if (st && typeof st.seq === 'number' && (st.seq > G.pvp.oppSeq || st.seq < G.pvp.oppSeq - 50)){
+      G.pvp.oppSeq = st.seq;
       pvpApplyState(st);
     }
   });
@@ -338,13 +344,17 @@ function pvpApplyState(st){
     startGame();
     if (G.pvp) G.pvp.syncStart = false;
   }
-  // Resync the score so both phones agree even if a poll was missed.
+  // Resync the score so both phones agree even if a poll was missed --
+  // but never from a stale post about an earlier point.
+  var staleScore = typeof st.pointNum === 'number' && typeof G.pointNum === 'number' && st.pointNum < G.pointNum;
+  if (!staleScore){
   if (Array.isArray(st.pts)) G.pts = st.pts.slice();
   if (Array.isArray(st.games)) G.games = st.games.slice();
   if (Array.isArray(st.tbPts)) G.tbPts = st.tbPts.slice();
   if (typeof st.tb === 'boolean') G.tb = st.tb;
   if (typeof st.server === 'number') G.server = st.server;
   if (typeof st.pointNum === 'number') G.pointNum = st.pointNum;
+  }
   updateSB();
   if (fresh) return; // skip events on the first state I apply
   // Opponent position: glide toward it (no teleporting).
@@ -1274,7 +1284,7 @@ const PS = {
     pvpPost('/create', { player_id: who.id, player_name: who.name, game: 'tennis' }).then(function(room){
       if (!room || !room.code){ pvpSetStatus('Could not create a room — check your connection and try again.'); return; }
       G.myTeam = HOME; // host is DANTE (bottom, serves first)
-      G.pvp = { code: room.code, role: 'host', oppName: '', seq: 0, lastSeenSeq: 0, pollTimer: null, posT: 0 };
+      G.pvp = { code: room.code, role: 'host', oppName: '', seq: 0, oppSeq: -1, pollTimer: null, posT: 0 };
       pvpSetStatus('Room created! Give this code to the other player:');
       pvpSetRoomLbl('CODE: ' + room.code + ' — waiting for them to join...');
       pvpStartPoll();
@@ -1282,13 +1292,13 @@ const PS = {
   });
   document.getElementById('pvpJoinBtn').addEventListener('pointerdown', function(){
     var code = (document.getElementById('pvpCodeInput').value || '').trim();
-    if (!/^\d{4}$/.test(code)){ pvpSetStatus('Enter the 4-digit code from the other phone.'); return; }
+    if (!/^[0-9]{4}$/.test(code)){ pvpSetStatus('Enter the 4-digit code from the other phone.'); return; }
     var who = pvpPlayer();
     pvpSetStatus('Joining room ' + code + '...');
     pvpPost('/join', { code: code, player_id: who.id, player_name: who.name }).then(function(room){
       if (!room || !room.code){ pvpSetStatus('Room not found — check the code and try again.'); return; }
       G.myTeam = AWAY; // guest is CODY (top)
-      G.pvp = { code: room.code, role: 'guest', oppName: room.host_name || 'Opponent', seq: 0, lastSeenSeq: 0, pollTimer: null, posT: 0 };
+      G.pvp = { code: room.code, role: 'guest', oppName: room.host_name || 'Opponent', seq: 0, oppSeq: -1, pollTimer: null, posT: 0 };
       pvpSetStatus('Joined! You are CODY (top).');
       pvpSetRoomLbl('CODE: ' + room.code + ' — vs ' + G.pvp.oppName);
       pvpStartPoll();
