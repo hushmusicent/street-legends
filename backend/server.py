@@ -15067,7 +15067,11 @@ async def center_prize_award(data: dict):
     updated = await db.players.find_one({"id": player_id})
     return {"game": game, "level": level, "prize": prize, "cash": updated.get("cash", 0)}
 
-# ---- PARK_PVP_ROOMS (park-games PvP rooms, all 5 games) ----
+
+
+# Register router last so every route defined above is included
+
+# ---- PARK_PVP_ROOMS (park-games PvP rooms, all 6 games) ----
 class ParkPvpRoomCreate(BaseModel):
     player_id: str
     player_name: str = ""
@@ -15101,7 +15105,7 @@ async def _park_pvp_room_code():
 
 @api_router.post("/park_pvp/rooms/create")
 async def park_pvp_room_create(body: ParkPvpRoomCreate):
-    game = body.game if body.game in ("baseball", "soccer", "tennis", "one_on_one", "basketball") else "baseball"
+    game = body.game if body.game in ("baseball", "soccer", "tennis", "one_on_one", "basketball", "football") else "baseball"
     code = await _park_pvp_room_code()
     now = datetime.now(timezone.utc).isoformat()
     room = {"code": code, "host_id": body.player_id, "host_name": body.player_name,
@@ -15118,7 +15122,13 @@ async def park_pvp_room_join(body: ParkPvpRoomJoin):
     room = await db.park_pvp_rooms.find_one({"code": body.code})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
-    if room["host_id"] == body.player_id or room.get("guest_id") == body.player_id:
+    if room["host_id"] == body.player_id:
+        # v3: never silently return the waiting room to the host's own id.
+        # That made the guest phone show "Joined!" while the room stayed
+        # waiting forever (same player id on both phones, or the shared
+        # 'local-player' fallback when identity injection never landed).
+        raise HTTPException(status_code=400, detail="host_cannot_join: you are the host - join from the other phone/account")
+    if room.get("guest_id") == body.player_id:
         room["_id"] = str(room["_id"])
         return room
     if room["status"] != "waiting":

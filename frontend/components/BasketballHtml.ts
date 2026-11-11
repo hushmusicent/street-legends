@@ -308,12 +308,23 @@ function pvpPollOnce(){
     }
     // Opponent joined — the game starts on its own now (like the house
     // games: the game starts when the second player enters the code).
-    if(G.pvp.role==='host'&&room.status==='playing'&&room.guest_name&&G.mode!=='play'){
-      G.pvp.oppName=room.guest_name;
+    // Host: start when a guest_id is present (guest_id is always set on
+    // join; guest_name alone is not a reliable trigger).
+    if(G.pvp.role==='host'&&room.status==='playing'&&room.guest_id&&G.mode!=='play'){
+      G.pvp.oppName=room.guest_name||'Opponent';
       var lbl=document.getElementById('pvpRoomLbl');
       if(lbl) lbl.textContent='CODE: '+code+' — vs '+G.pvp.oppName;
       var st2=document.getElementById('pvpStatus');
       if(st2) st2.textContent='They joined! Starting the game...';
+      startGame();
+    }
+    // Guest: start as soon as the room is playing. Do NOT wait for the
+    // host's first state post — if that post is missed or late, the
+    // guest would sit on "WAITING FOR HOST" forever. The host's state
+    // still resyncs positions/score when it arrives.
+    if(G.pvp.role==='guest'&&room.status==='playing'&&G.mode!=='play'){
+      var st3=document.getElementById('pvpStatus');
+      if(st3) st3.textContent='Host joined! Starting the game...';
       startGame();
     }
     var st=room.state||null;
