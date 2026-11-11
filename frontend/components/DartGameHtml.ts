@@ -119,6 +119,7 @@ function endGame(w) {
   winner = w;
   updateHeader();
   setMsg(w === 'you' ? 'YOU WIN! 301 cleared!' : 'CPU WINS!');
+  if (w === 'you') if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'dartboard', level: 1 }));
   playWin();
 }
 

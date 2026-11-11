@@ -405,6 +405,7 @@ function endGame(winner) {
   updateHeader();
   if (winner === 'you') {
     setMsg('YOU WIN! Table cleared!');
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'pool', level: 1 }));
     sayLine('LOSE');
   } else {
     setMsg('CPU WINS! Better luck next time.');

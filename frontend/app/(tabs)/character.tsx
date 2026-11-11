@@ -33,6 +33,12 @@ import {
   getOwnedTerritories,
   deleteItem,
   sellItem,
+  getStashBox,
+  depositStashItem,
+  useBrownSugarItem,
+  sellBrownSugarItem,
+  useFlakeItem,
+  sellFlakeItem,
   consumeRockCandyItem,
   sellRockCandyItem,
   consumePillsItem,
@@ -499,6 +505,114 @@ export default function CharacterScreen() {
     }
   };
 
+// FLAKE_ITEM_FRONTEND_HANDLERS: use/sell Flake, mirroring handleSellItem.
+  const handleUseFlake = async () => {
+    if (!playerId) return;
+    try {
+      const result = await useFlakeItem(playerId);
+      await loadAllData();
+      Alert.alert('Flake used!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to use Flake');
+    }
+  };
+
+  const handleSellFlake = async () => {
+    if (!playerId) return;
+    try {
+      const result = await sellFlakeItem(playerId, 1);
+      await loadAllData();
+      Alert.alert('Sold!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to sell Flake');
+    }
+  };
+
+// BROWN_SUGAR_ITEM_FRONTEND_HANDLERS: use/sell Brown Sugar, mirroring handleSellItem.
+  // On a blocked re-use the backend returns HTTP 400 and the alert shows its message.
+  const handleUseBrownSugar = async () => {
+    if (!playerId) return;
+    try {
+      const result = await useBrownSugarItem(playerId);
+      await loadAllData();
+      Alert.alert('Brown Sugar used!', result.message);
+    } catch (error: any) {
+      Alert.alert('Brown Sugar', error?.response?.data?.detail || 'Failed to use Brown Sugar');
+    }
+  };
+
+  const handleSellBrownSugar = async () => {
+    if (!playerId) return;
+    try {
+      const result = await sellBrownSugarItem(playerId, 1);
+      await loadAllData();
+      Alert.alert('Sold!', result.message);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to sell Brown Sugar');
+    }
+  };
+
+// BROWN_SUGAR_FRONTEND_FLAGS: once-only rule - each item's buff is read from player.active_buffs (own buff only, expiry-checked).
+  const brownSugarActive = ((player as any)?.active_buffs || []).some((b: any) => b.item_id === 'brown_sugar' && (!b.expires_at || b.expires_at >= new Date().toISOString()));
+  const grassActive = ((player as any)?.active_buffs || []).some((b: any) => b.item_id === 'grass' && (!b.expires_at || b.expires_at >= new Date().toISOString()));
+  const pillsActive = ((player as any)?.active_buffs || []).some((b: any) => b.item_id === 'pills' && (!b.expires_at || b.expires_at >= new Date().toISOString()));
+  const rockCandyActive = ((player as any)?.active_buffs || []).some((b: any) => b.item_id === 'rock_candy' && (!b.expires_at || b.expires_at >= new Date().toISOString()));
+  const flakeActive = ((player as any)?.active_buffs || []).some((b: any) => b.item_id === 'flake' && (!b.expires_at || b.expires_at >= new Date().toISOString()));
+
+// STASH_BOX: STORE from the item screen. Asks HOW MANY first, then shows the slot picker.
+  const [stashBox, setStashBox] = useState<any>(null);
+  const [storeItem, setStoreItem] = useState<any>(null);
+  const [storeQty, setStoreQty] = useState('');
+  const [storeStep, setStoreStep] = useState<'qty' | 'slots' | null>(null);
+  const [storeBusy, setStoreBusy] = useState(false);
+  const loadStashBox = async () => {
+    if (!playerId) return null;
+    try { const res: any = await getStashBox(playerId); setStashBox(res); return res; } catch (_) { return null; }
+  };
+  const stashOzHeld = (itemId: string) => {
+    const inv: any[] = (player as any)?.inventory || [];
+    let held = 0;
+    for (const it of inv) {
+      if (typeof it === 'string') { if (it === itemId) held += 1; }
+      else if (it && (it.item_id === itemId || it.id === itemId)) { held += (it.qty ?? it.quantity ?? it.count ?? 1); }
+    }
+    return held;
+  };
+  const handleStoreItem = async (item: EquipmentItem) => {
+    if (!playerId) return;
+    const itemId = (item as any).id || (item as any).item_id;
+    if (!['grass', 'pills', 'rock_candy', 'flake', 'brown_sugar'].includes(itemId)) return;
+    const box = stashBox || (await loadStashBox());
+    if (!box?.owned) {
+      Alert.alert('Stash Box', 'Buy the Stash Box first — $5,000 in House > Utilities.');
+      return;
+    }
+    setStoreItem(item);
+    setStoreQty(String(stashOzHeld(itemId) || ''));
+    setStoreStep('qty');
+  };
+  const confirmStoreQty = () => {
+    if (!storeItem) return;
+    const itemId = (storeItem as any).id || (storeItem as any).item_id;
+    const qty = parseInt(storeQty, 10);
+    if (!qty || qty < 1 || qty > stashOzHeld(itemId)) { Alert.alert('Stash Box', 'Enter 1 to ' + stashOzHeld(itemId) + ' oz.'); return; }
+    setStoreStep('slots');
+  };
+  const pickStoreSlot = async (slot: number) => {
+    if (!playerId || !storeItem || storeBusy) return;
+    const itemId = (storeItem as any).id || (storeItem as any).item_id;
+    const qty = parseInt(storeQty, 10);
+    setStoreBusy(true);
+    try {
+      const res: any = await depositStashItem(playerId, slot, itemId, qty);
+      setStashBox(res?.box || res);
+      setStoreItem(null); setStoreStep(null); setStoreQty('');
+      await loadAllData();
+      Alert.alert('Stored!', qty + ' oz ' + storeItem.name + ' stored in slot ' + (slot + 1) + '.');
+    } catch (e: any) { Alert.alert('Stash Box', e?.response?.data?.detail || 'Could not store that.'); }
+    finally { setStoreBusy(false); }
+  };
+
   const handleRepairItem = async (item: EquipmentItem) => {
     if (!playerId || item.inventory_index === undefined) return;
     
@@ -826,6 +940,16 @@ export default function CharacterScreen() {
             onDelete={handleDeleteItem}
             onSell={handleSellItem}
             onRepair={handleRepairItem}
+            onStore={handleStoreItem}
+            onUseBrownSugar={handleUseBrownSugar}
+            onSellBrownSugar={handleSellBrownSugar}
+            brownSugarActive={brownSugarActive}
+            grassActive={grassActive}
+            pillsActive={pillsActive}
+            rockCandyActive={rockCandyActive}
+            flakeActive={flakeActive}
+            onUseFlake={handleUseFlake}
+            onSellFlake={handleSellFlake}
             onUseRockCandy={handleUseRockCandy}
             onSellRockCandy={handleSellRockCandy}
             onUsePills={handleUsePills}
@@ -847,6 +971,41 @@ export default function CharacterScreen() {
         )}
       </ScrollView>
 
+      {/* STASH_BOX store modal — ask HOW MANY first, then pick a slot. */}
+      <Modal visible={storeStep !== null} animationType="slide" onRequestClose={() => { setStoreStep(null); setStoreItem(null); }}>
+        <View style={{ flex: 1, backgroundColor: '#111', padding: 16 }}>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#FFD700' }}>STORE {storeItem?.name || ''}</Text>
+          {storeStep === 'qty' && storeItem ? (
+            <View style={{ marginTop: 16 }}>
+              <Text style={{ color: '#fff' }}>You hold {stashOzHeld((storeItem as any).id || (storeItem as any).item_id)} oz. How many?</Text>
+              <TextInput value={storeQty} onChangeText={setStoreQty} keyboardType="numeric" placeholder="oz" placeholderTextColor="#666" style={{ backgroundColor: '#1a1a1a', color: '#fff', borderRadius: 8, padding: 10, marginTop: 8 }} />
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity onPress={confirmStoreQty} style={{ backgroundColor: '#FFD700', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16 }}><Text style={{ fontWeight: '800', color: '#000' }}>NEXT</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => { setStoreStep(null); setStoreItem(null); }}><Text style={{ color: '#888', paddingVertical: 10 }}>Cancel</Text></TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+          {storeStep === 'slots' && storeItem ? (
+            <View style={{ marginTop: 16 }}>
+              <Text style={{ color: '#FFD700', fontWeight: '800', fontSize: 15 }}>Store {storeQty} oz {storeItem.name} — pick a slot:</Text>
+              {Array.from({ length: 20 }, (_, i) => {
+                const open = (stashBox?.unlocked || [0, 1, 2]).includes(i);
+                if (!open) return null;
+                const entry = stashBox?.slots?.[String(i)];
+                const itemId = (storeItem as any).id || (storeItem as any).item_id;
+                if (entry && entry.item !== itemId) return null;
+                return (
+                  <TouchableOpacity key={i} onPress={() => pickStoreSlot(i)} disabled={storeBusy} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222' }}>
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Slot {i + 1}{entry ? ' — ' + entry.qty + ' oz already in here' : ' — EMPTY'}</Text>
+                    <Text style={{ color: '#FFD700' }}>STORE</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity onPress={() => setStoreStep('qty')} style={{ marginTop: 8 }}><Text style={{ color: '#888' }}>Back</Text></TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
       {/* Profile Picture Menu Modal */}
       <Modal
         visible={showPicMenu}
@@ -1426,6 +1585,16 @@ function ItemsTab({
   onDelete,
   onSell,
   onRepair,
+  onStore,
+  onUseBrownSugar,
+  onSellBrownSugar,
+  brownSugarActive,
+  grassActive,
+  pillsActive,
+  rockCandyActive,
+  flakeActive,
+  onUseFlake,
+  onSellFlake,
   onUseRockCandy,
   onSellRockCandy,
   onUsePills,
@@ -1441,6 +1610,18 @@ function ItemsTab({
   onDelete: (item: EquipmentItem) => void;
   onSell: (item: EquipmentItem) => void;
   onRepair: (item: EquipmentItem) => void;
+  onStore: (item: EquipmentItem) => void;
+  onUseBrownSugar: () => void;
+  onSellBrownSugar: () => void;
+  brownSugarActive: boolean;
+  grassActive: boolean;
+  pillsActive: boolean;
+  rockCandyActive: boolean;
+  flakeActive: boolean;
+  // BROWN_SUGAR_ITEM_FRONTEND_PROPS
+  onUseFlake: () => void;
+  onSellFlake: () => void;
+  // FLAKE_ITEM_FRONTEND_PROPS
   onUseRockCandy: () => void;
   onSellRockCandy: () => void;
   // ROCK_CANDY_ITEM_FRONTEND_PROPS
@@ -1509,7 +1690,7 @@ function ItemsTab({
             <View style={styles.itemInfo}>
               <View style={styles.itemHeader}>
                 <Text style={[styles.itemName, { color: item.is_broken ? '#666' : rarityColor }]}>
-                  {item.name} {item.is_broken && '(BROKEN)'}
+                  {item.name}{(item as any).qty ? ' x' + (item as any).qty + ' oz' : ''} {item.is_broken && '(BROKEN)'}
                 </Text>
                 <Text style={[styles.rarityBadge, { color: item.is_broken ? '#666' : rarityColor }]}>
                   {item.rarity.toUpperCase()}
@@ -1552,17 +1733,18 @@ function ItemsTab({
               <TouchableOpacity
                 style={[styles.itemActionBtn, styles.equipActionBtn]}
                 onPress={() => onUseGrass()}
+                disabled={grassActive}
               >
                 <Ionicons name="leaf" size={14} color="#4caf50" />
-                <Text style={[styles.itemActionText, { color: '#4caf50' }]}>USE (+50% HP 60s)</Text>
+                <Text style={[styles.itemActionText, { color: '#4caf50' }]}>{grassActive ? 'HP ACTIVE' : 'USE (+50% HP 60s)'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.itemActionBtn, styles.sellActionBtn]}
-                onPress={() => onSellGrass()}
-              >
-                <Ionicons name="cash" size={14} color="#f39c12" />
-                <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL 1 OZ ($100)</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.equipActionBtn]}
+                  onPress={() => onStore(item)}
+                >
+                  <Ionicons name="archive" size={14} color="#3498db" />
+                  <Text style={[styles.itemActionText, { color: '#3498db' }]}>STORE</Text>
+                </TouchableOpacity>
             </View>
           ) : item.id === 'pills' ? (
             /* PILLS_ITEM_FRONTEND_ROW */
@@ -1570,17 +1752,18 @@ function ItemsTab({
               <TouchableOpacity
                 style={[styles.itemActionBtn, styles.equipActionBtn]}
                 onPress={() => onUsePills()}
+                disabled={pillsActive}
               >
                 <Ionicons name="medkit" size={14} color="#4caf50" />
-                <Text style={[styles.itemActionText, { color: '#4caf50' }]}>USE (+50% ENERGY 60s)</Text>
+                <Text style={[styles.itemActionText, { color: '#4caf50' }]}>{pillsActive ? 'ENERGY ACTIVE' : 'USE (+50% ENERGY 60s)'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.itemActionBtn, styles.sellActionBtn]}
-                onPress={() => onSellPills()}
-              >
-                <Ionicons name="cash" size={14} color="#f39c12" />
-                <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL 1 OZ ($200)</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.equipActionBtn]}
+                  onPress={() => onStore(item)}
+                >
+                  <Ionicons name="archive" size={14} color="#3498db" />
+                  <Text style={[styles.itemActionText, { color: '#3498db' }]}>STORE</Text>
+                </TouchableOpacity>
             </View>
           ) : item.id === 'rock_candy' ? (
             /* ROCK_CANDY_ITEM_FRONTEND_ROW */
@@ -1588,17 +1771,56 @@ function ItemsTab({
               <TouchableOpacity
                 style={[styles.itemActionBtn, styles.equipActionBtn]}
                 onPress={() => onUseRockCandy()}
+                disabled={rockCandyActive}
               >
                 <Ionicons name="diamond" size={14} color="#ce93d8" />
-                <Text style={[styles.itemActionText, { color: '#ce93d8' }]}>USE (+50% ATTACK 60s)</Text>
+                <Text style={[styles.itemActionText, { color: '#ce93d8' }]}>{rockCandyActive ? 'ATTACK ACTIVE' : 'USE (+50% ATTACK 60s)'}</Text>
               </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.equipActionBtn]}
+                  onPress={() => onStore(item)}
+                >
+                  <Ionicons name="archive" size={14} color="#3498db" />
+                  <Text style={[styles.itemActionText, { color: '#3498db' }]}>STORE</Text>
+                </TouchableOpacity>
+            </View>
+          ) : (
+/* FLAKE_ITEM_FRONTEND_ROW */ item.id === 'flake' ? (
+<View style={styles.itemActions}>
               <TouchableOpacity
-                style={[styles.itemActionBtn, styles.sellActionBtn]}
-                onPress={() => onSellRockCandy()}
+                style={[styles.itemActionBtn, styles.equipActionBtn]}
+                onPress={() => onUseFlake()}
+                disabled={flakeActive}
               >
-                <Ionicons name="cash" size={14} color="#f39c12" />
-                <Text style={[styles.itemActionText, { color: '#f39c12' }]}>SELL 1 OZ ($300)</Text>
+                <Ionicons name="shield" size={14} color="#f48fb1" />
+                <Text style={[styles.itemActionText, { color: '#f48fb1' }]}>{flakeActive ? 'ARMOR ACTIVE' : 'USE (+50% ARMOR 60s)'}</Text>
               </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.equipActionBtn]}
+                  onPress={() => onStore(item)}
+                >
+                  <Ionicons name="archive" size={14} color="#3498db" />
+                  <Text style={[styles.itemActionText, { color: '#3498db' }]}>STORE</Text>
+                </TouchableOpacity>
+            </View>
+          ) : (
+/* BROWN_SUGAR_ITEM_FRONTEND_ROW */ item.id === 'brown_sugar' ? (
+<View style={styles.itemActions}>
+              <TouchableOpacity
+                style={[styles.itemActionBtn, styles.equipActionBtn]}
+                onPress={() => onUseBrownSugar()}
+                disabled={brownSugarActive}
+              >
+                <Ionicons name="clover" size={14} color="#9b59b6" />
+                <Text style={[styles.itemActionText, { color: '#9b59b6' }]}>{brownSugarActive ? 'LUCK ACTIVE' : 'USE (+50% LUCK 60s)'}</Text>
+              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.itemActionBtn, styles.equipActionBtn]}
+                  onPress={() => onStore(item)}
+                >
+                  <Ionicons name="archive" size={14} color="#3498db" />
+                  <Text style={[styles.itemActionText, { color: '#3498db' }]}>STORE</Text>
+                </TouchableOpacity>
             </View>
           ) : (
               <View style={styles.itemActions}>
@@ -1638,6 +1860,8 @@ function ItemsTab({
                   <Text style={[styles.itemActionText, { color: '#e74c3c' }]}>DROP</Text>
                 </TouchableOpacity>
               </View>
+          )
+          )
           )}
 
             </View>

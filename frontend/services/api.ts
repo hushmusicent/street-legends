@@ -28,7 +28,21 @@ export const getPlayer = async (playerId: string): Promise<Player> => {
 };
 
 export const updatePlayerPosition = async (playerId: string, position: Position): Promise<void> => {
-  await api.put(`/players/${playerId}/position`, position);
+  // RESTAURANT_FRESH_GPS_FRONTEND: a failing position PUT used to vanish
+  // silently (.catch(() => {}) at the call sites) while the server kept a
+  // stale position for hours. Retry once, and WARN with the HTTP status so
+  // a broken update is visible instead of invisible.
+  try {
+    await api.put(`/players/${playerId}/position`, position);
+  } catch (e: any) {
+    console.warn('[POSITION] update failed, retrying once', e?.response?.status ?? e?.message);
+    try {
+      await api.put(`/players/${playerId}/position`, position);
+    } catch (e2: any) {
+      console.warn('[POSITION] update failed after retry', e2?.response?.status ?? e2?.message);
+      throw e2;
+    }
+  }
 };
 
 export const getNearbyPlayers = async (playerId: string, radius: number = 500): Promise<NearbyPlayer[]> => {
@@ -645,6 +659,57 @@ export const sellItem = async (playerId: string, itemId: string) => {
   const response = await api.post(`/players/${playerId}/inventory/${itemId}/sell`);
   return response.data;
 };
+// STASH_BOX_API: house Stash Box - 20 slots, 3 free, $5,000 per extra slot.
+export const getStashBox = async (playerId: string) => {
+  const response = await api.get(`/stash-box?player_id=${playerId}`);
+  return response.data;
+};
+
+export const buyStashBox = async (playerId: string) => {
+  const response = await api.post(`/stash-box/buy?player_id=${playerId}`);
+  return response.data;
+};
+
+export const sellStashBox = async (playerId: string) => {
+  const response = await api.post(`/stash-box/sell?player_id=${playerId}`);
+  return response.data;
+};
+
+export const unlockStashSlot = async (playerId: string, slot: number) => {
+  const response = await api.post(`/stash-box/unlock?player_id=${playerId}&slot=${slot}`);
+  return response.data;
+};
+
+export const depositStashItem = async (playerId: string, slot: number, itemId: string, qty: number) => {
+  const response = await api.post(`/stash-box/deposit?player_id=${playerId}&slot=${slot}&item=${itemId}&qty=${qty}`);
+  return response.data;
+};
+
+export const withdrawStashItem = async (playerId: string, slot: number, qty: number) => {
+  const response = await api.post(`/stash-box/withdraw?player_id=${playerId}&slot=${slot}&qty=${qty}`);
+  return response.data;
+};
+
+export const useBrownSugarItem = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/brown_sugar/use`);
+  return response.data;
+};
+
+export const sellBrownSugarItem = async (playerId: string, qty: number = 1) => {
+  const response = await api.post(`/players/${playerId}/brown_sugar/sell?qty=${qty}`);
+  return response.data;
+};
+
+export const useFlakeItem = async (playerId: string) => {
+  const response = await api.post(`/players/${playerId}/flake/use`);
+  return response.data;
+};
+
+export const sellFlakeItem = async (playerId: string, qty: number = 1) => {
+  const response = await api.post(`/players/${playerId}/flake/sell?qty=${qty}`);
+  return response.data;
+};
+
 
 export const consumeRockCandyItem = async (playerId: string) => {
   const response = await api.post(`/players/${playerId}/rock-candy/use`);
@@ -704,8 +769,45 @@ export const spawnRestaurants = async (latitude: number, longitude: number, play
   return response.data;
 };
 
-export const eatAtRestaurant = async (restaurantId: string, playerId: string) => {
-  const response = await api.post(`/restaurants/${restaurantId}/eat?player_id=${playerId}`);
+export const eatAtRestaurant = async (restaurantId: string, playerId: string, position?: { latitude: number; longitude: number }) => {
+  // RESTAURANT_FRESH_GPS_FRONTEND: send the phone's LIVE GPS so the
+  // server's 100m check measures from where the player actually is, not
+  // the stored position (17h stale: "7478m away"). No position = old
+  // behavior (server falls back to the stored position).
+  const gps = position ? `&latitude=${position.latitude}&longitude=${position.longitude}` : '';
+  const response = await api.post(`/restaurants/${restaurantId}/eat?player_id=${playerId}${gps}`);
+  return response.data;
+};
+
+
+// ACTIVITY_CENTER_API: real activity centers (OpenStreetMap) + presence client.
+export const getActivityCentersNearby = async (latitude: number, longitude: number, radiusKm: number = 2) => {
+  const response = await api.get(`/activity-centers/nearby?latitude=${latitude}&longitude=${longitude}&radius_km=${radiusKm}`);
+  return response.data;
+};
+export const centerEnterPresence = async (centerId: string, playerId: string, playerName: string): Promise<any> => {
+  const response = await api.post(`/activity-centers/${centerId}/enter`, { player_id: playerId, player_name: playerName });
+  return response.data;
+};
+export const centerLeavePresence = async (centerId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/activity-centers/${centerId}/leave`, { player_id: playerId });
+  return response.data;
+};
+export const centerHeartbeatPresence = async (centerId: string, playerId: string, playerName: string): Promise<any> => {
+  const response = await api.post(`/activity-centers/${centerId}/heartbeat`, { player_id: playerId, player_name: playerName });
+  return response.data;
+};
+export const getCenterPresence = async (centerId: string): Promise<any> => {
+  const response = await api.get(`/activity-centers/${centerId}/presence`);
+  return response.data;
+};
+export const awardCenterPrize = async (playerId: string, game: string, level: number, won: boolean, makes: number, onfireMakes: number): Promise<any> => {
+  const response = await api.post(`/center-prize/award`, { player_id: playerId, game, level, won, makes, onfire_makes: onfireMakes });
+  return response.data;
+};
+
+export const saveCenterLayout = async (centerId: string, playerId: string, layout: any): Promise<any> => {
+  const response = await api.post(`/activity-centers/${centerId}/layout`, { player_id: playerId, layout });
   return response.data;
 };
 
@@ -715,8 +817,10 @@ export const spawnNightclubs = async (latitude: number, longitude: number, playe
   return response.data;
 };
 
-export const visitNightclub = async (nightclubId: string, playerId: string) => {
-  const response = await api.post(`/nightclubs/${nightclubId}/visit?player_id=${playerId}`);
+export const visitNightclub = async (nightclubId: string, playerId: string, position?: { latitude: number; longitude: number }) => {
+  // RESTAURANT_FRESH_GPS_FRONTEND: same live-GPS fix as eatAtRestaurant.
+  const gps = position ? `&latitude=${position.latitude}&longitude=${position.longitude}` : '';
+  const response = await api.post(`/nightclubs/${nightclubId}/visit?player_id=${playerId}${gps}`);
   return response.data;
 };
 
@@ -726,8 +830,13 @@ export const spawnBanks = async (latitude: number, longitude: number, playerLeve
   return response.data;
 };
 
-export const robBank = async (bankId: string, playerId: string) => {
-  const response = await api.post(`/banks/${bankId}/rob?player_id=${playerId}`);
+export const robBank = async (bankId: string, playerId: string, position?: { latitude: number; longitude: number }) => {
+  // BANK_ROBBERY_FRESH_GPS_FRONTEND: send the phone's LIVE GPS so the
+  // server's proximity check measures from where the player actually is,
+  // not the stored position (17h stale: "18769m away"). No position = old
+  // behavior (server falls back to the stored position).
+  const gps = position ? `&latitude=${position.latitude}&longitude=${position.longitude}` : '';
+  const response = await api.post(`/banks/${bankId}/rob?player_id=${playerId}${gps}`);
   return response.data;
 };
 
@@ -981,6 +1090,61 @@ export const loginPlayer = async (playerId: string) => {
 };
 
 
+
+// PHARMACY_API: real pharmacies (OpenStreetMap) + buy/sell by the oz.
+export const getPharmaciesNearby = async (latitude: number, longitude: number, radiusKm: number = 2): Promise<any[]> => {
+  const response = await api.get(`/pharmacies/nearby?latitude=${latitude}&longitude=${longitude}&radius_km=${radiusKm}`);
+  return response.data;
+};
+
+export const pharmacyRequestId = (): string => {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) + '-' + Math.random().toString(36).slice(2, 10);
+};
+
+export const pharmacyBuy = async (playerId: string, itemId: string, qty: number = 1, requestId?: string): Promise<any> => {
+  const response = await api.post('/pharmacies/buy', { player_id: playerId, item_id: itemId, qty, request_id: requestId || pharmacyRequestId() });
+  return response.data;
+};
+
+export const pharmacySell = async (playerId: string, itemId: string, qty: number = 1, requestId?: string): Promise<any> => {
+  const response = await api.post('/pharmacies/sell', { player_id: playerId, item_id: itemId, qty, request_id: requestId || pharmacyRequestId() });
+  return response.data;
+};
+
+
+// PARK_API: real parks (OpenStreetMap) + presence client.
+export const getParksNearby = async (latitude: number, longitude: number, radiusKm: number = 2): Promise<any[]> => {
+  const response = await api.get(`/parks/nearby?latitude=${latitude}&longitude=${longitude}&radius_km=${radiusKm}`);
+  return response.data;
+};
+
+export const parkEnterPresence = async (parkId: string, playerId: string, playerName: string): Promise<any> => {
+  const response = await api.post(`/parks/${parkId}/enter`, { player_id: playerId, player_name: playerName });
+  return response.data;
+};
+
+export const parkLeavePresence = async (parkId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/parks/${parkId}/leave`, { player_id: playerId });
+  return response.data;
+};
+
+export const parkHeartbeatPresence = async (parkId: string, playerId: string, playerName: string): Promise<any> => {
+  const response = await api.post(`/parks/${parkId}/heartbeat`, { player_id: playerId, player_name: playerName });
+  return response.data;
+};
+
+export const getParkPresence = async (parkId: string): Promise<any> => {
+  const response = await api.get(`/parks/${parkId}/presence`);
+  return response.data;
+};
+
+
+// BILLBOARD_API: billboards on real highways / main roads (OpenStreetMap).
+export const getBillboardsNearby = async (latitude: number, longitude: number, radiusKm: number = 2): Promise<any[]> => {
+  const response = await api.get(`/billboards/nearby?latitude=${latitude}&longitude=${longitude}&radius_km=${radiusKm}`);
+  return response.data;
+};
+
 export default api;
 // ===== Player Houses =====
 export const buyHouse = async (playerId: string, tier: string, latitude: number, longitude: number): Promise<any> => {
@@ -1059,5 +1223,17 @@ export const houseHeartbeatPresence = async (houseId: string, playerId: string, 
 };
 export const getHousePresence = async (houseId: string): Promise<any> => {
   const response = await api.get(`/houses/${houseId}/presence`);
+  return response.data;
+};
+
+export const getFiendsNearby = async (latitude: number, longitude: number, playerId?: string): Promise<any[]> => {
+  let url = `/fiends/nearby?latitude=${latitude}&longitude=${longitude}`;
+  if (playerId) url += `&player_id=${playerId}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+export const sellToFiend = async (fiendId: string, playerId: string): Promise<any> => {
+  const response = await api.post(`/fiends/${fiendId}/complete?player_id=${playerId}`);
   return response.data;
 };

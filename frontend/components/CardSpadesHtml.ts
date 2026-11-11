@@ -345,6 +345,7 @@ function spScoreHand() {
   if (SP.us >= 500 || SP.them >= 500) {
     SP.over = true;
     SP.msg = (SP.us > SP.them ? 'YOU WIN THE GAME!' : SP.them > SP.us ? 'OPPONENTS WIN THE GAME.' : 'TIE GAME!') + ' Final: You ' + SP.us + ' - Opponents ' + SP.them + '.';
+    if (SP.us > SP.them) if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'card_table', level: 1 }));
     document.getElementById('spNext').style.display = 'none';
     var again = document.createElement('button');
     again.className = 'green newgame'; again.textContent = 'NEW GAME';

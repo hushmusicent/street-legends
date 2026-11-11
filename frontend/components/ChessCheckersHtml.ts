@@ -587,6 +587,9 @@ function renderBoard(){
 }
 function showResult(msg){
   gameOver = true;
+function showResult(msg){
+  gameOver = true;
+  if (curMode === "cpu" && (msg === "Checkmate! You win!" || msg === "You win!")) if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'chess_checkers', level: curLevel }));
   document.getElementById("statusText").textContent = msg;
   document.getElementById("turnText").textContent = "Game over";
   document.getElementById("btnAgain").style.display = "inline-block";

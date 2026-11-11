@@ -315,6 +315,7 @@ function endByEmpty(finisher) {
   var win = S.youScore > S.cpuScore ? "you" : (S.cpuScore > S.youScore ? "cpu" : "tie");
   S.msg = win === "tie" ? "Tie game!" : (win === "you" ? "You win!" : "CPU wins.");
   el("overText").textContent = (win === "tie" ? "Tie game! " : (win === "you" ? "YOU WIN! " : "CPU WINS. ")) + "Final: You " + S.youScore + " - CPU " + S.cpuScore + ".";
+  if (win === "you") if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'scrabble', level: 1 }));
   el("overOverlay").style.display = "flex";
   render();
 }
@@ -325,6 +326,7 @@ function endByPasses() {
   var win = S.youScore > S.cpuScore ? "you" : (S.cpuScore > S.youScore ? "cpu" : "tie");
   S.msg = win === "tie" ? "Tie game!" : (win === "you" ? "You win!" : "CPU wins.");
   el("overText").textContent = (win === "tie" ? "Tie game! " : (win === "you" ? "YOU WIN! " : "CPU WINS. ")) + "Final: You " + S.youScore + " - CPU " + S.cpuScore + ".";
+  if (win === "you") if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'scrabble', level: 1 }));
   el("overOverlay").style.display = "flex";
   render();
 }

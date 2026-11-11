@@ -195,6 +195,7 @@ function endHand(winner, points, note) {
   if (S.youScore >= 100 || S.cpuScore >= 100) {
     S.matchOver = true;
     el("overText").textContent = (S.youScore >= 100 ? "YOU WIN THE MATCH!" : "CPU WINS THE MATCH.") + " Final: You " + S.youScore + " - CPU " + S.cpuScore + ".";
+    if (S.youScore >= 100) if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'dominoes', level: 1 }));
     el("overOverlay").style.display = "flex";
   }
   save(); render();

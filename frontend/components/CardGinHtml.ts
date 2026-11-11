@@ -446,6 +446,7 @@ function ginFinish() {
   document.getElementById('ginDiscBtn').disabled = true;
   if (G.us >= 100 || G.them >= 100) {
     G.msg = (G.us > G.them ? 'YOU WIN THE GAME!' : 'CPU WINS THE GAME.') + ' Final: You ' + G.us + ' - CPU ' + G.them + '.';
+    if (G.us > G.them) if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'center_prize_win', game: 'card_table', level: 1 }));
     var again = document.createElement('button');
     again.className = 'green newgame'; again.textContent = 'NEW GAME';
     again.addEventListener('click', function () { ginNewGame(); });
