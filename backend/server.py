@@ -15178,9 +15178,151 @@ async def park_pvp_room_leave(code: str, body: ParkPvpRoomLeave):
     if room["status"] == "waiting":
         await db.park_pvp_rooms.delete_one({"code": code})
         return {"ok": True, "deleted": True}
+    if room["status"] == "finished":
+        return {"ok": True, "finished": True, "winner": room.get("winner")}
     winner = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
     await db.park_pvp_rooms.update_one({"code": code}, {"$set": {"status": "finished", "winner": winner, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    # Held wager + the leaver never reported a result = they quit mid-game:
+    # the other player takes the pot. (If the leaver already reported, the
+    # normal two-report settle finishes it when the other phone reports.)
+    if room.get("wager_status") == "held" and body.player_id not in (room.get("wager_reports") or {}):
+        amount = int(room.get("wager_amount", 0))
+        res = await db.park_pvp_rooms.update_one({"code": code, "wager_status": "held"},
+            {"$set": {"wager_status": "paid", "wager_winner_id": winner, "wager_forfeit": True}})
+        if res.modified_count == 1:
+            await db.players.update_one({"id": winner}, {"$inc": {"cash": 2 * amount}})
     return {"ok": True, "finished": True, "winner": winner}
+
+
+# ---- Park PvP cash wagers (same flow as pool: host proposes, guest agrees,
+# both stakes are held at start, the winner takes both). Unlike pool, a win
+# is only paid when BOTH phones report the same winner; a mismatch refunds.
+class ParkWagerPropose(BaseModel):
+    player_id: str
+    amount: int
+    round: int = 0  # which game round (first game = 0, each rematch +1) the bet is for
+
+
+class ParkWagerSettle(BaseModel):
+    player_id: str
+    outcome: str  # "win" | "draw" (quitting mid-game is settled by the leave route)
+    winner_id: str = ""
+
+
+async def park_wager_room(code):
+    room = await db.park_pvp_rooms.find_one({"code": code})
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+async def park_wager_set(code, fields, player_id):
+    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.park_pvp_rooms.update_one({"code": code}, {"$set": fields})
+    return pool_wager_out(await park_wager_room(code), player_id)
+
+
+@api_router.post("/park_pvp/rooms/{code}/wager/propose")
+async def park_wager_propose(code: str, body: ParkWagerPropose):
+    room = await park_wager_room(code)
+    if body.player_id != room["host_id"]:
+        raise HTTPException(status_code=403, detail="Only the host proposes the wager")
+    if isinstance(body.amount, bool) or body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Wager amount must be a positive cash amount")
+    if room.get("wager_status", "none") in ("agreed", "held"):
+        raise HTTPException(status_code=400, detail="A wager is already agreed or held for this room")
+    host = await db.players.find_one({"id": room["host_id"]})
+    if not host or host.get("cash", 0) < body.amount:
+        raise HTTPException(status_code=400, detail="You don't have $" + format(body.amount, ",") + " to bet")
+    return await park_wager_set(code, {"wager_amount": int(body.amount), "wager_status": "proposed",
+                                       "wager_round": int(body.round), "wager_reports": {}, "wager_winner_id": None}, body.player_id)
+
+
+@api_router.post("/park_pvp/rooms/{code}/wager/agree")
+async def park_wager_agree(code: str, body: PoolWagerAction):
+    room = await park_wager_room(code)
+    if body.player_id != room.get("guest_id"):
+        raise HTTPException(status_code=403, detail="Only the guest agrees to the wager")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to agree to")
+    ok, detail = await pool_wager_check_funds(room, int(room.get("wager_amount", 0)))
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    return await park_wager_set(code, {"wager_status": "agreed"}, body.player_id)
+
+
+@api_router.post("/park_pvp/rooms/{code}/wager/decline")
+async def park_wager_decline(code: str, body: PoolWagerAction):
+    room = await park_wager_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status", "none") != "proposed":
+        raise HTTPException(status_code=400, detail="No wager proposal to decline")
+    return await park_wager_set(code, {"wager_status": "declined"}, body.player_id)
+
+
+@api_router.post("/park_pvp/rooms/{code}/wager/start")
+async def park_wager_start(code: str, body: PoolWagerAction):
+    room = await park_wager_room(code)
+    if body.player_id not in (room["host_id"], room.get("guest_id")):
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status") == "held":
+        return pool_wager_out(room, body.player_id)
+    if room.get("wager_status") != "agreed":
+        raise HTTPException(status_code=400, detail="No agreed wager to start")
+    amount = int(room.get("wager_amount", 0))
+    ok, detail = await pool_wager_check_funds(room, amount)
+    if not ok:
+        await park_wager_set(code, {"wager_status": "declined"}, body.player_id)
+        raise HTTPException(status_code=400, detail=detail)
+    # Atomic flip agreed -> held so two phones calling start never charge twice.
+    res = await db.park_pvp_rooms.update_one({"code": code, "wager_status": "agreed"},
+                                             {"$set": {"wager_status": "held", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if res.modified_count == 1:
+        await db.players.update_one({"id": room["host_id"]}, {"$inc": {"cash": -amount}})
+        await db.players.update_one({"id": room["guest_id"]}, {"$inc": {"cash": -amount}})
+    return pool_wager_out(await park_wager_room(code), body.player_id)
+
+
+@api_router.post("/park_pvp/rooms/{code}/wager/settle")
+async def park_wager_settle(code: str, body: ParkWagerSettle):
+    room = await park_wager_room(code)
+    members = (room["host_id"], room.get("guest_id"))
+    if body.player_id not in members:
+        raise HTTPException(status_code=403, detail="Not in this room")
+    if room.get("wager_status") != "held":
+        return pool_wager_out(room, body.player_id)  # already paid/refunded
+    amount = int(room.get("wager_amount", 0))
+    now = datetime.now(timezone.utc).isoformat()
+
+    async def pay(winner_id, forfeit=False):
+        res = await db.park_pvp_rooms.update_one({"code": code, "wager_status": "held"},
+            {"$set": {"wager_status": "paid", "wager_winner_id": winner_id, "wager_forfeit": forfeit, "updated_at": now}})
+        if res.modified_count == 1:
+            await db.players.update_one({"id": winner_id}, {"$inc": {"cash": 2 * amount}})
+
+    async def refund():
+        res = await db.park_pvp_rooms.update_one({"code": code, "wager_status": "held"},
+            {"$set": {"wager_status": "refunded", "updated_at": now}})
+        if res.modified_count == 1:
+            for pid in members:
+                await db.players.update_one({"id": pid}, {"$inc": {"cash": amount}})
+
+    if body.outcome in ("win", "draw"):
+        report = body.winner_id if body.outcome == "win" else "draw"
+        if report != "draw" and report not in members:
+            raise HTTPException(status_code=400, detail="Wager winner must be a player in this room")
+        await db.park_pvp_rooms.update_one({"code": code}, {"$set": {"wager_reports." + body.player_id: report}})
+        reports = (await park_wager_room(code)).get("wager_reports") or {}
+        if all(pid in reports for pid in members):
+            a, b = reports[members[0]], reports[members[1]]
+            if a == b and a != "draw":
+                await pay(a)
+            else:
+                await refund()
+    else:
+        raise HTTPException(status_code=400, detail="Unknown wager outcome")
+    return pool_wager_out(await park_wager_room(code), body.player_id)
 
 
 # Register router last so every route defined above is included

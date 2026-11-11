@@ -324,7 +324,7 @@ function pvpPollOnce(){
     // games: the game starts when the second player enters the code).
     // Host: start when a guest_id is present (guest_id is always set on
     // join; guest_name alone is not a reliable trigger).
-    if(G.pvp.role==='host'&&room.guest_id&&G.mode!=='play'&&G.mode!=='over'){
+    if (pvpWagerReady(room, G.pvp.round || 0) && G.pvp.role==='host'&&room.guest_id&&G.mode!=='play'&&G.mode!=='over'){
       G.pvp.oppName=room.guest_name||'Opponent';
       var lbl=document.getElementById('pvpRoomLbl');
       if(lbl) lbl.textContent='CODE: '+code+' — vs '+G.pvp.oppName;
@@ -336,7 +336,7 @@ function pvpPollOnce(){
     // host's first state post — if that post is missed or late, the
     // guest would sit on "WAITING FOR HOST" forever. The host's state
     // still resyncs positions/score when it arrives.
-    if(G.pvp.role==='guest'&&room.status==='playing'&&G.mode!=='play'&&G.mode!=='over'){
+    if (pvpWagerReady(room, G.pvp.round || 0) && G.pvp.role==='guest'&&room.status==='playing'&&G.mode!=='play'&&G.mode!=='over'){
       var st3=document.getElementById('pvpStatus');
       if(st3) st3.textContent='Host joined! Starting the game...';
       startGame();
@@ -1731,7 +1731,8 @@ function pvpRematchCheck(room, st){
   var opp = (room.states && room.states[oppRole]) || null;
   var r = G.pvp.round || 0;
   G.pvp.oppRm = (opp && typeof opp.rm === 'number') ? opp.rm : 0;
-  if (room.status !== 'finished' && G.pvp.rmReq === r + 1 && G.pvp.oppRm === r + 1){
+  G.pvp.lastRoom = room;
+  if (room.status !== 'finished' && G.pvp.rmReq === r + 1 && G.pvp.oppRm === r + 1 && pvpWagerReady(room, r + 1)){
     G.pvp.round = r + 1;
     G.pvp.oppMe = null;
     G.over = false;
@@ -1757,6 +1758,81 @@ pvpBar.innerHTML = '<div id="pvpExMsg" style="color:#ffd54f;font-size:14px;font-
   + '<button id="pvpExRematch" style="background:#6a1b9a;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">REMATCH</button>'
   + '</div>';
 document.body.appendChild(pvpBar);
+/* ---------- PvP cash wager (host bets, guest accepts, winner takes both) ---------- */
+function pvpWagerPost(action, body){
+  return pvpPost('/' + G.pvp.code + '/wager/' + action, body).then(function(room){
+    if (room && room.code){ G.pvp.lastRoom = room; G.pvp.wErr = ''; }
+    else G.pvp.wErr = action === 'propose' ? 'Bet failed - you may not have that much cash.' : (action === 'agree' ? 'Could not accept - one of you is short on cash.' : 'Bet action failed - try again.');
+    pvpExtrasRefresh();
+    return room;
+  });
+}
+function pvpWagerReady(room, nextRound){
+  // Games (first game and rematches) wait while a bet is being decided.
+  var s = (room && room.wager_status) || 'none';
+  if (s === 'proposed') return false;
+  if (s === 'agreed'){
+    if (!G.pvp.wStarting){ G.pvp.wStarting = true; pvpWagerPost('start', { player_id: pvpPlayer().id }).then(function(){ G.pvp.wStarting = false; }); }
+    return false;
+  }
+  if (s === 'held') return (room.wager_round || 0) === nextRound;
+  return true;
+}
+function pvpWagerWinnerTeam(){
+  // Scores are team-indexed in every park game (0 = host, 1 = guest).
+  // Tennis is decided by games won in the set.
+  var sc = (Array.isArray(G.games) && Array.isArray(G.pts)) ? G.games : G.score;
+  if (!Array.isArray(sc) || sc[0] === sc[1]) return -1;
+  return sc[0] > sc[1] ? 0 : 1;
+}
+function pvpWagerSettleIfOver(){
+  var room = G.pvp.lastRoom, r = G.pvp.round || 0;
+  if (!room || room.wager_status !== 'held' || (room.wager_round || 0) !== r) return;
+  if (!pvpIsOver() || room.status === 'finished' || G.pvp.wSettled === r) return;
+  G.pvp.wSettled = r;
+  var t = pvpWagerWinnerTeam();
+  var body = { player_id: pvpPlayer().id, outcome: t < 0 ? 'draw' : 'win', winner_id: t === 0 ? room.host_id : (t === 1 ? room.guest_id : '') };
+  pvpWagerPost('settle', body);
+}
+var pvpWagerBox = document.createElement('div');
+pvpWagerBox.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px';
+pvpWagerBox.innerHTML = '<div id="pvpWMsg" style="color:#7CFC9A;font-size:14px;font-weight:700;text-align:center"></div>'
+  + '<div id="pvpWHost" style="display:flex;gap:8px;align-items:center">'
+  + '<input id="pvpWAmt" inputmode="numeric" maxlength="7" placeholder="$ BET" style="width:100px;text-align:center;font-size:16px;padding:10px;border-radius:8px;border:2px solid #f5c518;background:#111;color:#fff" />'
+  + '<button id="pvpWBet" style="background:#f5c518;color:#000;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">BET CASH</button></div>'
+  + '<div id="pvpWGuest" style="display:flex;gap:8px">'
+  + '<button id="pvpWAccept" style="background:#2e7d32;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">ACCEPT BET</button>'
+  + '<button id="pvpWDecline" style="background:#b71c1c;color:#fff;border:2px solid #fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;min-height:44px">DECLINE</button></div>';
+pvpBar.appendChild(pvpWagerBox);
+document.getElementById('pvpWBet').addEventListener('click', function(){
+  var amt = parseInt((document.getElementById('pvpWAmt').value || '').replace(/[^0-9]/g, ''), 10);
+  if (!amt || amt <= 0){ G.pvp.wErr = 'Enter how much cash to bet.'; pvpExtrasRefresh(); return; }
+  var r = G.pvp.round || 0;
+  pvpWagerPost('propose', { player_id: pvpPlayer().id, amount: amt, round: pvpIsOver() ? r + 1 : r });
+});
+document.getElementById('pvpWAccept').addEventListener('click', function(){ pvpWagerPost('agree', { player_id: pvpPlayer().id }); });
+document.getElementById('pvpWDecline').addEventListener('click', function(){ pvpWagerPost('decline', { player_id: pvpPlayer().id }); });
+function pvpWagerRefresh(){
+  var room = G.pvp.lastRoom || {}, s = room.wager_status || 'none', amt = room.wager_amount || 0;
+  var me = pvpPlayer().id, isHost = G.pvp.role === 'host', r = G.pvp.round || 0;
+  var nextRound = pvpIsOver() ? r + 1 : r;
+  var betForNext = (s === 'proposed' || s === 'agreed' || s === 'held') && (room.wager_round || 0) === nextRound;
+  var canPropose = isHost && room.status !== 'finished' && !betForNext && s !== 'agreed' && !(s === 'held');
+  document.getElementById('pvpWHost').style.display = canPropose ? 'flex' : 'none';
+  document.getElementById('pvpWGuest').style.display = (!isHost && s === 'proposed') ? 'flex' : 'none';
+  var $m = '$' + Number(amt).toLocaleString();
+  var msg = '';
+  if (s === 'proposed') msg = isHost ? 'Waiting for them to accept your ' + $m + ' bet...' : 'Host bets ' + $m + ' - winner takes ' + '$' + Number(2 * amt).toLocaleString() + '!';
+  else if (s === 'agreed') msg = 'Bet accepted! Taking ' + $m + ' from each player...';
+  else if (s === 'held') msg = (room.wager_round || 0) === r && pvpIsOver() ? 'Settling the ' + $m + ' bet...' : $m + ' each is on the line!';
+  else if (s === 'paid') msg = room.wager_winner_id === me ? 'You won the bet: +' + '$' + Number(2 * amt).toLocaleString() + '!' : 'You lost the ' + $m + ' bet.';
+  else if (s === 'refunded') msg = 'Bet refunded to both players.';
+  else if (s === 'declined') msg = isHost ? 'They declined the bet.' : 'Bet declined.';
+  else if (isHost) msg = 'Optional: bet cash on this game.';
+  if (G.pvp.wErr) msg = G.pvp.wErr;
+  document.getElementById('pvpWMsg').textContent = msg;
+}
+
 document.getElementById('pvpExShare').addEventListener('click', pvpShareCode);
 document.getElementById('pvpExRematch').addEventListener('click', pvpRequestRematch);
 // In PvP the game's own REMATCH button asks the other phone instead of
@@ -1767,17 +1843,20 @@ document.addEventListener('click', function(e){
 }, true);
 function pvpExtrasRefresh(){
   var on = pvpIsOn();
-  var waiting = on && G.pvp.role === 'host' && pvpNotStarted();
+  if (on) pvpWagerSettleIfOver();
+  var notStarted = on && pvpNotStarted();
+  var waiting = notStarted && G.pvp.role === 'host' && !(G.pvp.lastRoom && G.pvp.lastRoom.guest_id);
   var over = on && pvpIsOver();
-  pvpBar.style.display = (waiting || over) ? 'flex' : 'none';
-  if (!(waiting || over)) return;
+  pvpBar.style.display = (notStarted || over) ? 'flex' : 'none';
+  if (!(notStarted || over)) return;
+  pvpWagerRefresh();
   var r = G.pvp.round || 0;
   var mine = G.pvp.rmReq === r + 1, theirs = G.pvp.oppRm === r + 1;
   document.getElementById('pvpExShare').style.display = waiting ? 'block' : 'none';
   var rb = document.getElementById('pvpExRematch');
   rb.style.display = over ? 'block' : 'none';
   rb.disabled = mine; rb.style.opacity = mine ? '0.6' : '1';
-  var msg = 'Room ' + G.pvp.code + ' - send the code to your friend';
+  var msg = waiting ? 'Room ' + G.pvp.code + ' - send the code to your friend' : 'Starting soon...';
   if (over) msg = mine ? 'Rematch asked - waiting for the other player...' : (theirs ? 'The other player wants a REMATCH!' : 'Game over - play again?');
   document.getElementById('pvpExMsg').textContent = msg;
 }
