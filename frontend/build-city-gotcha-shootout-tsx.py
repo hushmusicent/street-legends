@@ -171,10 +171,20 @@ export default function ShootoutSimulator() {
     );
   }
 
+  // The config is injected INTO the HTML itself (right before </head>), not
+  // via injectedJavaScriptBeforeContentLoaded. That prop does not reliably
+  // fire for source={{html}} inline documents, so the game never saw
+  // SHOOTOUT_CONFIG, never entered app mode, never hid the start screen,
+  // and never reported results — so QUIT did nothing and no payout landed.
+  const gameHtml = GAME_HTML.replace(
+    '</head>',
+    `<script>window.SHOOTOUT_CONFIG = { level: ${level}, appMode: true };</script></head>`
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <WebView
-        source={{ html: GAME_HTML }}
+        source={{ html: gameHtml }}
         injectedJavaScriptBeforeContentLoaded={injectedConfig}
         onMessage={handleGameMessage}
         javaScriptEnabled

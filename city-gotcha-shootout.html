@@ -11,14 +11,14 @@
   /* The wrap is sized by JS to window.innerHeight. 100vh overflows in a
      WebView (it counts the area under the status bar), which made the game
      taller than the screen and cut the player off the bottom. */
-  #wrap { position:relative; width:100vw; height:100%; max-width:520px; margin:0 auto; background:#0a0a12; }
+  #wrap { position:relative; width:100vw; height:100%; max-width:400px; margin:0 auto; background:#0a0a12; }
   canvas { display:block; width:100%; height:100%; touch-action:none; }
   /* Overlay screens */
   .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(5,5,15,.82); z-index:10; text-align:center; padding:16px; }
   .hidden { display:none !important; }
-  .title { color:#ffd23f; font-size:42px; font-weight:bold; letter-spacing:3px; text-shadow:0 3px 0 #b8860b, 0 6px 12px rgba(0,0,0,.7); flex-shrink:0; }
-  .subtitle { color:#7fd4ff; font-size:16px; margin:10px 0 4px; letter-spacing:2px; flex-shrink:0; }
-  .howto { color:#e8e8e8; font-size:14px; line-height:1.7; margin:14px 0 6px; max-width:380px; flex-shrink:1; min-height:0; overflow-y:auto; max-height:52vh; padding:10px 12px; border:1px solid rgba(255,255,255,.18); border-radius:10px; background:rgba(0,0,0,.35); -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+  .title { color:#ffd23f; font-size:34px; font-weight:bold; letter-spacing:3px; text-shadow:0 3px 0 #b8860b, 0 6px 12px rgba(0,0,0,.7); flex-shrink:0; }
+  .subtitle { color:#7fd4ff; font-size:14px; margin:8px 0 4px; letter-spacing:2px; flex-shrink:0; }
+  .howto { color:#e8e8e8; font-size:13px; line-height:1.6; margin:12px 0 6px; max-width:340px; flex-shrink:1; min-height:0; overflow-y:auto; max-height:52vh; padding:10px 12px; border:1px solid rgba(255,255,255,.18); border-radius:10px; background:rgba(0,0,0,.35); -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
   .howto::-webkit-scrollbar { width:6px; }
   .howto::-webkit-scrollbar-thumb { background:#555; border-radius:3px; }
   .howto b { color:#ffd23f; }
