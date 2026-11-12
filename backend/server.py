@@ -217,6 +217,11 @@ def get_object(path: str) -> tuple:
 # Create the main app
 app = FastAPI(title="GTA GPS RPG API")
 
+# Health check (Emergent / load balancer probes GET /health)
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
