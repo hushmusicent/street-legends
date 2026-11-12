@@ -25,7 +25,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-RAW_URL = "https://raw.githubusercontent.com/hushmusicent/street-legends/main/frontend/app/shootout-simulator.tsx?v=1"
+RAW_URL = "https://raw.githubusercontent.com/hushmusicent/street-legends/main/frontend/app/shootout-simulator.tsx?v=4"
 TARGET = Path("frontend/app/shootout-simulator.tsx")
 BACKUP = Path("frontend/app/shootout-simulator.tsx.bak")
 
@@ -52,9 +52,6 @@ def main():
     if "const GAME_HTML" not in content:
         print("CITY_GOTCHA_APP_FAIL downloaded file has no embedded game")
         return 1
-    # The GitHub copy imports the store from a path that doesn't exist
-    # ('../hooks/useGameStore'), which breaks Publish. Point it at the real store.
-    content = content.replace("from '../hooks/useGameStore'", "from '../stores/gameStore'")
     if TARGET.exists():
         BACKUP.write_text(TARGET.read_text(encoding="utf-8"), encoding="utf-8")
     TARGET.parent.mkdir(parents=True, exist_ok=True)
