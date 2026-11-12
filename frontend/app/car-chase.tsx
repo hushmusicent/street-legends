@@ -189,11 +189,14 @@ export default function CarChaseGame() {
           const session = await startStandaloneCarChase(playerId, difficulty);
           setGameId(session.game_id);
         } else {
-          setGameId('standalone');
+          setGameId(null);
+          showGameToast({ type: 'error', title: 'No Rewards Session', message: 'Could not start a rewards session - this chase will not pay out.', duration: 4000 });
         }
       } catch (e: any) {
         console.log('Standalone start failed:', e?.response?.data?.detail || e?.message);
-        setGameId('standalone');
+        setGameId(null);
+        const msg = e?.response?.data?.detail || 'Could not start a rewards session - this chase will not pay out.';
+        showGameToast({ type: 'error', title: 'No Rewards Session', message: msg, duration: 4000 });
       }
       setLoading(false);
       return;
@@ -387,6 +390,14 @@ export default function CarChaseGame() {
       countyLineDistance,
       gameState.won
     );
+
+    // Settings (standalone) games pay 50% — halve the displayed rewards so
+    // the modal shows what the backend actually pays (~$227, not $455).
+    if (isStandalone && gameState.won) {
+      rewards.totalCash = Math.floor(rewards.totalCash / 2);
+      rewards.totalXP = Math.floor(rewards.totalXP / 2);
+      rewards.reputation = Math.max(1, Math.floor(rewards.reputation / 2));
+    }
     
     setGameRewards(rewards);
     setShowResultsModal(true);

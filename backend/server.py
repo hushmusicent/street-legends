@@ -9194,7 +9194,6 @@ async def start_standalone_castle(player_id: str, level: int = 1):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    _check_minigame_global_cooldown(player)
     level = max(1, min(level, 10))
     level_rewards = {
         1: {"min": 25, "max": 50, "xp": 12, "rep": 2},
@@ -9235,7 +9234,6 @@ async def start_standalone_car_chase(player_id: str, level: int = 1):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    _check_minigame_global_cooldown(player)
     level = max(1, min(level, 10))
     game_id = str(uuid.uuid4())
     game = {
@@ -9263,7 +9261,6 @@ async def start_standalone_runaway(player_id: str, level: int = 1):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    _check_minigame_global_cooldown(player)
     level = max(1, min(level, 20))
     game_id = str(uuid.uuid4())
     game = {
@@ -9291,7 +9288,6 @@ async def start_standalone_package_grab(player_id: str, level: int = 1):
     player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    _check_minigame_global_cooldown(player)
     level = max(1, min(level, 20))
     game_id = str(uuid.uuid4())
     game = {
@@ -9429,8 +9425,7 @@ async def start_castle_minigame(castle_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
+    # Map games use their own per-marker cooldown (checked below), not the global one.
     
     castle = await db.castles.find_one({"id": castle_id})
     if not castle:
@@ -9491,8 +9486,7 @@ async def start_random_castle_game(player_id: str, castle_id: str = None):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
+    # Map games use their own per-marker cooldown (checked below), not the global one.
     
     # Check cooldown if castle_id provided
     if castle_id:
@@ -9586,11 +9580,6 @@ async def complete_castle_game(game_id: str, members_eliminated: int, won: bool,
             {"id": game["player_id"]},
             {"$set": {f"castle_cooldowns.{castle_id}": datetime.utcnow().isoformat()}}
         )
-    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
-    )
     
     if won:
         # Calculate rewards based on difficulty and members eliminated
@@ -9719,8 +9708,7 @@ async def start_car_chase(chase_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
+    # Map games use their own per-marker cooldown (checked below), not the global one.
     
     car_chase = await db.car_chases.find_one({"id": chase_id})
     if not car_chase:
@@ -9803,11 +9791,6 @@ async def complete_car_chase(game_id: str, won: bool, distance_traveled: int, st
             {"id": game["player_id"]},
             {"$set": {f"carchase_cooldowns.{chase_id}": datetime.utcnow().isoformat()}}
         )
-    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
-    )
     
     if won:
         # Calculate rewards based on difficulty and distance
@@ -9918,8 +9901,7 @@ async def start_runaway(runaway_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
+    # Map games use their own per-marker cooldown (checked below), not the global one.
     
     runaway = await db.runaways.find_one({"id": runaway_id})
     if not runaway:
@@ -10002,11 +9984,6 @@ async def complete_runaway(game_id: str, won: bool, distance_traveled: int, stan
             {"id": game["player_id"]},
             {"$set": {f"runaway_cooldowns.{runaway_id}": datetime.utcnow().isoformat()}}
         )
-    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
-    )
     
     if won:
         # Calculate rewards based on difficulty (1-20)
@@ -10110,8 +10087,7 @@ async def start_package_grab(grab_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
+    # Map games use their own per-marker cooldown (checked below), not the global one.
     
     grab = await db.packagegrabs.find_one({"id": grab_id})
     if not grab:
@@ -10190,11 +10166,6 @@ async def complete_package_grab(game_id: str, won: bool, boxes_collected: int, d
             {"id": game["player_id"]},
             {"$set": {f"packagegrab_cooldowns.{grab_id}": datetime.utcnow().isoformat()}}
         )
-    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
-    )
     
     if won:
         # Calculate rewards based on boxes collected
@@ -10303,6 +10274,35 @@ async def spawn_shootouts(latitude: float, longitude: float, player_level: int =
     return [shootout]
 
 
+@api_router.post("/shootouts/standalone/start")
+async def start_standalone_shootout(player_id: str, level: int = 1):
+    """Start a standalone shootout game from the options menu"""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    
+    # Create game session for standalone mode
+    game_id = str(uuid.uuid4())
+    game = {
+        "id": game_id,
+        "player_id": player_id,
+        "shootout_id": "standalone",
+        "shootout_name": f"Training Level {level}",
+        "status": "active",
+        "started_at": datetime.utcnow().isoformat(),
+        "standalone": True,
+        "level": level,
+    }
+    
+    await db.shootout_games.insert_one(game)
+    
+    return {
+        "game_id": game_id,
+        "shootout_name": game["shootout_name"],
+    }
+
+
 @api_router.post("/shootouts/{shootout_id}/start")
 async def start_shootout(shootout_id: str, player_id: str):
     """Start a shootout simulator game"""
@@ -10310,8 +10310,7 @@ async def start_shootout(shootout_id: str, player_id: str):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
+    # Map games use their own per-marker cooldown (checked below), not the global one.
     
     shootout = await db.shootouts.find_one({"id": shootout_id})
     if not shootout:
@@ -10353,37 +10352,6 @@ async def start_shootout(shootout_id: str, player_id: str):
     }
 
 
-@api_router.post("/shootouts/standalone/start")
-async def start_standalone_shootout(player_id: str, level: int = 1):
-    """Start a standalone shootout game from the options menu"""
-    player = await db.players.find_one({"id": player_id})
-    if not player:
-        raise HTTPException(status_code=404, detail="Player not found")
-
-    # Global mini-game cooldown: play once -> all mini-games lock for 15 min
-    _check_minigame_global_cooldown(player)
-    
-    # Create game session for standalone mode
-    game_id = str(uuid.uuid4())
-    game = {
-        "id": game_id,
-        "player_id": player_id,
-        "shootout_id": "standalone",
-        "shootout_name": f"Training Level {level}",
-        "status": "active",
-        "started_at": datetime.utcnow().isoformat(),
-        "standalone": True,
-        "level": level,
-    }
-    
-    await db.shootout_games.insert_one(game)
-    
-    return {
-        "game_id": game_id,
-        "shootout_name": game["shootout_name"],
-    }
-
-
 @api_router.post("/shootouts/game/{game_id}/complete")
 async def complete_shootout(game_id: str, hits: int, standalone: bool = False):
     """Complete a shootout game and award rewards based on hits"""
@@ -10419,18 +10387,13 @@ async def complete_shootout(game_id: str, hits: int, standalone: bool = False):
             {"id": game["player_id"]},
             {"$set": {f"shootout_cooldowns.{shootout_id}": datetime.utcnow().isoformat()}}
         )
-    # Global cooldown: ANY completion (map or practice) locks all mini-games for 15 min
-    await db.players.update_one(
-        {"id": game["player_id"]},
-        {"$set": {"minigame_global_cooldown_until": _minigame_global_cooldown_until()}}
-    )
     
     if hits > 0:
         # Calculate rewards based on hits and level
         level = player.get("shootout_level", 1)
         
-        # Rewards per hit scale with level
-        hit_reward = 5 + level * 2
+        # City Gotcha rate: a flat $10 per hit (level does not change it)
+        hit_reward = 10
         xp_per_hit = 2 + level // 2
         
         cash_reward = hits * hit_reward

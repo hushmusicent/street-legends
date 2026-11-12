@@ -281,11 +281,27 @@ export default function CastleLevelsScreen() {
     if (isStandalone && playerId) {
       startStandaloneCastle(playerId, level)
         .then((s) => setGameSessionId(s.game_id))
-        .catch(() => setGameSessionId(null));
+        .catch((err: any) => {
+          setGameSessionId(null);
+          const msg = err?.response?.data?.detail || 'Could not start a rewards session - this level will not pay out.';
+          showGameToast({ type: 'error', title: 'No Rewards Session', message: msg, duration: 4000 });
+        });
     } else if (!isRandomMode) {
       setGameSessionId(null);
     }
   };
+
+  // Auto-start Level 1 when launched from settings (standalone mode).
+  // The level select is skipped in standalone mode, but without this no
+  // level is ever started: Level 1 has no enemies/blocks and no backend
+  // session, so the win shows local rewards but never pays out.
+  const standaloneStartedRef = useRef(false);
+  useEffect(() => {
+    if (isStandalone && playerId && !isRandomMode && !standaloneStartedRef.current) {
+      standaloneStartedRef.current = true;
+      startLevel(1);
+    }
+  }, [isStandalone, playerId]);
 
   // Pan responder for aiming
   const panResponder = useRef(
