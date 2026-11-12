@@ -109,6 +109,10 @@ export default function ShootoutSimulator() {
     } catch {
       return;
     }
+    if (data.type === 'quit') {
+      router.replace('/(tabs)');
+      return;
+    }
     if (data.type !== 'gameOver') return;
     completedRef.current = true;
     const gid = gameIdRef.current;

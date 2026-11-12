@@ -21,7 +21,10 @@ const GAME_HTML = `<!DOCTYPE html>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#0a0a12; touch-action:none; }
   body { font-family: 'Courier New', monospace; }
-  #wrap { position:relative; width:100vw; height:100vh; max-width:520px; margin:0 auto; background:#0a0a12; }
+  /* The wrap is sized by JS to window.innerHeight. 100vh overflows in a
+     WebView (it counts the area under the status bar), which made the game
+     taller than the screen and cut the player off the bottom. */
+  #wrap { position:relative; width:100vw; height:100%; max-width:520px; margin:0 auto; background:#0a0a12; }
   canvas { display:block; width:100%; height:100%; touch-action:none; }
   /* Overlay screens */
   .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(5,5,15,.82); z-index:10; text-align:center; padding:16px; }
@@ -39,12 +42,14 @@ const GAME_HTML = `<!DOCTYPE html>
   .stat { color:#fff; font-size:18px; margin:4px 0; }
   .stat span { color:#ffd23f; font-weight:bold; }
   #muteBtn { position:absolute; top:70px; right:8px; z-index:20; background:rgba(0,0,0,.55); color:#fff; border:1px solid #555; border-radius:8px; font-size:16px; padding:6px 10px; cursor:pointer; }
+  #quitBtn { position:absolute; top:70px; left:8px; z-index:20; background:rgba(231,76,60,.85); color:#fff; border:1px solid #922b21; border-radius:8px; font-family:inherit; font-size:14px; font-weight:bold; letter-spacing:1px; padding:7px 12px; cursor:pointer; }
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="game"></canvas>
   <button id="muteBtn">🔊</button>
+  <button id="quitBtn">✕ QUIT</button>
 
   <div id="startScreen" class="overlay">
     <div class="title">CITY GOTCHA</div>
@@ -95,6 +100,11 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 function resize() {
+  // Size the wrap to the real viewport (window.innerHeight), not 100vh —
+  // in a WebView 100vh counts the area under the status bar, so the game
+  // ran taller than the screen and the player was cut off the bottom.
+  const wrap = document.getElementById('wrap');
+  if (wrap) wrap.style.height = window.innerHeight + 'px';
   DPR = Math.min(2, window.devicePixelRatio || 1);
   W = canvas.clientWidth; H = canvas.clientHeight;
   canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
@@ -123,6 +133,17 @@ document.getElementById('muteBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   muted = !muted;
   e.target.textContent = muted ? '🔇' : '🔊';
+});
+// QUIT: in the app it tells the app to close the game (back to the map);
+// in the browser it goes back to the start screen.
+document.getElementById('quitBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (APP_MODE) {
+    appReport({ type: 'quit' });
+    return;
+  }
+  S.mode = 'menu';
+  document.getElementById('startScreen').classList.remove('hidden');
 });
 
 // ---------- App mode (embedded in the Street Legends app via WebView) ----------
@@ -865,6 +886,10 @@ export default function ShootoutSimulator() {
     try {
       data = JSON.parse(event.nativeEvent.data);
     } catch {
+      return;
+    }
+    if (data.type === 'quit') {
+      router.replace('/(tabs)');
       return;
     }
     if (data.type !== 'gameOver') return;
