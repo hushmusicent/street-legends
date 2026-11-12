@@ -3,7 +3,7 @@ import { ActivityIndicator, Modal, SafeAreaView, StyleSheet, Text, TouchableOpac
 import { router, useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { showGameToast } from '../components/GameToast';
-import { useGameStore } from '../stores/gameStore';
+import { useGameStore } from '../hooks/useGameStore';
 import { useInvalidateMapQueries } from '../hooks/useMapQueries';
 import { startShootout as apiStartShootout, completeShootout as apiCompleteShootout, getPlayer } from '../services/api';
 
