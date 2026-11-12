@@ -102,17 +102,26 @@ export default function ShootoutSimulator() {
   }, [playerId, shootoutId, routeGameId, isStandalone, level]);
 
   const handleGameMessage = useCallback(async (event: any) => {
-    if (completedRef.current) return;
     let data: GameResult;
     try {
       data = JSON.parse(event.nativeEvent.data);
     } catch {
       return;
     }
+    // QUIT must work even after a round already finished — it is checked
+    // before the completed guard, or a tap after game-over does nothing.
+    // It takes you back to where you came from (map or settings); if there
+    // is nowhere to go back to, it lands on the map tab.
     if (data.type === 'quit') {
-      router.replace('/(tabs)');
+      try {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+      } catch {
+        router.replace('/(tabs)');
+      }
       return;
     }
+    if (completedRef.current) return;
     if (data.type !== 'gameOver') return;
     completedRef.current = true;
     const gid = gameIdRef.current;

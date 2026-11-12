@@ -23,8 +23,11 @@ const GAME_HTML = `<!DOCTYPE html>
   body { font-family: 'Courier New', monospace; }
   /* The wrap is sized by JS to window.innerHeight. 100vh overflows in a
      WebView (it counts the area under the status bar), which made the game
-     taller than the screen and cut the player off the bottom. */
-  #wrap { position:relative; width:100vw; height:100%; max-width:400px; margin:0 auto; background:#0a0a12; }
+     taller than the screen and cut the player off the bottom.
+     The 34px top padding keeps the HUD (AMMO/CASH/hearts) below the phone's
+     status bar — without it the top rows sit under the clock and icons
+     and you can't see them. */
+  #wrap { position:relative; width:100vw; height:100%; max-width:400px; margin:0 auto; background:#0a0a12; padding-top:34px; }
   canvas { display:block; width:100%; height:100%; touch-action:none; }
   /* Overlay screens */
   .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(5,5,15,.82); z-index:10; text-align:center; padding:16px; }
@@ -41,8 +44,8 @@ const GAME_HTML = `<!DOCTYPE html>
   .big { color:#ffd23f; font-size:30px; font-weight:bold; margin:8px 0; }
   .stat { color:#fff; font-size:18px; margin:4px 0; }
   .stat span { color:#ffd23f; font-weight:bold; }
-  #muteBtn { position:absolute; top:70px; right:8px; z-index:20; background:rgba(0,0,0,.55); color:#fff; border:1px solid #555; border-radius:8px; font-size:16px; padding:6px 10px; cursor:pointer; }
-  #quitBtn { position:absolute; top:70px; left:8px; z-index:20; background:rgba(231,76,60,.85); color:#fff; border:1px solid #922b21; border-radius:8px; font-family:inherit; font-size:14px; font-weight:bold; letter-spacing:1px; padding:7px 12px; cursor:pointer; }
+  #muteBtn { position:absolute; top:104px; right:8px; z-index:20; background:rgba(0,0,0,.55); color:#fff; border:1px solid #555; border-radius:8px; font-size:16px; padding:6px 10px; cursor:pointer; }
+  #quitBtn { position:absolute; top:104px; left:8px; z-index:20; background:rgba(231,76,60,.85); color:#fff; border:1px solid #922b21; border-radius:8px; font-family:inherit; font-size:14px; font-weight:bold; letter-spacing:1px; padding:7px 12px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -881,17 +884,26 @@ export default function ShootoutSimulator() {
   }, [playerId, shootoutId, routeGameId, isStandalone, level]);
 
   const handleGameMessage = useCallback(async (event: any) => {
-    if (completedRef.current) return;
     let data: GameResult;
     try {
       data = JSON.parse(event.nativeEvent.data);
     } catch {
       return;
     }
+    // QUIT must work even after a round already finished — it is checked
+    // before the completed guard, or a tap after game-over does nothing.
+    // It takes you back to where you came from (map or settings); if there
+    // is nowhere to go back to, it lands on the map tab.
     if (data.type === 'quit') {
-      router.replace('/(tabs)');
+      try {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+      } catch {
+        router.replace('/(tabs)');
+      }
       return;
     }
+    if (completedRef.current) return;
     if (data.type !== 'gameOver') return;
     completedRef.current = true;
     const gid = gameIdRef.current;
