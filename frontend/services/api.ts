@@ -1111,6 +1111,63 @@ export const pharmacySell = async (playerId: string, itemId: string, qty: number
   return response.data;
 };
 
+// Player-to-player drug trade (regular price, map player popup).
+export interface PlayerDrugRow {
+  item_id: string;
+  name: string;
+  qty: number;
+  price: number;
+}
+
+export const getPlayerDrugs = async (playerId: string): Promise<{ player_id: string; name: string; cash: number; drugs: PlayerDrugRow[] }> => {
+  const response = await api.get(`/players/${playerId}/drugs`);
+  return response.data;
+};
+
+export const tradeDrugs = async (sellerId: string, buyerId: string, itemId: string, qty: number): Promise<{ ok: boolean; item_id: string; name: string; qty: number; total: number; seller_cash: number; buyer_cash: number; message: string }> => {
+  const response = await api.post('/trade/drugs', { seller_id: sellerId, buyer_id: buyerId, item_id: itemId, qty });
+  return response.data;
+};
+
+// TRADE_AGREEMENT: two-step drug trade — propose, then the other player accepts.
+export interface TradeOffer {
+  offer_id: string;
+  seller_id: string;
+  buyer_id: string;
+  proposer_id: string;
+  other_id: string;
+  other_name: string;
+  item_id: string;
+  item_name: string;
+  qty: number;
+  unit_price: number;
+  total: number;
+  viewer_role: 'buyer' | 'seller';
+  summary: string;
+  status: string;
+  created_at: string;
+}
+
+export const proposeTradeDrug = async (proposerId: string, otherId: string, itemId: string, qty: number, direction: 'sell' | 'buy'): Promise<any> => {
+  const response = await api.post('/trade/drugs/propose', { proposer_id: proposerId, other_id: otherId, item_id: itemId, qty, direction });
+  return response.data;
+};
+
+export const getPendingTradeOffers = async (playerId: string): Promise<{ incoming: TradeOffer[]; outgoing: TradeOffer[] }> => {
+  const response = await api.get(`/trade/drugs/pending/${playerId}`);
+  return response.data;
+};
+
+export const respondTradeDrug = async (offerId: string, playerId: string, accept: boolean): Promise<any> => {
+  const response = await api.post('/trade/drugs/respond', { offer_id: offerId, player_id: playerId, accept });
+  return response.data;
+};
+
+export const cancelTradeDrug = async (offerId: string, playerId: string): Promise<any> => {
+  const response = await api.post('/trade/drugs/cancel', { offer_id: offerId, player_id: playerId });
+  return response.data;
+};
+
 
 // PARK_API: real parks (OpenStreetMap) + presence client.
 export const getParksNearby = async (latitude: number, longitude: number, radiusKm: number = 2): Promise<any[]> => {
@@ -1235,5 +1292,31 @@ export const getFiendsNearby = async (latitude: number, longitude: number, playe
 
 export const sellToFiend = async (fiendId: string, playerId: string): Promise<any> => {
   const response = await api.post(`/fiends/${fiendId}/complete?player_id=${playerId}`);
+  return response.data;
+};
+
+// RPS_GAME: Rock Paper Scissors PvP (single round, no betting).
+export const challengeRps = async (challengerId: string, opponentId: string): Promise<any> => {
+  const response = await api.post('/rps/challenge', { challenger_id: challengerId, opponent_id: opponentId });
+  return response.data;
+};
+export const getPendingRps = async (playerId: string): Promise<any> => {
+  const response = await api.get(`/rps/pending/${playerId}`);
+  return response.data;
+};
+export const respondRps = async (gameId: string, playerId: string, accept: boolean): Promise<any> => {
+  const response = await api.post('/rps/respond', { game_id: gameId, player_id: playerId, accept });
+  return response.data;
+};
+export const throwRps = async (gameId: string, playerId: string, throwVal: string): Promise<any> => {
+  const response = await api.post('/rps/throw', { game_id: gameId, player_id: playerId, throw: throwVal });
+  return response.data;
+};
+export const getRpsGame = async (gameId: string, playerId: string): Promise<any> => {
+  const response = await api.get(`/rps/game/${gameId}?player_id=${playerId}`);
+  return response.data;
+};
+export const cancelRps = async (gameId: string, playerId: string): Promise<any> => {
+  const response = await api.post('/rps/cancel', { game_id: gameId, player_id: playerId });
   return response.data;
 };

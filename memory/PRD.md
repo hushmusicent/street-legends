@@ -10,3 +10,6 @@
 ## Park PvP cash wagers (Jun 2026)
 - Backend: POST /api/park_pvp/rooms/{code}/wager/propose|agree|decline|start|settle (host proposes with round, guest agrees, start holds both stakes atomically, settle needs both phones to report same winner else refund). Leave mid-game with held bet = forfeit to the other player.
 - Frontend (6 park HTML games): BET CASH / ACCEPT / DECLINE in the PvP bar while waiting or after game over; game start + rematch wait until the bet is decided.
+
+## Park sync speed-up (Jun 2026)
+- 6 park games: pvpApplyOppFromRoom applies opponent slot from every /state POST reply; up to 2 polls in flight. Room create/join/leave untouched.

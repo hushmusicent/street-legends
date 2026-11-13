@@ -2538,7 +2538,7 @@ async def get_player(player_id: str):
 @api_router.put("/players/{player_id}/position")
 async def update_player_position(player_id: str, position: Position):
     """Update player's GPS position"""
-    player = await db.players.find_one({"_id": player_id})
+    player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     _vehicle_remainder_km = float(player.get("vehicle_travel_remainder_km", 0.0) or 0.0)
@@ -2695,7 +2695,8 @@ async def get_nearby_players(player_id: str, radius: float = 500):
                     "character_class": p["character_class"],
                     "position": p["position"],
                     "distance": round(distance, 1),
-                    "guild_id": p.get("guild_id")
+                    "guild_id": p.get("guild_id"),
+                    "profile_pic": p.get("profile_pic")
                 })
     
     return nearby
@@ -4777,6 +4778,538 @@ async def pharmacy_sell(data: dict):
     }
     await _pharmacy_complete(request_id, result)
     return result
+
+
+# PLAYER_DRUG_TRADE: trade the five enemy-drop items between two players
+# at the REGULAR price (same price the pharmacy charges). One direction per
+# call: seller -> buyer, qty oz. Buyer pays qty x regular price in cash.
+def _trade_inventory_qty(inv, item_id):
+    """Total oz of item_id across ALL inventory entries."""
+    total = 0
+    for _it in inv:
+        if isinstance(_it, dict) and _it.get("item_id") == item_id:
+            total += _it.get("qty", 1)
+        elif isinstance(_it, str) and _it == item_id:
+            total += 1
+    return total
+
+
+def _trade_deduct(inv, item_id, qty):
+    """Deduct qty oz of item_id across all entries, in place."""
+    left = qty
+    for _i in range(len(inv) - 1, -1, -1):
+        if left <= 0:
+            break
+        _it = inv[_i]
+        if isinstance(_it, dict) and _it.get("item_id") == item_id:
+            have = _it.get("qty", 1)
+            if have <= left:
+                inv.pop(_i)
+                left -= have
+            else:
+                inv[_i]["qty"] = have - left
+                left = 0
+        elif isinstance(_it, str) and _it == item_id:
+            inv.pop(_i)
+            left -= 1
+    return qty - left
+
+
+@api_router.get("/players/{player_id}/drugs")
+async def get_player_drugs(player_id: str):
+    """The five drug items a player holds, with oz and regular price each."""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    inv = player.get("inventory", [])
+    drugs = []
+    for item_id in FIEND_ITEM_IDS:
+        name, regular_price, _fiend_price = FIEND_ITEM_PRICES[item_id]
+        drugs.append({
+            "item_id": item_id,
+            "name": name,
+            "qty": _trade_inventory_qty(inv, item_id),
+            "price": regular_price,
+        })
+    return {"player_id": player_id, "name": player.get("name", ""), "cash": player.get("cash", 0), "drugs": drugs}
+
+
+@api_router.post("/trade/drugs")
+async def trade_drugs(data: dict):
+    """Trade qty oz of one drug from seller to buyer at the regular price."""
+    seller_id = data.get("seller_id")
+    buyer_id = data.get("buyer_id")
+    item_id = data.get("item_id")
+    qty = data.get("qty", 1)
+    if item_id not in FIEND_ITEM_IDS:
+        raise HTTPException(status_code=400, detail="Unknown item_id - only grass, pills, rock_candy, flake, brown_sugar can be traded")
+    if not isinstance(qty, int) or isinstance(qty, bool) or qty < 1 or qty > 10:
+        raise HTTPException(status_code=400, detail="Quantity must be an integer from 1 to 10 oz")
+    if not seller_id or not buyer_id or seller_id == buyer_id:
+        raise HTTPException(status_code=400, detail="seller_id and buyer_id must be two different players")
+    seller = await db.players.find_one({"id": seller_id})
+    if not seller:
+        raise HTTPException(status_code=404, detail="Seller not found")
+    buyer = await db.players.find_one({"id": buyer_id})
+    if not buyer:
+        raise HTTPException(status_code=404, detail="Buyer not found")
+    name, regular_price, _fiend_price = FIEND_ITEM_PRICES[item_id]
+    seller_inv = seller.get("inventory", [])
+    held = _trade_inventory_qty(seller_inv, item_id)
+    if held < qty:
+        raise HTTPException(status_code=400, detail=f"Seller only holds {held} oz of {name} - need {qty} oz")
+    total = regular_price * qty
+    if buyer.get("cash", 0) < total:
+        raise HTTPException(status_code=400, detail=f"Buyer needs ${total} cash for {qty} oz of {name}")
+    _trade_deduct(seller_inv, item_id, qty)
+    buyer_inv = buyer.get("inventory", [])
+    _pharmacy_add(buyer_inv, item_id, qty)
+    await db.players.update_one(
+        {"id": seller_id},
+        {"$set": {"inventory": seller_inv}, "$inc": {"cash": total}},
+    )
+    await db.players.update_one(
+        {"id": buyer_id},
+        {"$set": {"inventory": buyer_inv}, "$inc": {"cash": -total}},
+    )
+    return {
+        "ok": True,
+        "item_id": item_id, "name": name, "qty": qty,
+        "unit_price": regular_price, "total": total,
+        "seller_cash": seller.get("cash", 0) + total,
+        "buyer_cash": buyer.get("cash", 0) - total,
+        "message": f"Traded {qty} oz of {name} for ${total}",
+    }
+
+
+# TRADE_AGREEMENT: two-step drug trade — a proposal must be ACCEPTED by the
+# other player before anything moves. Offers live in db.trade_offers and
+# expire after 10 minutes. The v1 direct POST /api/trade/drugs stays as-is
+# (the app no longer calls it directly).
+TRADE_OFFER_TTL_SECONDS = 600
+
+
+def _trade_offer_age_seconds(offer):
+    """Seconds since the offer was created (huge number if unparseable)."""
+    try:
+        created = datetime.fromisoformat(str(offer.get("created_at", "")))
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - created).total_seconds()
+    except Exception:
+        return 10 ** 9
+
+
+def _trade_offer_public(offer, viewer_id):
+    """Offer shaped for the API: the other player's name + a plain summary
+    written from the viewer's side of the deal."""
+    proposer_id = offer.get("proposer_id")
+    other_id = offer.get("other_id")
+    viewer_is_proposer = viewer_id == proposer_id
+    other_player_id = other_id if viewer_is_proposer else proposer_id
+    other_name = offer.get("other_name") if viewer_is_proposer else offer.get("proposer_name")
+    viewer_is_buyer = viewer_id == offer.get("buyer_id")
+    item_id = offer.get("item_id")
+    name, _regular, _fiend = FIEND_ITEM_PRICES.get(item_id, (item_id, offer.get("unit_price", 0), 0))
+    qty = offer.get("qty", 0)
+    total = offer.get("total", 0)
+    if viewer_is_buyer:
+        summary = f"{other_name} wants to sell you {qty} oz of {name} for ${total}"
+    else:
+        summary = f"{other_name} wants to buy {qty} oz of {name} from you for ${total}"
+    return {
+        "offer_id": offer.get("offer_id"),
+        "seller_id": offer.get("seller_id"),
+        "buyer_id": offer.get("buyer_id"),
+        "proposer_id": proposer_id,
+        "other_id": other_player_id,
+        "other_name": other_name,
+        "item_id": item_id,
+        "item_name": name,
+        "qty": qty,
+        "unit_price": offer.get("unit_price", 0),
+        "total": total,
+        "viewer_role": "buyer" if viewer_is_buyer else "seller",
+        "summary": summary,
+        "status": offer.get("status"),
+        "created_at": offer.get("created_at"),
+    }
+
+
+async def _trade_offer_expire_stale(offer):
+    """Mark a pending offer expired if it is older than the TTL. True if expired."""
+    if offer.get("status") == "pending" and _trade_offer_age_seconds(offer) > TRADE_OFFER_TTL_SECONDS:
+        await db.trade_offers.update_one({"offer_id": offer.get("offer_id")}, {"$set": {"status": "expired"}})
+        return True
+    return False
+
+
+@api_router.post("/trade/drugs/propose")
+async def propose_trade_drugs(data: dict):
+    """Propose a trade. Nothing moves — the other player must accept first."""
+    proposer_id = data.get("proposer_id")
+    other_id = data.get("other_id")
+    item_id = data.get("item_id")
+    qty = data.get("qty", 1)
+    direction = data.get("direction")
+    if item_id not in FIEND_ITEM_IDS:
+        raise HTTPException(status_code=400, detail="Unknown item_id - only grass, pills, rock_candy, flake, brown_sugar can be traded")
+    if not isinstance(qty, int) or isinstance(qty, bool) or qty < 1 or qty > 10:
+        raise HTTPException(status_code=400, detail="Quantity must be an integer from 1 to 10 oz")
+    if direction not in ("sell", "buy"):
+        raise HTTPException(status_code=400, detail="direction must be 'sell' or 'buy'")
+    if not proposer_id or not other_id or proposer_id == other_id:
+        raise HTTPException(status_code=400, detail="proposer_id and other_id must be two different players")
+    proposer = await db.players.find_one({"id": proposer_id})
+    if not proposer:
+        raise HTTPException(status_code=404, detail="Proposer not found")
+    other = await db.players.find_one({"id": other_id})
+    if not other:
+        raise HTTPException(status_code=404, detail="Other player not found")
+    if direction == "sell":
+        seller_id, buyer_id = proposer_id, other_id
+        seller, buyer = proposer, other
+    else:
+        seller_id, buyer_id = other_id, proposer_id
+        seller, buyer = other, proposer
+    name, regular_price, _fiend_price = FIEND_ITEM_PRICES[item_id]
+    held = _trade_inventory_qty(seller.get("inventory", []), item_id)
+    if held < qty:
+        raise HTTPException(status_code=400, detail=f"Seller only holds {held} oz of {name} - need {qty} oz")
+    total = regular_price * qty
+    if buyer.get("cash", 0) < total:
+        raise HTTPException(status_code=400, detail=f"Buyer needs ${total} cash for {qty} oz of {name}")
+    offer = {
+        "offer_id": str(uuid.uuid4()),
+        "seller_id": seller_id,
+        "buyer_id": buyer_id,
+        "proposer_id": proposer_id,
+        "proposer_name": proposer.get("name", "a player"),
+        "other_id": other_id,
+        "other_name": other.get("name", "a player"),
+        "item_id": item_id,
+        "qty": qty,
+        "unit_price": regular_price,
+        "total": total,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.trade_offers.insert_one(offer)
+    return _trade_offer_public(offer, proposer_id)
+
+
+@api_router.get("/trade/drugs/pending/{player_id}")
+async def get_pending_trade_offers(player_id: str):
+    """Pending offers for a player: incoming (they must answer) + outgoing."""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    offers = await db.trade_offers.find({"status": "pending"}).to_list(200)
+    incoming = []
+    outgoing = []
+    for offer in offers:
+        if player_id not in (offer.get("seller_id"), offer.get("buyer_id")):
+            continue
+        if await _trade_offer_expire_stale(offer):
+            continue
+        public = _trade_offer_public(offer, player_id)
+        if offer.get("proposer_id") == player_id:
+            outgoing.append(public)
+        else:
+            incoming.append(public)
+    return {"incoming": incoming, "outgoing": outgoing}
+
+
+@api_router.post("/trade/drugs/respond")
+async def respond_trade_drugs(data: dict):
+    """Accept or decline an offer. Only the NON-proposer party may respond.
+    Accept re-validates seller oz + buyer cash right now, then executes."""
+    offer_id = data.get("offer_id")
+    player_id = data.get("player_id")
+    accept = data.get("accept")
+    if not isinstance(accept, bool):
+        raise HTTPException(status_code=400, detail="accept must be true or false")
+    offer = await db.trade_offers.find_one({"offer_id": offer_id})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    if offer.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Offer is " + str(offer.get("status")) + " - no longer pending")
+    if await _trade_offer_expire_stale(offer):
+        raise HTTPException(status_code=400, detail="Offer expired - it was over 10 minutes old")
+    if player_id == offer.get("proposer_id"):
+        raise HTTPException(status_code=400, detail="The proposer cannot accept their own offer - the other player must answer")
+    if player_id not in (offer.get("seller_id"), offer.get("buyer_id")):
+        raise HTTPException(status_code=400, detail="You are not a party to this offer")
+    if not accept:
+        await db.trade_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "declined"}})
+        return {"ok": True, "status": "declined", "offer_id": offer_id}
+    # Accept: re-validate RIGHT NOW, then execute the same transfer as v1.
+    seller_id = offer.get("seller_id")
+    buyer_id = offer.get("buyer_id")
+    item_id = offer.get("item_id")
+    qty = offer.get("qty")
+    seller = await db.players.find_one({"id": seller_id})
+    if not seller:
+        raise HTTPException(status_code=404, detail="Seller not found")
+    buyer = await db.players.find_one({"id": buyer_id})
+    if not buyer:
+        raise HTTPException(status_code=404, detail="Buyer not found")
+    name, regular_price, _fiend_price = FIEND_ITEM_PRICES[item_id]
+    held = _trade_inventory_qty(seller.get("inventory", []), item_id)
+    if held < qty:
+        await db.trade_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "expired"}})
+        raise HTTPException(status_code=400, detail=f"Offer void - seller only holds {held} oz of {name} now")
+    total = regular_price * qty
+    if buyer.get("cash", 0) < total:
+        await db.trade_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "expired"}})
+        raise HTTPException(status_code=400, detail=f"Offer void - buyer only has ${buyer.get('cash', 0)} cash now, needs ${total}")
+    seller_inv = seller.get("inventory", [])
+    _trade_deduct(seller_inv, item_id, qty)
+    buyer_inv = buyer.get("inventory", [])
+    _pharmacy_add(buyer_inv, item_id, qty)
+    await db.players.update_one({"id": seller_id}, {"$set": {"inventory": seller_inv}, "$inc": {"cash": total}})
+    await db.players.update_one({"id": buyer_id}, {"$set": {"inventory": buyer_inv}, "$inc": {"cash": -total}})
+    await db.trade_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "accepted"}})
+    return {
+        "ok": True, "status": "accepted",
+        "item_id": item_id, "name": name, "qty": qty,
+        "unit_price": regular_price, "total": total,
+        "seller_cash": seller.get("cash", 0) + total,
+        "buyer_cash": buyer.get("cash", 0) - total,
+        "message": f"Traded {qty} oz of {name} for ${total}",
+    }
+
+
+@api_router.post("/trade/drugs/cancel")
+async def cancel_trade_drugs(data: dict):
+    """Cancel my own pending offer. Only the proposer may cancel."""
+    offer_id = data.get("offer_id")
+    player_id = data.get("player_id")
+    offer = await db.trade_offers.find_one({"offer_id": offer_id})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    if offer.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Offer is " + str(offer.get("status")) + " - no longer pending")
+    if player_id != offer.get("proposer_id"):
+        raise HTTPException(status_code=400, detail="Only the proposer can cancel this offer")
+    await db.trade_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "cancelled"}})
+    return {"ok": True, "status": "cancelled", "offer_id": offer_id}
+
+
+# RPS_GAME: Rock Paper Scissors PvP — single round, no betting. A
+# challenges B from the player menu; B says yes/no; both pick in a popup;
+# the result shows on both screens. Games live in db.rps_games and expire
+# after 10 minutes.
+RPS_TTL_SECONDS = 600
+RPS_THROWS = ("rock", "paper", "scissors")
+RPS_BEATS = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
+
+
+def _rps_age_seconds(game):
+    """Seconds since the game was created (huge number if unparseable)."""
+    try:
+        created = datetime.fromisoformat(str(game.get("created_at", "")))
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - created).total_seconds()
+    except Exception:
+        return 10 ** 9
+
+
+def _rps_result_for(game, viewer_id):
+    """'win' / 'lose' / 'draw' from the viewer's side — None until finished."""
+    if game.get("status") != "finished":
+        return None
+    winner_id = game.get("winner_id")
+    if winner_id is None:
+        return "draw"
+    return "win" if winner_id == viewer_id else "lose"
+
+
+def _rps_public(game, viewer_id):
+    """Game shaped for the API. The opponent's throw is only included once
+    the game is finished — never reveal it early."""
+    finished = game.get("status") == "finished"
+    viewer_is_challenger = viewer_id == game.get("challenger_id")
+    other_id = game.get("opponent_id") if viewer_is_challenger else game.get("challenger_id")
+    other_name = game.get("opponent_name") if viewer_is_challenger else game.get("challenger_name")
+    your_throw = game.get("challenger_throw") if viewer_is_challenger else game.get("opponent_throw")
+    opp_throw = game.get("opponent_throw") if viewer_is_challenger else game.get("challenger_throw")
+    return {
+        "game_id": game.get("game_id"),
+        "challenger_id": game.get("challenger_id"),
+        "challenger_name": game.get("challenger_name"),
+        "opponent_id": game.get("opponent_id"),
+        "opponent_name": game.get("opponent_name"),
+        "other_id": other_id,
+        "other_name": other_name,
+        "status": game.get("status"),
+        "your_throw": your_throw,
+        "opponent_has_thrown": opp_throw is not None,
+        "opponent_throw": opp_throw if finished else None,
+        "throws": (
+            {"challenger_throw": game.get("challenger_throw"), "opponent_throw": game.get("opponent_throw")}
+            if finished else None
+        ),
+        "winner_id": game.get("winner_id") if finished else None,
+        "result": _rps_result_for(game, viewer_id),
+        "summary": f"{game.get('challenger_name', 'A player')} challenged you to Rock Paper Scissors",
+        "created_at": game.get("created_at"),
+    }
+
+
+async def _rps_expire_stale(game):
+    """Mark a pending game expired if it is older than the TTL. True if expired."""
+    if game.get("status") == "pending" and _rps_age_seconds(game) > RPS_TTL_SECONDS:
+        await db.rps_games.update_one({"game_id": game.get("game_id")}, {"$set": {"status": "expired"}})
+        return True
+    return False
+
+
+@api_router.post("/rps/challenge")
+async def rps_challenge(data: dict):
+    """Challenge another player to Rock Paper Scissors. Creates a pending game."""
+    challenger_id = data.get("challenger_id")
+    opponent_id = data.get("opponent_id")
+    if not challenger_id or not opponent_id or challenger_id == opponent_id:
+        raise HTTPException(status_code=400, detail="challenger_id and opponent_id must be two different players")
+    challenger = await db.players.find_one({"id": challenger_id})
+    if not challenger:
+        raise HTTPException(status_code=404, detail="Challenger not found")
+    opponent = await db.players.find_one({"id": opponent_id})
+    if not opponent:
+        raise HTTPException(status_code=404, detail="Opponent not found")
+    game = {
+        "game_id": str(uuid.uuid4()),
+        "challenger_id": challenger_id,
+        "challenger_name": challenger.get("name", "a player"),
+        "opponent_id": opponent_id,
+        "opponent_name": opponent.get("name", "a player"),
+        "status": "pending",
+        "challenger_throw": None,
+        "opponent_throw": None,
+        "winner_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.rps_games.insert_one(game)
+    return _rps_public(game, challenger_id)
+
+
+@api_router.get("/rps/pending/{player_id}")
+async def rps_pending(player_id: str):
+    """Pending RPS games for a player: incoming (they must answer) + outgoing."""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    games = await db.rps_games.find({"status": "pending"}).to_list(200)
+    incoming = []
+    outgoing = []
+    for game in games:
+        if player_id not in (game.get("challenger_id"), game.get("opponent_id")):
+            continue
+        if await _rps_expire_stale(game):
+            continue
+        public = _rps_public(game, player_id)
+        if game.get("challenger_id") == player_id:
+            outgoing.append(public)
+        else:
+            incoming.append(public)
+    return {"incoming": incoming, "outgoing": outgoing}
+
+
+@api_router.post("/rps/respond")
+async def rps_respond(data: dict):
+    """Answer a challenge. Only the OPPONENT may respond."""
+    game_id = data.get("game_id")
+    player_id = data.get("player_id")
+    accept = data.get("accept")
+    if not isinstance(accept, bool):
+        raise HTTPException(status_code=400, detail="accept must be true or false")
+    game = await db.rps_games.find_one({"game_id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Game is " + str(game.get("status")) + " - no longer pending")
+    if await _rps_expire_stale(game):
+        raise HTTPException(status_code=400, detail="Game expired - it was over 10 minutes old")
+    if player_id == game.get("challenger_id"):
+        raise HTTPException(status_code=400, detail="The challenger cannot answer their own challenge - the other player must answer")
+    if player_id != game.get("opponent_id"):
+        raise HTTPException(status_code=400, detail="You are not a party to this game")
+    new_status = "accepted" if accept else "declined"
+    await db.rps_games.update_one({"game_id": game_id}, {"$set": {"status": new_status}})
+    game["status"] = new_status
+    return _rps_public(game, player_id)
+
+
+@api_router.post("/rps/throw")
+async def rps_throw(data: dict):
+    """Throw rock / paper / scissors. One throw per player; when both have
+    thrown the winner is computed and the game finishes."""
+    game_id = data.get("game_id")
+    player_id = data.get("player_id")
+    throw = data.get("throw")
+    if throw not in RPS_THROWS:
+        raise HTTPException(status_code=400, detail="throw must be rock, paper or scissors")
+    game = await db.rps_games.find_one({"game_id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game.get("status") != "accepted":
+        raise HTTPException(status_code=400, detail="Game is " + str(game.get("status")) + " - not accepting throws")
+    is_challenger = player_id == game.get("challenger_id")
+    is_opponent = player_id == game.get("opponent_id")
+    if not is_challenger and not is_opponent:
+        raise HTTPException(status_code=400, detail="You are not a party to this game")
+    field = "challenger_throw" if is_challenger else "opponent_throw"
+    if game.get(field) is not None:
+        raise HTTPException(status_code=400, detail="You already threw - one throw per player")
+    await db.rps_games.update_one({"game_id": game_id}, {"$set": {field: throw}})
+    game[field] = throw
+    # Both thrown? Finish the game and compute the winner.
+    if game.get("challenger_throw") is not None and game.get("opponent_throw") is not None:
+        c = game.get("challenger_throw")
+        o = game.get("opponent_throw")
+        if c == o:
+            winner_id = None
+        elif RPS_BEATS[c] == o:
+            winner_id = game.get("challenger_id")
+        else:
+            winner_id = game.get("opponent_id")
+        await db.rps_games.update_one(
+            {"game_id": game_id},
+            {"$set": {"status": "finished", "winner_id": winner_id}},
+        )
+        game["status"] = "finished"
+        game["winner_id"] = winner_id
+    return _rps_public(game, player_id)
+
+
+@api_router.get("/rps/game/{game_id}")
+async def rps_get_game(game_id: str, player_id: str = ""):
+    """Game state for one player. The opponent's throw stays hidden until
+    both have thrown."""
+    game = await db.rps_games.find_one({"game_id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if player_id and player_id not in (game.get("challenger_id"), game.get("opponent_id")):
+        raise HTTPException(status_code=400, detail="You are not a party to this game")
+    return _rps_public(game, player_id or game.get("challenger_id"))
+
+
+@api_router.post("/rps/cancel")
+async def rps_cancel(data: dict):
+    """Cancel my own pending challenge. Only the challenger may cancel."""
+    game_id = data.get("game_id")
+    player_id = data.get("player_id")
+    game = await db.rps_games.find_one({"game_id": game_id})
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Game is " + str(game.get("status")) + " - no longer pending")
+    if player_id != game.get("challenger_id"):
+        raise HTTPException(status_code=400, detail="Only the challenger can cancel this challenge")
+    await db.rps_games.update_one({"game_id": game_id}, {"$set": {"status": "cancelled"}})
+    return {"ok": True, "status": "cancelled", "game_id": game_id}
 
 
 # PARK_NEARBY: real parks from OpenStreetMap.
@@ -14988,6 +15521,12 @@ CENTER_PRIZE_GAMES = {
     "scrabble": {"max_level": 1},
     "chess_checkers": {"max_level": 10},
     "pop_shot": {"max_level": 5},
+    "basketball": {"max_level": 1},
+    "football": {"max_level": 1},
+    "baseball": {"max_level": 1},
+    "soccer": {"max_level": 1},
+    "tennis": {"max_level": 1},
+    "one_on_one": {"max_level": 1},
 }
 
 

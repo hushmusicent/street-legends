@@ -25,6 +25,7 @@ interface MapMarker {
   icon?: string;
   isBoss?: boolean;
   cooldownSeconds?: number;
+  profile_pic?: string | null;
 }
 
 interface MapTerritory {
@@ -351,9 +352,17 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
         function createMarker(m) {
           newIds[m.id] = true;
           if (entityMarkers[m.id]) {
-            // Update existing marker position
-            entityMarkers[m.id].setLatLng([m.lat, m.lng]);
-            return;
+            // Player picture changed (or newly available)? Rebuild the
+            // marker so the new icon shows. Otherwise just move it.
+            var oldPic = entityMarkers[m.id]._profilePic || null;
+            var newPic = m.profile_pic || null;
+            if (m.type === 'player' && oldPic !== newPic) {
+              map.removeLayer(entityMarkers[m.id]);
+              delete entityMarkers[m.id];
+            } else {
+              entityMarkers[m.id].setLatLng([m.lat, m.lng]);
+              return;
+            }
           }
           
           // Create new marker
@@ -538,6 +547,16 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
                 crownHTML +
                 '<div style="width:' + (isBoss ? '44px' : '38px') + ';height:' + (isBoss ? '44px' : '38px') + ';border-radius:' + borderRadius + ';overflow:hidden;border:3px solid ' + borderColor + ';box-shadow:0 2px 12px ' + shadowColor + ';background:#1a1a1a;' + (isBoss ? 'margin-top:2px;' : '') + '">' +
                 '<img src="' + enemyImg + '" style="width:100%;height:100%;object-fit:cover;" /></div>' + lvlBadge + nameBadge + '</div>';
+            } else if (m.type === 'player') {
+              if (m.profile_pic) {
+                var picUrl = m.profile_pic.replace(/"/g, '&quot;');
+                markerHTML = '<div style="width:42px;height:58px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                  '<div style="width:38px;height:38px;border-radius:50%;border:3px solid #4285F4;box-shadow:0 2px 8px rgba(0,0,0,0.5);overflow:hidden;background:#222;">' +
+                  '<img src="' + picUrl + '" style="width:100%;height:100%;object-fit:cover;display:block;" /></div>' + levelHTML + '</div>';
+              } else {
+                markerHTML = '<div style="width:42px;height:58px;position:relative;display:flex;flex-direction:column;align-items:center;">' +
+                  '<div style="background:#4285F4;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.5);font-size:18px;position:relative;">' + icon + levelHTML + '</div></div>';
+              }
             } else {
               markerHTML = '<div style="background:' + color + ';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:14px;position:relative;">' + icon + levelHTML + '</div>';
             }
@@ -552,9 +571,10 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             var isRunawayMarker = (m.type === 'runaway');
             var isPackageGrabMarker = (m.type === 'packageGrab');
             var isShootoutMarker = (m.type === 'shootout');
-            var markerWidth = isHouseMarker ? 72 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 56 : (isLocationMarker ? 48 : ((isBankMarker || isCasinoMarker) ? 52 : (isBossMarker ? 48 : (enemyImg ? 42 : 32)))));
-            var markerHeight = isHouseMarker ? 72 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 72 : (isLocationMarker ? 62 : ((isBankMarker || isCasinoMarker) ? 68 : (isBossMarker ? 68 : (enemyImg ? 58 : 32)))));
-            var iconAnchorY = isHouseMarker ? 36 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : ((isBankMarker || isCasinoMarker) ? 34 : (isBossMarker ? 34 : (enemyImg ? 29 : 16)))));
+            var isPlayerMarker = (m.type === 'player');
+            var markerWidth = isHouseMarker ? 72 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 56 : (isLocationMarker ? 48 : ((isBankMarker || isCasinoMarker) ? 52 : (isBossMarker ? 48 : ((enemyImg || isPlayerMarker) ? 42 : 32)))));
+            var markerHeight = isHouseMarker ? 72 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 72 : (isLocationMarker ? 62 : ((isBankMarker || isCasinoMarker) ? 68 : (isBossMarker ? 68 : ((enemyImg || isPlayerMarker) ? 58 : 32)))));
+            var iconAnchorY = isHouseMarker ? 36 : ((isCastleMarker || isCarChaseMarker || isRunawayMarker || isPackageGrabMarker || isShootoutMarker) ? 36 : (isLocationMarker ? 31 : ((isBankMarker || isCasinoMarker) ? 34 : (isBossMarker ? 34 : ((enemyImg || isPlayerMarker) ? 29 : 16)))));
             var divIcon = L.divIcon({
               className: 'custom-marker',
               html: markerHTML,
@@ -565,6 +585,7 @@ const generateBaseMapHTML = (initialLat: number, initialLng: number, enemyImages
             marker.on('click', (function(id, type) {
               return function() { sendMessage({ type: 'marker', id: id, markerType: type }); };
             })(m.id, m.type));
+            marker._profilePic = m.profile_pic || null;
             entityMarkers[m.id] = marker;
         }
         
@@ -745,6 +766,7 @@ export const GameMap: React.FC<GameMapProps> = ({ center, markers, heading = 0, 
         type: m.type,
         level: m.level || 0,
         name: m.name || '',
+        profile_pic: (m as any).profile_pic || null,
         cooldownSeconds: (m as any).cooldownSeconds || 0,
       }))
     );

@@ -25,7 +25,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-RAW_URL = "https://raw.githubusercontent.com/hushmusicent/street-legends/main/frontend/app/shootout-simulator.tsx?v=4"
+RAW_URL = "https://raw.githubusercontent.com/hushmusicent/street-legends/main/frontend/app/shootout-simulator.tsx?v=5"
 TARGET = Path("frontend/app/shootout-simulator.tsx")
 BACKUP = Path("frontend/app/shootout-simulator.tsx.bak")
 
