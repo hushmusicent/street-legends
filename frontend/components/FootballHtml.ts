@@ -254,6 +254,7 @@ const G={
   runPlay:false, handoffDone:false, handoffTarget:null, handoffGrace:0,
   myTeam:0, // PvC: you are always HOME (team 0). PvP: 0 if host, 1 if guest.
   pvp:null, // null in PvC; in PvP: {code, role, oppName, seq, lastSeenSeq, pollTimer, posT, playOver}
+  prizePosted:false, // park prize: posted once per game when YOU beat the CPU
   lastHolder:null, // the holder we last posted (so we only post changes)
 };
 
@@ -328,7 +329,7 @@ function pvpPostState(patch){
   if(patch&&patch.ev) st.ev=patch.ev;
   var who=pvpPlayer();
   st.round = G.pvp.round || 0; st.rm = G.pvp.rmReq || 0;
-  var pvw = G.pvp; pvw.posting = true; return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pvw.posting = false; return r; });
+  var pvw = G.pvp; pvw.posting = true; return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pvw.posting = false; pvpApplyOppFromRoom(r); return r; });
 }
 function pvpStartPoll(){
   if(!G.pvp) return;
@@ -338,11 +339,25 @@ function pvpStartPoll(){
 function pvpStopPoll(){
   if(G.pvp&&G.pvp.pollTimer){ clearInterval(G.pvp.pollTimer); G.pvp.pollTimer=null; }
 }
+// Sync speed-up: the state POST already returns the room, including the
+// opponent's latest slot. Apply it here so every position post doubles as
+// a poll (no extra request, no room/setup change). Mid-game only; game
+// start, finish and rematch stay in pvpPollOnce. The seq check makes a
+// state seen by both paths apply only once.
+function pvpApplyOppFromRoom(room){
+  if (!room || !room.states || !pvpIsOn() || room.status === 'finished') return;
+  if (!(G.started || G.mode === 'play') || pvpIsOver()) return;
+  var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+  var st = room.states[oppRole];
+  if (!st || (st.me && st.me.team === G.myTeam)) return;
+  if ((st.round || 0) < (G.pvp.round || 0)) return;
+  if (typeof st.seq === 'number' && st.seq > G.pvp.oppSeq){ G.pvp.oppSeq = st.seq; pvpApplyState(st); }
+}
 function pvpPollOnce(){
   if(!pvpIsOn()) return;
   var code=G.pvp.code;
-  if (G.pvp.polling) return; var pvq = G.pvp; pvq.polling = true;
-  pvpGet(code).then(function(room){ pvq.polling = false;
+  if ((G.pvp.polling || 0) >= 2) return; var pvq = G.pvp; pvq.polling = (pvq.polling || 0) + 1;
+  pvpGet(code).then(function(room){ pvq.polling = Math.max(0, (pvq.polling || 1) - 1);
     if(!room) return;
     if(room.status==='finished'){
       pvpStopPoll();
@@ -751,6 +766,7 @@ function updatePlayClock(){
 }
 function newGame(){
   G.score=[0,0]; G.elapsed=0; G.turbo=100; G.pause=0; G.afterPause=false;
+  G.prizePosted=false;
   G.shake=0; G.nextDrive=null; G._lastCarrier=null;
   setupDrive(0,20); // HOME ball first, own 20
   updateScore();
@@ -949,6 +965,7 @@ function scoreTD(team){
 }
 function endGame(team){
   G.mode='over'; G.phase='dead';
+  if(!pvpIsOn()&&team===G.myTeam&&!G.prizePosted){G.prizePosted=true;if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'park_prize_win',game:'football',level:1}));}
   whistle();
   $('finalTitle').textContent=team===0?'HOME WINS!':'AWAY WINS!';
   $('finalScore').innerHTML='<span class="h">'+G.score[0]+'</span> &ndash; <span class="a">'+G.score[1]+'</span>';

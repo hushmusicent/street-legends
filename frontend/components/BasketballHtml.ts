@@ -214,6 +214,7 @@ const G={
   ts:1, slowT:0, slowFactor:0.33, netSnap:0, trail:[], // wind-trail samples, recorded during dunk flights only
   myTeam:0, // PvC: you are always HOME (team 0). PvP: 0 if host, 1 if guest.
   pvp:null, // null in PvC; in PvP: {code, role, oppName, seq, lastSeenSeq, pollTimer, posT}
+  prizePosted:false, // park prize: posted once per game when YOU beat the CPU
   lastHolder:null, // the holder we last posted (so we only post changes)
 };
 
@@ -295,7 +296,7 @@ function pvpPostState(patch){
   var who=pvpPlayer();
   var pv=G.pvp; pv.posting=true;
   st.round = G.pvp.round || 0; st.rm = G.pvp.rmReq || 0;
-  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pv.posting=false; return r; });
+  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pv.posting = false; pvpApplyOppFromRoom(r); return r; });
 }
 function pvpStartPoll(){
   if(!G.pvp) return;
@@ -305,13 +306,27 @@ function pvpStartPoll(){
 function pvpStopPoll(){
   if(G.pvp&&G.pvp.pollTimer){ clearInterval(G.pvp.pollTimer); G.pvp.pollTimer=null; }
 }
+// Sync speed-up: the state POST already returns the room, including the
+// opponent's latest slot. Apply it here so every position post doubles as
+// a poll (no extra request, no room/setup change). Mid-game only; game
+// start, finish and rematch stay in pvpPollOnce. The seq check makes a
+// state seen by both paths apply only once.
+function pvpApplyOppFromRoom(room){
+  if (!room || !room.states || !pvpIsOn() || room.status === 'finished') return;
+  if (!(G.started || G.mode === 'play') || pvpIsOver()) return;
+  var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+  var st = room.states[oppRole];
+  if (!st || (st.me && st.me.team === G.myTeam)) return;
+  if ((st.round || 0) < (G.pvp.round || 0)) return;
+  if (typeof st.seq === 'number' && st.seq > G.pvp.oppSeq){ G.pvp.oppSeq = st.seq; pvpApplyState(st); }
+}
 function pvpPollOnce(){
   if(!pvpIsOn()) return;
-  if(G.pvp.polling) return; // previous poll still in flight
+  if ((G.pvp.polling || 0) >= 2) return; // previous poll still in flight
   var code=G.pvp.code;
-  var pv=G.pvp; pv.polling=true;
+  var pv=G.pvp; pv.polling = (pv.polling || 0) + 1;
   pvpGet(code).then(function(room){
-    pv.polling=false;
+    pv.polling = Math.max(0, (pv.polling || 1) - 1);
     if(!room) return;
     if(room.status==='finished'){
       pvpStopPoll();
@@ -472,6 +487,7 @@ function resetPositions(possTeam){
 }
 function newGame(){
   G.score=[0,0]; G.elapsed=0; G.fire=null; G.turbo=100; G.pause=0; G.afterPause=false; G.shake=0;
+  G.prizePosted=false;
   G.slowT=0; G.ts=1; // slow-mo off at tip-off
   G.bhSince=0; G._lastHolder=null;
   G.players=[mkPlayer(0,1,-20,23),mkPlayer(0,2,-40,30),mkPlayer(1,1,20,23),mkPlayer(1,2,40,16)];
@@ -747,6 +763,7 @@ function outOfBounds(team){
 }
 function endGame(team){
   G.mode='over';
+  if(!pvpIsOn()&&team===G.myTeam&&!G.prizePosted){G.prizePosted=true;if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'park_prize_win',game:'basketball',level:1}));}
   whistle();
   $('finalTitle').textContent=team===0?'HOME WINS!':'AWAY WINS!';
   $('finalScore').innerHTML='<span class="h">'+G.score[0]+'</span> &ndash; <span class="a">'+G.score[1]+'</span>';

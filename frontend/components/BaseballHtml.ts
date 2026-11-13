@@ -255,6 +255,7 @@ const G = {
   over: false,
   myTeam: HOME, // PvC: you are always HOME. PvP: HOME if host, AWAY if guest.
   pvp: null,    // null in PvC; in PvP: {code, role, oppName, seq, lastSeenSeq, pollTimer}
+  prizePosted: false, // park prize: posted once per game when YOU beat the CPU
 };
 function teamBatting(){ return G.half === 'top' ? AWAY : HOME; }
 function teamPitching(){ return G.half === 'top' ? HOME : AWAY; }
@@ -1275,6 +1276,7 @@ function endHalfInning(){
 }
 function endGame(){
   G.mode = 'over'; G.over = true;
+  if(!pvpIsOn()&&G.score[HOME]>G.score[AWAY]&&!G.prizePosted){G.prizePosted=true;if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify({type:'park_prize_win',game:'baseball',level:1}));}
   const w = G.score[HOME] > G.score[AWAY] ? 'YOU WIN!' : G.score[AWAY] > G.score[HOME] ? 'CPU WINS' : 'TIE GAME';
   showMsg(w, TEAM_NAME[HOME] + ' ' + G.score[HOME] + ' - ' + TEAM_NAME[AWAY] + ' ' + G.score[AWAY]);
   document.getElementById('overlay').classList.remove('hidden');
@@ -2326,11 +2328,25 @@ function pvpStartPoll(){
 function pvpStopPoll(){
   if (G.pvp && G.pvp.pollTimer){ clearInterval(G.pvp.pollTimer); G.pvp.pollTimer = null; }
 }
+// Sync speed-up: the state POST already returns the room, including the
+// opponent's latest slot. Apply it here so every position post doubles as
+// a poll (no extra request, no room/setup change). Mid-game only; game
+// start, finish and rematch stay in pvpPollOnce. The seq check makes a
+// state seen by both paths apply only once.
+function pvpApplyOppFromRoom(room){
+  if (!room || !room.states || !pvpIsOn() || room.status === 'finished') return;
+  if (!(G.started || G.mode === 'play') || pvpIsOver()) return;
+  var oppRole = G.pvp.role === 'host' ? 'guest' : 'host';
+  var st = room.states[oppRole];
+  if (!st || (st.me && st.me.team === G.myTeam)) return;
+  if ((st.round || 0) < (G.pvp.round || 0)) return;
+  if (typeof st.seq === 'number' && st.seq > G.pvp.oppSeq){ G.pvp.oppSeq = st.seq; pvpApplyState(st); }
+}
 function pvpPollOnce(){
   if (!pvpIsOn()) return;
   var code = G.pvp.code;
-  if (G.pvp.polling) return; var pvq = G.pvp; pvq.polling = true;
-  pvpGet(code).then(function(room){ pvq.polling = false;
+  if ((G.pvp.polling || 0) >= 2) return; var pvq = G.pvp; pvq.polling = (pvq.polling || 0) + 1;
+  pvpGet(code).then(function(room){ pvq.polling = Math.max(0, (pvq.polling || 1) - 1);
     if (!room) return;
     if (room.status === 'finished'){
       pvpStopPoll();
@@ -2385,7 +2401,7 @@ function pvpPostState(patch){
   }
   var me = pvpPlayer();
   st.round = G.pvp.round || 0; st.rm = G.pvp.rmReq || 0;
-  return pvpPost('/' + G.pvp.code + '/state', { player_id: me.id, state: st });
+  return pvpPost('/' + G.pvp.code + '/state', { player_id: me.id, state: st }).then(function(r){ pvpApplyOppFromRoom(r); return r; });
 }
 function pvpApplyState(st){
   // Apply a state received from the opponent. Only the event fields
@@ -2469,6 +2485,7 @@ function pvpReceiveResult(r){
 function startGame(){
   G.started = true;
   G.over = false;
+  G.prizePosted = false;
   G.inning = 1; G.half = 'top';
   G.outs = 0; G.balls = 0; G.strikes = 0;
   G.bases = [false, false, false];
