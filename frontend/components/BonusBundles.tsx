@@ -156,7 +156,10 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
       mounted = false;
       try { purchaseSub?.remove(); } catch (_) {}
       try { errorSub?.remove(); } catch (_) {}
-      endConnection().catch(() => {});
+      // Do NOT call endConnection() here: GodPotions is also mounted in
+      // the shop and shares this billing connection. Disconnecting when
+      // the Bonus tab unmounts kills GodPotions purchases (stuck spinner
+      // / frozen shop). GodPotions owns the connection lifecycle.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
