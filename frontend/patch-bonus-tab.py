@@ -64,8 +64,12 @@ IMPORT_NEW = (
     "import { BonusBundles } from '../../components/BonusBundles';"
 )
 
+# NOTE: the render anchor captures the "{filter === 'house' ? (" opener,
+# but the replacement must NOT carry that leading "{" into the else
+# branch -- ") : {filter ..." parses as an object literal and breaks
+# the build (shop.tsx 409). The chained ternary is ") : filter ...".
 RENDER_RE = re.compile(
-    r"(\{filter === 'house' \? \()",
+    r"\{filter === 'house' \? \(",
     re.DOTALL,
 )
 RENDER_NEW = (
@@ -73,7 +77,7 @@ RENDER_NEW = (
     "        <ScrollView style={styles.itemsScroll} contentContainerStyle={styles.scrollContent}>\n"
     "          <BonusBundles playerId={playerId} />\n"
     "        </ScrollView>\n"
-    "      ) : \\1"
+    "      ) : filter === 'house' ? ("
 )
 
 def _download(url: str, dest: Path) -> None:
@@ -127,7 +131,9 @@ def main():
         if not m:
             print(f"ERROR: shop.tsx {name} anchor not found (file changed in an unexpected way)")
             sys.exit(1)
-        src = src[:m.start()] + m.expand(new) + src[m.end():]
+        # RENDER_NEW has no group refs; the others use \1.
+        repl = new if name == "render" else m.expand(new)
+        src = src[:m.start()] + repl + src[m.end():]
     SHOP.write_text(src)
     cur = SHOP.read_text()
     if "'bonus'" not in cur or "BonusBundles" not in cur:
