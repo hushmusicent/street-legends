@@ -24,8 +24,8 @@ from pathlib import Path
 
 RAW = "https://raw.githubusercontent.com/hushmusicent/street-legends/main"
 FILES = [
-    ("frontend/components/GodPotions.tsx", "Do NOT call endConnection() here: the Bonus tab shares this"),
-    ("frontend/components/BonusBundles.tsx", "Do NOT call endConnection() here: GodPotions is also mounted in"),
+    ("frontend/components/GodPotions.tsx", "(cur: string | null) => (cur === sku ? null : cur)"),
+    ("frontend/components/BonusBundles.tsx", "(cur: string | null) => (cur === sku ? null : cur)"),
 ]
 MARKER = "IAP_REFRESH_OK"
 
