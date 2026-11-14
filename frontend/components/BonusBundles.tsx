@@ -183,7 +183,7 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
     // fires, unstick the button after 30s instead of spinning forever.
     clearBuyTimeout();
     buyTimeoutRef.current = setTimeout(() => {
-      setBuying((cur) => (cur === sku ? null : cur));
+      setBuying((cur: string | null) => (cur === sku ? null : cur));
       buyTimeoutRef.current = null;
     }, 30000);
     try {

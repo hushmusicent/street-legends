@@ -43,7 +43,7 @@ def main():
         return
     for rel, sig in need:
         r = subprocess.run(
-            ["curl", "-sL", f"{RAW}/{rel}?v=3", "-o", rel],
+            ["curl", "-sL", f"{RAW}/{rel}?v=4", "-o", rel],
             capture_output=True, text=True, timeout=120,
         )
         if r.returncode != 0:
