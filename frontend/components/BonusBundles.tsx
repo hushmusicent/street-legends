@@ -81,6 +81,8 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
   const [using, setUsing] = useState<string | null>(null);
   const playerIdRef = useRef(playerId);
   playerIdRef.current = playerId;
+  const buyTimeoutRef = useRef<any>(null);
+  const clearBuyTimeout = () => { if (buyTimeoutRef.current) { clearTimeout(buyTimeoutRef.current); buyTimeoutRef.current = null; } };
 
   const refreshMk1 = async () => {
     const pid = playerIdRef.current;
@@ -121,6 +123,9 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
     })();
 
     purchaseSub = purchaseUpdatedListener(async (purchase: any) => {
+      // Ignore purchases for other products (e.g. God Potions). Without
+      // this, a God Potion buy would pop a 'Grant Failed' alert here.
+      if (!SKUS.includes(purchase.productId)) return;
       const pid = playerIdRef.current;
       try {
         if (!pid) throw new Error('Not logged in');
@@ -142,11 +147,13 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
           err?.response?.data?.detail || err?.message || 'Could not grant your bundle.'
         );
       } finally {
+        clearBuyTimeout();
         setBuying(null);
       }
     });
 
     errorSub = purchaseErrorListener((error: any) => {
+      clearBuyTimeout();
       setBuying(null);
       if (error?.code === 'E_USER_CANCELLED') return;
       Alert.alert('Purchase Failed', error?.message || 'The purchase did not complete.');
@@ -156,6 +163,7 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
       mounted = false;
       try { purchaseSub?.remove(); } catch (_) {}
       try { errorSub?.remove(); } catch (_) {}
+      clearBuyTimeout();
       // Do NOT call endConnection() here: GodPotions is also mounted in
       // the shop and shares this billing connection. Disconnecting when
       // the Bonus tab unmounts kills GodPotions purchases (stuck spinner
@@ -171,11 +179,19 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
       Alert.alert('Login Required', 'Log in before buying a bundle.');
       return;
     }
+    // Safety net: if Play Billing never answers and neither listener
+    // fires, unstick the button after 30s instead of spinning forever.
+    clearBuyTimeout();
+    buyTimeoutRef.current = setTimeout(() => {
+      setBuying((cur) => (cur === sku ? null : cur));
+      buyTimeoutRef.current = null;
+    }, 30000);
     try {
       setBuying(sku);
       await requestPurchase({ request: { google: { skus: [sku] } }, type: 'in-app' });
       // Result arrives via purchaseUpdatedListener.
     } catch (e: any) {
+      clearBuyTimeout();
       setBuying(null);
       if (e?.code === 'E_USER_CANCELLED') return;
       Alert.alert('Purchase Failed', e?.message || 'Could not start the purchase.');

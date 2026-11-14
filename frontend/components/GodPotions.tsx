@@ -9,31 +9,16 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  initConnection,
+  endConnection,
+  fetchProducts,
+  requestPurchase,
+  finishTransaction,
+  purchaseUpdatedListener,
+  purchaseErrorListener,
+} from 'react-native-iap';
 import api from '../services/api';
-
-// IAP only works on native platforms, not web
-let initConnection: any = () => Promise.resolve();
-let endConnection: any = () => Promise.resolve();
-let fetchProducts: any = () => Promise.resolve([]);
-let requestPurchase: any = () => Promise.resolve();
-let finishTransaction: any = () => Promise.resolve();
-let purchaseUpdatedListener: any = () => ({ remove: () => {} });
-let purchaseErrorListener: any = () => ({ remove: () => {} });
-
-if (Platform.OS !== 'web') {
-  try {
-    const iap = require('react-native-iap');
-    initConnection = iap.initConnection;
-    endConnection = iap.endConnection;
-    fetchProducts = iap.fetchProducts;
-    requestPurchase = iap.requestPurchase;
-    finishTransaction = iap.finishTransaction;
-    purchaseUpdatedListener = iap.purchaseUpdatedListener;
-    purchaseErrorListener = iap.purchaseErrorListener;
-  } catch (e) {
-    console.log('IAP not available:', e);
-  }
-}
 
 const SKUS = ['god_potion_health_1h', 'god_potion_energy_1h'];
 
@@ -70,6 +55,8 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
   const [buying, setBuying] = useState<string | null>(null);
   const playerIdRef = useRef(playerId);
   playerIdRef.current = playerId;
+  const buyTimeoutRef = useRef<any>(null);
+  const clearBuyTimeout = () => { if (buyTimeoutRef.current) { clearTimeout(buyTimeoutRef.current); buyTimeoutRef.current = null; } };
 
   const refreshGodmode = async () => {
     const pid = playerIdRef.current;
@@ -111,6 +98,10 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
     })();
 
     purchaseSub = purchaseUpdatedListener(async (purchase: any) => {
+      // Ignore purchases for other products (e.g. Bonus bundles, which
+      // also grant godmode). Without this, a Bonus buy would pop an
+      // 'Activation Failed' alert here.
+      if (!SKUS.includes(purchase.productId)) return;
       const pid = playerIdRef.current;
       try {
         if (!pid) throw new Error('Not logged in');
@@ -132,11 +123,13 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
           err?.response?.data?.detail || err?.message || 'Could not activate your potion.'
         );
       } finally {
+        clearBuyTimeout();
         setBuying(null);
       }
     });
 
     errorSub = purchaseErrorListener((error: any) => {
+      clearBuyTimeout();
       setBuying(null);
       if (error?.code === 'E_USER_CANCELLED') return;
       Alert.alert('Purchase Failed', error?.message || 'The purchase did not complete.');
@@ -149,7 +142,10 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
       try { purchaseSub?.remove(); } catch (_) {}
       try { errorSub?.remove(); } catch (_) {}
       if (timer) clearInterval(timer);
-      endConnection().catch(() => {});
+      clearBuyTimeout();
+      // Do NOT call endConnection() here: the Bonus tab shares this
+      // billing connection, and disconnecting mid-purchase leaves the
+      // BUY button stuck on a spinner with no error.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -161,11 +157,19 @@ export function GodPotions({ playerId }: { playerId: string | null }) {
       Alert.alert('Login Required', 'Log in before buying a potion.');
       return;
     }
+    // Safety net: if Play Billing never answers and neither listener
+    // fires, unstick the button after 30s instead of spinning forever.
+    clearBuyTimeout();
+    buyTimeoutRef.current = setTimeout(() => {
+      setBuying((cur) => (cur === sku ? null : cur));
+      buyTimeoutRef.current = null;
+    }, 30000);
     try {
       setBuying(sku);
       await requestPurchase({ request: { google: { skus: [sku] } }, type: 'in-app' });
       // Result arrives via purchaseUpdatedListener.
     } catch (e: any) {
+      clearBuyTimeout();
       setBuying(null);
       if (e?.code === 'E_USER_CANCELLED') return;
       Alert.alert('Purchase Failed', e?.message || 'Could not start the purchase.');
