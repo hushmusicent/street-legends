@@ -18,10 +18,11 @@ import { useGameStore } from '../../stores/gameStore';
 import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse, getInventoryHouses, placeHouse, updatePlayerPosition, moveHouseToInventory } from '../../services/api';
 import api from '../../services/api';
 import { GodPotions } from '../../components/GodPotions';
+import { BonusBundles } from '../../components/BonusBundles';
 import { getBundledIcon } from '../../assets/icons/iconMap';
 import * as Location from 'expo-location';
 
-type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable' | 'house';
+type FilterKey = 'all' | 'health_recharge' | 'energy_recharge' | 'combo' | 'consumable' | 'house' | 'bonus';
 const HOUSES = [
   { tier: 'apartment', name: 'Street Apartment', price: 100000, image: require('../../assets/houses/house-apartment.jpg'), blurb: 'A rough city pad. Four walls, a barred window, and a door that locks.' },
   { tier: 'cabin', name: 'Country Cabin', price: 500000, image: require('../../assets/houses/house-cabin.jpg'), blurb: 'Wood walls, open fields, and quiet. Room to breathe.' },
@@ -295,6 +296,7 @@ export default function ShopTabScreen() {
     { key: 'combo', label: 'Combo', icon: 'fast-food' },
     { key: 'consumable', label: 'Stims', icon: 'fitness' },
     { key: 'house', label: 'House', icon: 'home' },
+    { key: 'bonus', label: 'Bonus', icon: 'gift' },
   ];
 
   const getEffectText = (effect: Record<string, any>): string[] => {
@@ -400,7 +402,11 @@ export default function ShopTabScreen() {
 
       <GodPotions playerId={playerId} />
 
-      {filter === 'house' ? (
+      {filter === 'bonus' ? (
+        <ScrollView style={styles.itemsScroll} contentContainerStyle={styles.scrollContent}>
+          <BonusBundles playerId={playerId} />
+        </ScrollView>
+      ) : filter === 'house' ? (
         <ScrollView style={styles.itemsScroll} contentContainerStyle={styles.scrollContent}>
           {inventoryHouses.length > 0 && (
             <View style={{ marginBottom: 16 }}>

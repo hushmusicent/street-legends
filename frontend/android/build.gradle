@@ -1,0 +1,37 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    def kotlinVersion = findProperty('android.kotlinVersion')
+    classpath(kotlinVersion ? "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion" : 'org.jetbrains.kotlin:kotlin-gradle-plugin')
+  }
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
+
+// BUILDCONFIG-FIX-V4
+// Turn on BuildConfig for Android library modules. The React Native root
+// project plugin evaluates subprojects early, so afterEvaluate {} fails with
+// "Cannot run Project.afterEvaluate(Closure) when the project is already
+// evaluated". plugins.withId runs right away if the plugin is already applied,
+// or later when it is applied, so it is safe in both cases.
+subprojects { sub ->
+    sub.plugins.withId('com.android.library') {
+        sub.android.buildFeatures.buildConfig = true
+    }
+}
