@@ -206,6 +206,24 @@ function placeOnArm(tile, arm) {
   S.arms[arm].push(placed);
   S.passes = 0;
 }
+function endsTotal() {
+  var t = 0;
+  for (var a = 0; a < ARMS.length; a++) { var e = armEnd(ARMS[a]); if (e !== null) t += e; }
+  return t;
+}
+function scoreEnds(player) {
+  var t = endsTotal();
+  if (t > 0 && t % 5 === 0) {
+    if (player === "you") S.youScore += t; else S.cpuScore += t;
+    if (S.youScore >= 100 || S.cpuScore >= 100) {
+      S.matchOver = true;
+      el("overText").textContent = (S.youScore >= 100 ? "YOU WIN THE MATCH!" : "CPU WINS THE MATCH.") + " Final: You " + S.youScore + " - CPU " + S.cpuScore + ".";
+      el("overOverlay").style.display = "flex";
+    }
+    return t;
+  }
+  return 0;
+}
 function afterPlay(player) {
   if (player === "you" && S.you.length === 0) { endHand("you", handPips(S.cpu), "You played your last tile! You win the hand, +" + handPips(S.cpu) + " points."); return true; }
   if (player === "cpu" && S.cpu.length === 0) { endHand("cpu", handPips(S.you), "CPU played its last tile. CPU wins the hand, +" + handPips(S.you) + " points."); return true; }
@@ -229,8 +247,9 @@ function youPlay(i) {
   if (arms.length === 1) {
     S.you.splice(i, 1);
     placeOnArm(tile, arms[0]);
+    var pts = scoreEnds("you");
     S.mustPlay = -1; S.pending = -1; S.pendingArms = [];
-    S.msg = "You played " + tile[0] + "-" + tile[1] + " on " + arms[0] + ".";
+    S.msg = "You played " + tile[0] + "-" + tile[1] + " on " + arms[0] + "." + (pts ? " Ends total " + pts + " - +" + pts + " points!" : "");
     if (afterPlay("you")) return;
     S.turn = "cpu"; save(); render();
     setTimeout(cpuTurn, 900);
@@ -245,8 +264,9 @@ function placePending(arm) {
   if (i < 0 || i >= S.you.length) return;
   var tile = S.you[i]; S.you.splice(i, 1);
   placeOnArm(tile, arm);
+  var pts = scoreEnds("you");
   S.mustPlay = -1; S.pending = -1; S.pendingArms = [];
-  S.msg = "You played " + tile[0] + "-" + tile[1] + " on " + arm + ".";
+  S.msg = "You played " + tile[0] + "-" + tile[1] + " on " + arm + "." + (pts ? " Ends total " + pts + " - +" + pts + " points!" : "");
   if (afterPlay("you")) return;
   S.turn = "cpu"; save(); render();
   setTimeout(cpuTurn, 900);
@@ -292,7 +312,8 @@ function cpuTurn() {
   var arms = matchingArms(tile);
   var arm = arms[0];
   placeOnArm(tile, arm);
-  S.msg = "CPU played " + tile[0] + "-" + tile[1] + " on " + arm + ".";
+  var pts = scoreEnds("cpu");
+  S.msg = "CPU played " + tile[0] + "-" + tile[1] + " on " + arm + "." + (pts ? " Ends total " + pts + " - +" + pts + " points!" : "");
   if (afterPlay("cpu")) return;
   S.turn = "you"; save(); render();
 }

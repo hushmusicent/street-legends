@@ -296,7 +296,23 @@ function pvpPostState(patch){
   var who=pvpPlayer();
   var pv=G.pvp; pv.posting=true;
   st.round = G.pvp.round || 0; st.rm = G.pvp.rmReq || 0;
-  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){ pv.posting = false; pvpApplyOppFromRoom(r); return r; });
+  return pvpPost('/'+G.pvp.code+'/state',{player_id:who.id,state:st}).then(function(r){
+    pv.posting=false;
+    // SYNC: the backend returns the full room. Use it right away to apply
+    // the opponent's latest state instead of waiting for the next poll.
+    try {
+      if (r && r.states) {
+        var oRole = G.pvp.role === 'host' ? 'guest' : 'host';
+        var oSt = r.states[oRole] || null;
+        if (oSt && typeof oSt.seq === 'number' && (oSt.seq > G.pvp.oppSeq || oSt.seq < G.pvp.oppSeq - 50)) {
+          G.pvp.oppSeq = oSt.seq;
+          pvpApplyState(oSt);
+        }
+        if (r.status === 'finished' && G.mode !== 'over') { pvpStopPoll(); G.mode = 'over'; }
+      }
+    } catch (e) {}
+    return r;
+  });
 }
 function pvpStartPoll(){
   if(!G.pvp) return;
@@ -339,9 +355,11 @@ function pvpPollOnce(){
     // games: the game starts when the second player enters the code).
     // Host: start when a guest_id is present (guest_id is always set on
     // join; guest_name alone is not a reliable trigger).
-    if (pvpWagerReady(room, G.pvp.round || 0) && G.pvp.role==='host'&&room.guest_id&&G.mode!=='play'&&G.mode!=='over'){
+    if (pvpWagerReady(room, G.pvp.round || 0) && G.pvp.role==='host'&&room.guest_id&&(G.mode!=='play'||!G.pvp.started)&&G.mode!=='over'){ // PVP MODE: restart if it started as PvC
+      if(G.mode==='play'&&!G.pvp.started){ G.pvp.syncStart=true; }
       G.pvp.oppName=room.guest_name||'Opponent';
-      var lbl=document.getElementById('pvpRoomLbl');
+            if(window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({type:'pvp_opponent',name:G.pvp.oppName}));
+var lbl=document.getElementById('pvpRoomLbl');
       if(lbl) lbl.textContent='CODE: '+code+' — vs '+G.pvp.oppName;
       var st2=document.getElementById('pvpStatus');
       if(st2) st2.textContent='They joined! Starting the game...';
@@ -415,6 +433,10 @@ function pvpReceiveEv(ev){
   // Apply one event posted by the opponent. Only events from the OTHER
   // team are applied (my own events are already applied locally).
   if(!ev||typeof ev.team!=='number'||ev.team===G.myTeam) return;
+  // PVP OOB: out of bounds is a game event, not a player action --
+  // apply it on both phones (before the team filter) so both reset
+  // to the same possession. No re-post, so no event loop.
+  if(ev&&ev.k==='oob'&&typeof ev.team==='number'){ callout('OUT OF BOUNDS',''); G.pause=0.9; G.afterPause=true; G.nextPoss=ev.team; return; }
   var p=null;
   G.players.forEach(function(q){ if(q.team===ev.team&&q.num===ev.num) p=q; });
   if(!p) return;
@@ -760,6 +782,8 @@ function resolveShot(b){
 function outOfBounds(team){
   callout('OUT OF BOUNDS','');
   G.pause=0.9; G.afterPause=true; G.nextPoss=team;
+  // PVP OOB: broadcast so the other phone resets to the same possession.
+  if(pvpIsOn()) pvpPostState({ev:{k:'oob',team:team}});
 }
 function endGame(team){
   G.mode='over';
@@ -917,7 +941,8 @@ function openGame(){
 function startGame(){
   $('startOverlay').classList.add('hidden');
   $('endOverlay').classList.add('hidden');
-  G.difficulty=diffSel;
+    if(pvpIsOn()&&G.pvp) G.pvp.started=true; // PVP MODE: remember this start was PvP
+G.difficulty=diffSel;
   $('diffChip').textContent=cpuDiff().name;
   newGame();
   G.mode='play';
@@ -941,6 +966,9 @@ function moveToward(p,tx,tz,sp,dt){
   p.z=clamp(p.z+dz/dd*sp*dt,CZ0-4,CZ1+4);
 }
 function updateAI(dt){
+    // PVP NO AI: in PvP both teams are human -- the computer must not
+  // drive any player. (PvC is untouched; this only fires in PvP.)
+  if(pvpIsOn()) return;
   const bh=holder();
   const D=cpuDiff();
   // PvP: the opponent's controlled player is a real person -- the AI
@@ -949,6 +977,10 @@ function updateAI(dt){
   G.players.forEach(function(p,i){
     if(i===G.user) return;
     if(oppCtrl&&p===oppCtrl) return;
+    // PVP SYNC: never let the AI drive an opponent player that has a
+    // sync target -- pvpApplyState sets tx/tz only on the human-driven
+    // player, so this holds even when oppMe is stale after a switch.
+    if(pvpIsOn()&&G.players[G.user]&&p.team!==G.players[G.user].team&&typeof p.tx==='number'&&typeof p.tz==='number') return;
     if(p.stumble>0){ p.stumble-=dt; return; }
     if(p.cool>0) p.cool-=dt;
     if(p.shootCd>0) p.shootCd-=dt;

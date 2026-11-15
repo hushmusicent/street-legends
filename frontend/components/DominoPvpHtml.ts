@@ -176,6 +176,11 @@ function placeOnArm(st, tile, arm) {
   st.arms[arm].push(placed);
   st.passes = 0;
 }
+function endsTotalPvp(st) {
+  var t = 0;
+  for (var a = 0; a < ARMS.length; a++) { var e = armEnd(st, ARMS[a]); if (e !== null) t += e; }
+  return t;
+}
 var LOG = [];
 var S = null;
 var PENDING = -1;
@@ -195,6 +200,8 @@ function replay() {
       placeOnArm(st, act.tile, act.side);
       st.mustPlay = -1;
       st.msg = (act.p === MY ? 'You' : FOE_NAME) + ' played ' + act.tile[0] + '-' + act.tile[1] + ' on ' + act.side + '.';
+      var endsPts = endsTotalPvp(st);
+      if (endsPts > 0 && endsPts % 5 === 0) { scores[act.p] += endsPts; st.msg += ' Ends total ' + endsPts + ' - +' + endsPts + ' points!'; if (scores[act.p] >= 100) st.matchOver = true; }
       if (hand.length === 0) {
         var pts = handPips(st.hands[act.p === 'host' ? 'guest' : 'host']);
         scores[act.p] += pts;

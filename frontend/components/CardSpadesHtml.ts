@@ -271,6 +271,7 @@ function spBid(p, bid) {
     if (SP.turn !== 0) spCpuTurn();
     return;
   }
+  SP.turn = next;
   if (next === 0) { SP.phase = 'bid'; spRenderBidRow(); spRender(); }
   else { setTimeout(function () { spBid(next, spCpuBid(SP.hands[next])); }, 500); }
 }

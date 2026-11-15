@@ -138,7 +138,7 @@ const PoolGameModal = ({ visible, onClose, playerId }: { visible: boolean; onClo
             mediaPlaybackRequiresUserAction={false}
             originWhitelist={['*']}
             style={{ flex: 1 }}
-            onMessage={handlePopShotMsg}
+            onMessage={handlePrizeMsg}
           />
         ) : (
           <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Pool game needs WebView, which is not available in this build.</Text>
@@ -2406,11 +2406,13 @@ const handleParkGameMessage = (data: string | undefined, onClose: () => void, ga
 };
 
 const BasketballGameModal = ({ visible, onClose, playerId, playerName, onCashChange }: { visible: boolean; onClose: () => void; playerId: string; playerName: string; onCashChange?: () => void }) => {
+    // PVP TITLE: the opponent's name in a PvP room (null = vs CPU).
+  const [foeName, setFoeName] = useState<string | null>(null);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#111111' }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
-          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>BASKETBALL - YOU vs CPU</Text>
+          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>{foeName ? `BASKETBALL - YOU vs ${foeName}` : 'BASKETBALL - YOU vs CPU'}</Text>
           <TouchableOpacity onPress={onClose} style={{ backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 }}>
             <Text style={{ color: '#ffffff', fontWeight: '800' }}>CLOSE</Text>
           </TouchableOpacity>
@@ -2425,7 +2427,7 @@ const BasketballGameModal = ({ visible, onClose, playerId, playerName, onCashCha
             mediaPlaybackRequiresUserAction={false}
             originWhitelist={['*']}
             style={{ flex: 1 }}
-            onMessage={(event: any) => handleParkGameMessage(event?.nativeEvent?.data, onClose, 'Basketball', onCashChange, playerId)}
+            onMessage={(event: any) => { const d = event?.nativeEvent?.data; if (typeof d === 'string' && d.indexOf('pvp_opponent') !== -1) { try { const m = JSON.parse(d); if (m && m.type === 'pvp_opponent' && m.name) { setFoeName(String(m.name)); return; } } catch (e) {} } handleParkGameMessage(d, onClose, 'Basketball', onCashChange, playerId); }}
           />
         ) : (
           <Text style={{ color: '#ffffff', textAlign: 'center', marginTop: 40 }}>Basketball needs WebView, which is not available in this build.</Text>

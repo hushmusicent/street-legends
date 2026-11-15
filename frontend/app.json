@@ -68,7 +68,8 @@
       "expo-status-bar",
       "expo-web-browser",
       "expo-audio",
-      "./plugins/withRemoveMediaPermissions.js"
+      "./plugins/withRemoveMediaPermissions.js",
+      "./plugins/withBuildConfig.js"
     ],
     "experiments": {
       "typedRoutes": true
