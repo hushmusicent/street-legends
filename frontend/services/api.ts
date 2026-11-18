@@ -55,6 +55,21 @@ export const getLeaderboard = async (limit: number = 20): Promise<LeaderboardEnt
   return response.data;
 };
 
+export interface GamesTop50Entry {
+  rank: number;
+  id: string;
+  name: string;
+  level: number;
+  wins: number;
+  best: number;
+  profile_pic: string | null;
+}
+
+export const getGamesTop50 = async (game: string = 'all'): Promise<GamesTop50Entry[]> => {
+  const response = await api.get(`/games/top50?game=${encodeURIComponent(game)}`);
+  return response.data;
+};
+
 // Social / Friends APIs
 export const searchPlayers = async (name: string, limit: number = 20): Promise<PlayerSearchResult[]> => {
   const response = await api.get(`/players/search?name=${encodeURIComponent(name)}&limit=${limit}`);

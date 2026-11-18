@@ -3640,7 +3640,7 @@ async def get_battle(battle_id: str):
 # ============== PLAYER HOUSES ==============
 HOUSE_TIERS = {
     "apartment": {"name": "Street Apartment", "price": 100000, "image": "house-apartment", "item_limit": 2},
-    "cabin": {"name": "Country Cabin", "price": 500000, "image": "house-cabin", "item_limit": 3},
+    "cabin": {"name": "Country Cabin", "price": 500000, "image": "house-cabin", "item_limit": 4},
     "mansion": {"name": "Luxury Mansion", "price": 1000000, "image": "house-mansion", "item_limit": 6},
 }
 
@@ -3840,7 +3840,7 @@ async def add_house_item(house_id: str, payload: dict):
     items = house.get("items", []) or []
     if any(it.get("item_id") == item_id for it in items):
         raise HTTPException(status_code=400, detail="Item already placed")
-    limit = house.get("item_limit") or HOUSE_TIERS.get(house.get("tier"), {}).get("item_limit", 2)
+    limit = HOUSE_TIERS.get(house.get("tier"), {}).get("item_limit", 2)
     if len(items) >= limit:
         raise HTTPException(status_code=400, detail="House is full")
     info = HOUSE_ITEM_CATALOG[item_id]
@@ -13002,7 +13002,8 @@ async def place_house_item_from_inventory(house_id: str, payload: dict):
     items = house.get("items", []) or []
     if any(i.get("item_id") == item_id for i in items):
         raise HTTPException(status_code=400, detail="Item is already in this house")
-    if len(items) >= house.get("item_limit", 6):
+    limit = HOUSE_TIERS.get(house.get("tier"), {}).get("item_limit", 6)
+    if len(items) >= limit:
         raise HTTPException(status_code=400, detail="House is full")
     await db.houses.update_one({"id": house_id}, {"$push": {"items": {"item_id": item_id, "x": 0.5, "y": 0.5}}})
     inv = list(player.get("inventory_items", []) or [])
@@ -15631,6 +15632,33 @@ async def shutdown_db_client():
 # levels 1-10). Pop Shot: $10 per make, $15 per ON FIRE make,
 # +10% compounding per level (5 levels). The server computes the
 # prize from game + level + result; the client never sends an amount.
+# ============== GAMES TOP 50 LEADERBOARD ==============
+# Wins + best scores for the 13 park + activity-center games.
+# Park games: baseball, soccer, tennis, one_on_one, basketball, football.
+# Center games: pool, dartboard, card_table, dominoes, scrabble, chess_checkers, pop_shot.
+# Stored per player as game_stats.<game>.wins / game_stats.<game>.best.
+GAMES_TOP50 = ["baseball", "soccer", "tennis", "one_on_one", "basketball", "football",
+               "pool", "dartboard", "card_table", "dominoes", "scrabble", "chess_checkers", "pop_shot"]
+GAMES_TOP50_SET = set(GAMES_TOP50)
+
+
+async def _record_game_win(player_id, game, score):
+    """Record one win for a game: wins +1, best = max(best, score)."""
+    if game not in GAMES_TOP50_SET:
+        return
+    try:
+        score = int(score)
+    except (TypeError, ValueError):
+        score = 0
+    if score < 0:
+        score = 0
+    await db.players.update_one(
+        {"id": player_id},
+        {"$inc": {f"game_stats.{game}.wins": 1},
+         "$max": {f"game_stats.{game}.best": score}},
+    )
+
+
 CENTER_PRIZE_GAMES = {
     "pool": {"max_level": 1},
     "dartboard": {"max_level": 1},
@@ -15691,8 +15719,77 @@ async def center_prize_award(data: dict):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     await db.players.update_one({"id": player_id}, {"$inc": {"cash": prize}})
+    # Top 50: record the win. Pop Shot scores by makes; other center games
+    # send no score, so best stays 0 and only the win counts.
+    if game == "pop_shot":
+        _top50_score = makes + onfire_makes
+    else:
+        try:
+            _top50_score = int(data.get("score", 0))
+        except (TypeError, ValueError):
+            _top50_score = 0
+    await _record_game_win(player_id, game, _top50_score)
     updated = await db.players.find_one({"id": player_id})
     return {"game": game, "level": level, "prize": prize, "cash": updated.get("cash", 0)}
+
+
+class GamesRecordWin(BaseModel):
+    player_id: str
+    game: str
+    score: int = 0
+
+
+@api_router.post("/games/record-win")
+async def games_record_win(body: GamesRecordWin):
+    """Direct Top 50 win recording (used by park PvC wins)."""
+    if body.game not in GAMES_TOP50_SET:
+        raise HTTPException(status_code=400, detail="Unknown game")
+    player = await db.players.find_one({"id": body.player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    await _record_game_win(body.player_id, body.game, body.score)
+    return {"ok": True, "game": body.game}
+
+
+@api_router.get("/games/top50")
+async def games_top50(game: str = "all"):
+    """Top 50 players by wins (then best score) for park + center games.
+
+    game=all totals wins across all 13 games and takes the max best;
+    a single game name ranks by that game's wins/best only.
+    """
+    if game != "all" and game not in GAMES_TOP50_SET:
+        raise HTTPException(status_code=400, detail="Unknown game")
+    players = await db.players.find(
+        {},
+        {"id": 1, "name": 1, "level": 1, "profile_pic": 1, "game_stats": 1},
+    ).to_list(10000)
+    rows = []
+    for p in players:
+        stats = p.get("game_stats") or {}
+        if game == "all":
+            wins = 0
+            best = 0
+            for g in GAMES_TOP50:
+                entry = stats.get(g) or {}
+                wins += int(entry.get("wins", 0) or 0)
+                best = max(best, int(entry.get("best", 0) or 0))
+        else:
+            entry = stats.get(game) or {}
+            wins = int(entry.get("wins", 0) or 0)
+            best = int(entry.get("best", 0) or 0)
+        if wins <= 0:
+            continue
+        rows.append({
+            "id": p["id"],
+            "name": p.get("name", "Player"),
+            "level": p.get("level", 1),
+            "wins": wins,
+            "best": best,
+            "profile_pic": p.get("profile_pic"),
+        })
+    rows.sort(key=lambda r: (-r["wins"], -r["best"]))
+    return [{"rank": i + 1, **r} for i, r in enumerate(rows[:50])]
 
 
 
@@ -15716,6 +15813,7 @@ class ParkPvpRoomState(BaseModel):
     state: dict = {}
     status: str = ""
     winner: str = ""
+    score: int = 0
 
 
 class ParkPvpRoomLeave(BaseModel):
@@ -15792,6 +15890,11 @@ async def park_pvp_room_state(code: str, body: ParkPvpRoomState):
     if body.winner:
         update["winner"] = body.winner
     await db.park_pvp_rooms.update_one({"code": code}, {"$set": update})
+    # Top 50: the first winner set on a room records one win for that player.
+    # room here is still the pre-update doc, so room.get("winner") is empty
+    # only when no winner was set before this post.
+    if body.winner and not room.get("winner") and body.winner in (room["host_id"], room["guest_id"]):
+        await _record_game_win(body.winner, room.get("game", "baseball"), body.score)
     room = await db.park_pvp_rooms.find_one({"code": code})
     room["_id"] = str(room["_id"])
     return room

@@ -171,6 +171,18 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
       Alert.alert('Login Required', 'Log in before buying a bundle.');
       return;
     }
+    // DIAG-GUARD: do not start a purchase Play has not sent us yet.
+    // requestPurchase() hangs forever on an unknown SKU and never fires
+    // either listener, leaving the BUY button spinning. If Play has not
+    // returned this product, tell the user instead of hanging.
+    const known = products.some((x: any) => (x.id ?? x.productId) === sku);
+    if (!known) {
+      Alert.alert(
+        'Not Ready Yet',
+        'Play Store has not sent this product to your phone yet. Close the app fully and reopen it, or clear the Play Store cache and try again.'
+      );
+      return;
+    }
     try {
       setBuying(sku);
       await requestPurchase({ request: { google: { skus: [sku] } }, type: 'in-app' });
@@ -213,6 +225,9 @@ export function BonusBundles({ playerId }: { playerId: string | null }) {
           <Text style={styles.realMoneyText}>REAL MONEY</Text>
         </View>
       </View>
+      <Text style={{ color: '#f39c12', fontSize: 12, marginBottom: 8 }}>
+        Play sent {products.length}/4 products{products.length > 0 ? `: ${products.map((x: any) => x.id ?? x.productId).join(', ')}` : ' - none yet'}
+      </Text>
 
       {(mk1.health_mk1 > 0 || mk1.energy_mk1 > 0) && (
         <View style={styles.mk1Row}>
