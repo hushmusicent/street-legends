@@ -12804,6 +12804,114 @@ def _godmode_remaining(player: dict) -> dict:
         pass
     return out
 
+# IAP_VERIFY: Google Play purchase verification for God Potions.
+# Package name of the Play app (must match the Play Console listing).
+PLAY_PACKAGE_NAME = "com.emergent.streetempiretest.xfvyzd"
+
+
+def _play_service_account_credentials():
+    """Service-account credentials from the GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+    env secret (the whole JSON key file contents). Returns None when the
+    secret is not set, so the caller can fall back to warn-and-grant
+    instead of breaking live sales during setup."""
+    import json
+    import os
+    raw = os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "")
+    if not raw or not raw.strip():
+        return None
+    try:
+        info = json.loads(raw)
+    except Exception:
+        logging.warning("IAP_VERIFY: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is not valid JSON")
+        return None
+    try:
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_info(
+            info,
+            scopes=["https://www.googleapis.com/auth/androidpublisher"],
+        )
+        return creds
+    except Exception as exc:
+        logging.warning("IAP_VERIFY: could not build service-account credentials: %s", exc)
+        return None
+
+
+async def _verify_play_purchase(product_id: str, purchase_token: str):
+    """Verify a one-time Play purchase with the Play Developer API.
+    Returns (verified: bool, reason: str).
+    - (True, 'verified') when Play confirms purchaseState == 0 (purchased).
+    - (False, reason) when Play says otherwise or the call fails.
+    - (None, 'not_configured') when no service-account secret is set.
+    Runs the blocking google-auth / HTTP work in a thread so the event
+    loop is not stalled."""
+    creds = _play_service_account_credentials()
+    if creds is None:
+        return (None, "not_configured")
+    import asyncio as _asyncio
+
+    def _call():
+        try:
+            from google.auth.transport.requests import Request as _AuthRequest
+            creds.refresh(_AuthRequest())
+            token = creds.token
+        except Exception as exc:
+            return (False, f"auth_failed: {exc}")
+        try:
+            import urllib.parse
+            import urllib.request
+            url = (
+                "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+                f"{urllib.parse.quote(PLAY_PACKAGE_NAME, safe='')}/purchases/products/"
+                f"{urllib.parse.quote(product_id, safe='')}/tokens/"
+                f"{urllib.parse.quote(purchase_token, safe='')}"
+            )
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                import json as _json
+                data = _json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            return (False, f"play_api_failed: {exc}")
+        state = data.get("purchaseState")
+        if state != 0:
+            return (False, f"purchaseState={state} (0=purchased, 1=cancelled)")
+        return (True, "verified")
+
+    return await _asyncio.to_thread(_call)
+
+
+async def _consume_play_purchase(product_id: str, purchase_token: str):
+    """Consume a one-time Play purchase so the token cannot be replayed.
+    Best effort: returns True on success, False otherwise (logged)."""
+    creds = _play_service_account_credentials()
+    if creds is None:
+        return False
+    import asyncio as _asyncio
+
+    def _call():
+        try:
+            from google.auth.transport.requests import Request as _AuthRequest
+            creds.refresh(_AuthRequest())
+            token = creds.token
+        except Exception:
+            return False
+        try:
+            import urllib.parse
+            import urllib.request
+            url = (
+                "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+                f"{urllib.parse.quote(PLAY_PACKAGE_NAME, safe='')}/purchases/products/"
+                f"{urllib.parse.quote(product_id, safe='')}/tokens/"
+                f"{urllib.parse.quote(purchase_token, safe='')}:consume"
+            )
+            req = urllib.request.Request(url, method="POST", headers={"Authorization": f"Bearer {token}"})
+            with urllib.request.urlopen(req, timeout=15):
+                return True
+        except Exception:
+            return False
+
+    return await _asyncio.to_thread(_call)
+
+
 @api_router.post("/iap/grant-godmode")
 async def iap_grant_godmode(data: GodPotionGrant):
     """Grant 1-hour infinite health OR infinite energy after a $1 Play Billing purchase.
@@ -12822,8 +12930,26 @@ async def iap_grant_godmode(data: GodPotionGrant):
     player = await db.players.find_one({"id": data.player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    # TODO: verify data.purchase_token with Play Developer API here.
-    # For now we log it for audit.
+    # IAP_VERIFY: a purchase token is required, and it must verify with
+    # Google Play before anything is granted. Duplicate tokens (already
+    # granted) are rejected so one purchase cannot be replayed.
+    if not data.purchase_token:
+        raise HTTPException(status_code=400, detail="purchase_token is required")
+    _dup = await db.players.find_one({
+        "godmode.last_purchase_token": data.purchase_token,
+        "godmode.last_product_id": data.product_id,
+    })
+    if _dup:
+        raise HTTPException(status_code=400, detail="This purchase was already granted")
+    _verified, _reason = await _verify_play_purchase(data.product_id, data.purchase_token)
+    if _verified is False:
+        raise HTTPException(status_code=400, detail=f"Purchase could not be verified with Google Play: {_reason}")
+    if _verified is None:
+        logging.warning(
+            "IAP_VERIFY: granting %s to %s WITHOUT Play verification "
+            "(GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not set) - set the secret to enforce verification",
+            data.product_id, data.player_id,
+        )
     now = datetime.utcnow()
     until = now + timedelta(seconds=GOD_POTION_DURATION_SECONDS)
     until_str = until.isoformat()
@@ -12838,6 +12964,12 @@ async def iap_grant_godmode(data: GodPotionGrant):
     )
     updated = await db.players.find_one({"id": data.player_id})
     remaining = _godmode_remaining(updated)
+    # Consume the token so it cannot be replayed for a second grant.
+    # Best effort: a consume failure does not revoke the verified grant.
+    if _verified is True:
+        _consumed = await _consume_play_purchase(data.product_id, data.purchase_token)
+        if not _consumed:
+            logging.warning("IAP_VERIFY: consume failed for %s token %s", data.product_id, (data.purchase_token or "")[:12])
     return {
         "message": f"Potion activated! Infinite {buff_kind.replace('_', ' ').title()} for 1 hour.",
         "product_id": data.product_id,
@@ -12846,6 +12978,7 @@ async def iap_grant_godmode(data: GodPotionGrant):
         "duration_seconds": GOD_POTION_DURATION_SECONDS,
         "expires_at": until_str,
         "remaining": remaining,
+        "purchase_verified": bool(_verified is True),
     }
 
 @api_router.get("/players/{player_id}/godmode")
@@ -12903,8 +13036,26 @@ async def iap_grant_bonus(data: BonusGrant):
     player = await db.players.find_one({"id": data.player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    # TODO: verify data.purchase_token with Play Developer API here.
-    # For now we log it for audit.
+    # IAP_VERIFY: a purchase token is required, and it must verify with
+    # Google Play before anything is granted. Duplicate tokens (already
+    # granted) are rejected so one purchase cannot be replayed.
+    if not data.purchase_token:
+        raise HTTPException(status_code=400, detail="purchase_token is required")
+    _dup = await db.players.find_one({
+        "bonus.last_purchase_token": data.purchase_token,
+        "bonus.last_product_id": data.product_id,
+    })
+    if _dup:
+        raise HTTPException(status_code=400, detail="This purchase was already granted")
+    _verified, _reason = await _verify_play_purchase(data.product_id, data.purchase_token)
+    if _verified is False:
+        raise HTTPException(status_code=400, detail=f"Purchase could not be verified with Google Play: {_reason}")
+    if _verified is None:
+        logging.warning(
+            "IAP_VERIFY: granting %s to %s WITHOUT Play verification "
+            "(GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not set) - set the secret to enforce verification",
+            data.product_id, data.player_id,
+        )
     now = datetime.utcnow()
     update_ops: dict = {"$inc": {"cash": bundle["cash"]}, "$set": {}}
     if bundle["health_mk1"]:
@@ -12931,12 +13082,19 @@ async def iap_grant_bonus(data: BonusGrant):
         parts.append("Infinite Health (1h)")
     if bundle["god_energy"]:
         parts.append("Infinite Energy (1h)")
+    # Consume the token so it cannot be replayed for a second grant.
+    # Best effort: a consume failure does not revoke the verified grant.
+    if _verified is True:
+        _consumed = await _consume_play_purchase(data.product_id, data.purchase_token)
+        if not _consumed:
+            logging.warning("IAP_VERIFY: consume failed for %s token %s", data.product_id, (data.purchase_token or "")[:12])
     return {
         "message": "Bonus granted! " + ", ".join(parts) + ".",
         "product_id": data.product_id,
         "price_usd": bundle["price_usd"],
         "cash": updated.get("cash", 0),
         "bonus_items": updated.get("bonus_items", {"health_mk1": 0, "energy_mk1": 0}),
+        "purchase_verified": bool(_verified is True),
     }
 
 @api_router.get("/players/{player_id}/bonus-items")
