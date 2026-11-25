@@ -2,7 +2,7 @@
   "expo": {
     "name": "Street Legends",
     "slug": "street-legends",
-    "version": "1.0.0",
+    "version": "1.0.20",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "street-legends",
@@ -30,7 +30,8 @@
         "android.permission.ACTIVITY_RECOGNITION",
         "com.android.vending.BILLING"
       ],
-      "package": "com.emergent.streetempiretest.xfvyzd"
+      "package": "com.emergent.streetempiretest.xfvyzd",
+      "versionCode": 163
     },
     "web": {
       "bundler": "metro",
@@ -69,7 +70,22 @@
       "expo-web-browser",
       "expo-audio",
       "./plugins/withRemoveMediaPermissions.js",
-      "./plugins/withBuildConfig.js"
+      "./plugins/withBuildConfig.js",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-1342550857186673~4649429004"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.google.android.gms.internal.consent_sdk.** { *; }\n-keep class com.google.android.gms.ads.** { *; }\n-keep class com.google.android.gms.common.** { *; }\n-keep class * extends androidx.room.RoomDatabase { <init>(); }\n-keep class * extends androidx.work.InputMerger { <init>(); }\n-keep class io.invertase.googlemobileads.** { *; }\n-keepattributes *Annotation*"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
