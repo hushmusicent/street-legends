@@ -82,7 +82,7 @@
         {
           "android": {
             "enableMinifyInReleaseBuilds": true,
-            "extraProguardRules": "-keep class com.google.android.gms.internal.consent_sdk.** { *; }\n-keep class com.google.android.gms.ads.** { *; }\n-keep class com.google.android.gms.common.** { *; }\n-keep class * extends androidx.room.RoomDatabase { <init>(); }\n-keep class * extends androidx.work.InputMerger { <init>(); }\n-keep class io.invertase.googlemobileads.** { *; }\n-keepattributes *Annotation*"
+            "extraProguardRules": "-keep class com.google.android.gms.internal.consent_sdk.** { *; }\n-keep class com.google.android.gms.ads.** { *; }\n-keep class com.google.android.gms.common.** { *; }\n-keep class * extends androidx.room.RoomDatabase { <init>(); }\n-keep class * extends androidx.work.InputMerger { <init>(); }\n-keep class io.invertase.googlemobileads.** { *; }\n-keepattributes *Annotation*\n-keep class com.google.android.ump.** { *; }\n-keep class com.google.android.gms.internal.** { *; }\n-keep class com.google.android.play.core.hsdp.** { *; }\n-keep class androidx.startup.** { *; }\n-keep class * implements androidx.startup.Initializer { *; }\n-keep class expo.modules.notifications.** { *; }\n-keep class expo.modules.ExpoModulesPackageList { *; }\n-keepclassmembers class * implements java.io.Serializable {\n  static final long serialVersionUID;\n  private static final java.io.ObjectStreamField[] serialPersistentFields;\n  private void writeObject(java.io.ObjectOutputStream);\n  private void readObject(java.io.ObjectInputStream);\n  java.lang.Object writeReplace();\n  java.lang.Object readResolve();\n}"
           }
         }
       ]

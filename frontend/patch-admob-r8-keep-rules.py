@@ -66,6 +66,12 @@ def load_json(path):
 
 
 def dump_json(path, data, raw):
+    # expo-build-properties (SDK 58) needs extraProguardRules as ONE string.
+    for _pl in data.get("expo", {}).get("plugins", []):
+        if isinstance(_pl, list) and _pl and _pl[0] == "expo-build-properties" and len(_pl) > 1:
+            _a = (_pl[1] or {}).get("android") or {}
+            if isinstance(_a.get("extraProguardRules"), list):
+                _a["extraProguardRules"] = "\n".join(_a["extraProguardRules"])
     text = json.dumps(data, indent=detect_indent(raw), ensure_ascii=False)
     if raw.endswith("\n"):
         text += "\n"
