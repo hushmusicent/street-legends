@@ -4,7 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { View, StyleSheet } from 'react-native';
 import { GameToastProvider } from '../components/GameToast';
+import { AdMobBanner } from '../components/AdMobAds';
 import IdleLogout from '../components/IdleLogout';
+import PushNotifications from '../components/PushNotifications';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Prevent the splash screen from auto-hiding before app is ready
@@ -58,7 +60,9 @@ export default function RootLayout() {
           <Stack.Screen name="delete-account" options={{ presentation: 'modal' }} />
           <Stack.Screen name="instructions" options={{ presentation: 'modal' }} />
         </Stack>
+        <PushNotifications />
         <GameToastProvider />
+        <AdMobBanner />
         </IdleLogout>
       </View>
     </QueryClientProvider>

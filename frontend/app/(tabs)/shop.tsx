@@ -19,6 +19,7 @@ import { getConsumableShop, buyConsumable, getPlayer, buyHouse, getPlayerHouse, 
 import api from '../../services/api';
 import { GodPotions } from '../../components/GodPotions';
 import { BonusBundles } from '../../components/BonusBundles';
+import { RewardedAdButton } from '../../components/AdMobAds';
 import { getBundledIcon } from '../../assets/icons/iconMap';
 import * as Location from 'expo-location';
 
@@ -401,6 +402,8 @@ export default function ShopTabScreen() {
       </ScrollView>
 
       <GodPotions playerId={playerId} />
+
+      <RewardedAdButton playerId={playerId} />
 
       {filter === 'bonus' ? (
         <ScrollView style={styles.itemsScroll} contentContainerStyle={styles.scrollContent}>

@@ -5192,6 +5192,8 @@ async def rps_challenge(data: dict):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.rps_games.insert_one(game)
+    # PUSH_NOTIFICATIONS: challenge created -> challenged player gets pinged.
+    asyncio.create_task(_push_to_player(opponent_id, "Rock Paper Scissors challenge!", f"{challenger.get('name', 'A player')} challenged you to Rock Paper Scissors. Open the game to answer!", {"type": "rps_challenge", "game_id": game["game_id"]}))
     return _rps_public(game, challenger_id)
 
 
@@ -5238,6 +5240,8 @@ async def rps_respond(data: dict):
         raise HTTPException(status_code=400, detail="You are not a party to this game")
     new_status = "accepted" if accept else "declined"
     await db.rps_games.update_one({"game_id": game_id}, {"$set": {"status": new_status}})
+    # PUSH_NOTIFICATIONS: opponent answered -> challenger gets the verdict.
+    asyncio.create_task(_push_to_player(game.get("challenger_id"), "RPS challenge " + new_status + "!", f"{game.get('opponent_name', 'Your opponent')} {new_status} your Rock Paper Scissors challenge.", {"type": "rps_respond", "game_id": game_id, "status": new_status}))
     game["status"] = new_status
     return _rps_public(game, player_id)
 
@@ -6343,6 +6347,14 @@ async def send_guild_message(guild_id: str, player_id: str, message: str):
     }
     
     await db.guild_chat.insert_one(chat_message)
+    # PUSH_NOTIFICATIONS: guild message -> other members get pinged.
+    try:
+        _members = await db.players.find({"guild_id": guild_id, "id": {"$ne": player_id}}, {"id": 1, "push_token": 1}).to_list(200)
+        _tokens = [m.get("push_token") for m in _members if m.get("push_token")]
+        if _tokens:
+            asyncio.create_task(_push_tokens(_tokens, f"{player.get('name', 'Someone')} in guild chat", message.strip()[:120], {"type": "guild_chat", "guild_id": guild_id}))
+    except Exception:
+        pass
     
     # Clean up old messages (keep only last 200 per guild)
     message_count = await db.guild_chat.count_documents({"guild_id": guild_id})
@@ -13140,6 +13152,44 @@ async def iap_use_mk1(data: Mk1Use):
         {"$inc": {"bonus_items.energy_mk1": -1}, "$set": {"stats.energy": max_en}},
     )
     return {"message": "Energy MK1 used! Energy fully restored.", "energy_mk1": count - 1}
+# === ADMOB REWARDED ADS ===
+REWARDED_AD_CASH = 1000
+REWARDED_AD_DAILY_LIMIT = 20
+
+
+@api_router.post("/ads/rewarded-grant")
+async def ads_rewarded_grant(data: dict):
+    """Grant $1,000 in-game cash for a completed AdMob rewarded ad view.
+
+    Trusts the app's call (no AdMob server-side verification); the
+    20/day cap below is the anti-farm mitigation, not proof of a view.
+    Cap is tracked on the player doc as ads_rewarded: {date, count}.
+    """
+    player_id = data.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    ads = player.get("ads_rewarded", {}) or {}
+    count = int(ads.get("count", 0) or 0) if ads.get("date") == today else 0
+    if count >= REWARDED_AD_DAILY_LIMIT:
+        raise HTTPException(status_code=429, detail="Daily rewarded-ad limit reached (20/day)")
+    new_count = count + 1
+    await db.players.update_one(
+        {"id": player_id},
+        {"$inc": {"cash": REWARDED_AD_CASH}, "$set": {"ads_rewarded": {"date": today, "count": new_count}}},
+    )
+    updated = await db.players.find_one({"id": player_id})
+    return {
+        "ok": True,
+        "granted": REWARDED_AD_CASH,
+        "cash": updated.get("cash", 0),
+        "ads_today": new_count,
+        "ads_limit": REWARDED_AD_DAILY_LIMIT,
+    }
+
 # === END BONUS_BUNDLES_IAP ===
 
 
@@ -13312,6 +13362,10 @@ async def pool_room_chat(code: str, body: PoolRoomChat):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
     await db.pool_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    # PUSH_NOTIFICATIONS: pool chat -> the other player in the room gets pinged.
+    _other = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    if _other:
+        asyncio.create_task(_push_to_player(_other, f"{body.player_name} in Pool", body.text[:120], {"type": "room_chat", "game": "pool", "code": code}))
     room = await db.pool_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
         await db.pool_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
@@ -13430,6 +13484,10 @@ async def dart_room_chat(code: str, body: DartRoomChat):
         raise HTTPException(status_code=403, detail="Not in this room")
     msg = {"sender_id": body.player_id, "sender_name": body.player_name, "text": body.text[:500], "ts": datetime.now(timezone.utc).isoformat()}
     await db.dart_rooms.update_one({"code": code}, {"$push": {"chat": msg}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    # PUSH_NOTIFICATIONS: darts chat -> the other player in the room gets pinged.
+    _other = room["guest_id"] if body.player_id == room["host_id"] else room["host_id"]
+    if _other:
+        asyncio.create_task(_push_to_player(_other, f"{body.player_name} in Darts", body.text[:120], {"type": "room_chat", "game": "darts", "code": code}))
     room = await db.dart_rooms.find_one({"code": code})
     if room and len(room.get("chat", [])) > 100:
         await db.dart_rooms.update_one({"code": code}, {"$set": {"chat": room["chat"][-100:]}})
@@ -16064,6 +16122,8 @@ async def park_pvp_room_join(body: ParkPvpRoomJoin):
     if room["status"] != "waiting":
         raise HTTPException(status_code=400, detail="Room is not waiting")
     await db.park_pvp_rooms.update_one({"code": body.code}, {"$set": {"guest_id": body.player_id, "guest_name": body.player_name, "status": "playing", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    # PUSH_NOTIFICATIONS: guest joined -> host gets "room ready".
+    asyncio.create_task(_push_to_player(room["host_id"], "Opponent joined!", f"{body.player_name or 'A player'} joined your {room.get('game', 'park')} match - room {body.code} is ready!", {"type": "park_pvp_ready", "code": body.code, "game": room.get("game", "")}))
     room = await db.park_pvp_rooms.find_one({"code": body.code})
     room["_id"] = str(room["_id"])
     return room
@@ -16258,6 +16318,162 @@ async def park_wager_settle(code: str, body: ParkWagerSettle):
     else:
         raise HTTPException(status_code=400, detail="Unknown wager outcome")
     return pool_wager_out(await park_wager_room(code), body.player_id)
+
+
+# Register router last so every route defined above is included
+# PUSH_NOTIFICATIONS: Expo push tokens + send helper.
+# Players store their Expo push token on the player doc (push_token).
+# Game events fire-and-forget a push via asyncio.create_task so a slow
+# or failing Expo call can never break the game endpoint that triggered it.
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+PUSH_COMEBACK_DAYS_DEFAULT = 3
+
+
+async def _push_send_expo(token, title, body, data=None):
+    """Send one push via the Expo Push API. Never raises."""
+    if not token or not isinstance(token, str) or not token.startswith("ExponentPushToken["):
+        return False
+    try:
+        payload = {"to": token, "title": title, "body": body, "sound": "default"}
+        if data:
+            payload["data"] = data
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(EXPO_PUSH_URL, json=payload)
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+async def _push_to_player(player_id, title, body, data=None):
+    """Push to one player by id (looks up their stored token). Never raises."""
+    try:
+        player = await db.players.find_one({"id": player_id}, {"push_token": 1})
+        if not player:
+            return False
+        return await _push_send_expo(player.get("push_token"), title, body, data)
+    except Exception:
+        return False
+
+
+async def _push_tokens(tokens, title, body, data=None):
+    """Push to a list of raw Expo tokens. Never raises."""
+    for token in tokens or []:
+        try:
+            await _push_send_expo(token, title, body, data)
+        except Exception:
+            continue
+    return True
+
+
+async def _push_to_players(player_ids, title, body, data=None):
+    """Push to several players by id. Never raises."""
+    for pid in player_ids or []:
+        try:
+            await _push_to_player(pid, title, body, data)
+        except Exception:
+            continue
+    return True
+
+
+class PushTokenBody(BaseModel):
+    push_token: str
+    platform: str = "android"
+
+
+@api_router.post("/players/{player_id}/push-token")
+async def set_push_token(player_id: str, body: PushTokenBody):
+    """Store a player's Expo push token so game events can notify them."""
+    player = await db.players.find_one({"id": player_id})
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    token = (body.push_token or "").strip()
+    if not token.startswith("ExponentPushToken["):
+        raise HTTPException(status_code=400, detail="Not a valid Expo push token")
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"push_token": token, "push_platform": body.platform,
+                  "push_token_updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"ok": True}
+
+
+def _push_parse_dt(value):
+    """Parse a last_active / last_comeback_push_at value that may be a
+    datetime or an ISO string. Returns an aware datetime or None."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+    return None
+
+
+async def _push_comeback_run(days=3):
+    """Find players inactive for >= days with a stored push token and send
+    each one a single 'come back' push. Skips anyone already nudged within
+    the same window (last_comeback_push_at). Returns counts. Never raises."""
+    try:
+        days = int(days)
+    except Exception:
+        days = PUSH_COMEBACK_DAYS_DEFAULT
+    if days < 1:
+        days = 1
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    sent = 0
+    skipped = 0
+    try:
+        players = await db.players.find(
+            {"push_token": {"$exists": True, "$ne": None, "$ne": ""}},
+            {"id": 1, "name": 1, "push_token": 1, "last_active": 1, "last_comeback_push_at": 1},
+        ).to_list(1000)
+    except Exception:
+        return {"ok": False, "sent": 0, "skipped": 0}
+    for p in players:
+        try:
+            last_active = _push_parse_dt(p.get("last_active"))
+            if last_active is not None and last_active >= cutoff:
+                skipped += 1
+                continue
+            last_nudge = _push_parse_dt(p.get("last_comeback_push_at"))
+            if last_nudge is not None and last_nudge >= cutoff:
+                skipped += 1
+                continue
+            ok = await _push_send_expo(
+                p.get("push_token"),
+                "Street Legends misses you!",
+                f"{p.get('name', 'Player')}, your crew is still running the streets. Come back and play!",
+                {"type": "comeback"},
+            )
+            await db.players.update_one(
+                {"id": p["id"]},
+                {"$set": {"last_comeback_push_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            if ok:
+                sent += 1
+            else:
+                skipped += 1
+        except Exception:
+            skipped += 1
+            continue
+    return {"ok": True, "sent": sent, "skipped": skipped}
+
+
+@api_router.post("/admin/push-comeback")
+async def push_comeback(
+    days: int = Query(PUSH_COMEBACK_DAYS_DEFAULT, description="Inactive for at least this many days"),
+    admin_key: str = Query(..., description="Admin secret key for authorization"),
+):
+    """Send 'come back' pushes to players inactive for >= days. Admin only.
+    Trigger it from a scheduled job (cron) or by hand; it is not automatic."""
+    if not ADMIN_SECRET_KEY or admin_key != ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    return await _push_comeback_run(days)
 
 
 # Register router last so every route defined above is included
