@@ -16,6 +16,13 @@ Run from /app: python3 frontend/patch-buildconfig-v3.py
 Then retry "Generate new build" in the Android Builds page.
 Idempotent: a full re-run prints BUILDCONFIG_V3_ALREADY_APPLIED.
 """
+
+# Guard added: BUILDCONFIG-FIX-V5 (AGP 9 safe) already in android/build.gradle -> do nothing.
+from pathlib import Path as _P
+for _c in (_P(__file__).resolve().parent / "android" / "build.gradle", _P("/app/frontend/android/build.gradle")):
+    if _c.exists() and "BUILDCONFIG-FIX-V5" in _c.read_text():
+        print("android/build.gradle already has BUILDCONFIG-FIX-V5; nothing to do.")
+        raise SystemExit(0)
 import json
 import subprocess
 import sys
