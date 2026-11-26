@@ -24,14 +24,16 @@ allprojects {
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
 
-// BUILDCONFIG-FIX-V4
-// Turn on BuildConfig for Android library modules. The React Native root
-// project plugin evaluates subprojects early, so afterEvaluate {} fails with
-// "Cannot run Project.afterEvaluate(Closure) when the project is already
-// evaluated". plugins.withId runs right away if the plugin is already applied,
-// or later when it is applied, so it is safe in both cases.
+// BUILDCONFIG-FIX-V5
+// Turn on BuildConfig for Android app + library modules. Use each module's own
+// `android` extension (AGP 9 types both have buildFeatures). Casting to the old
+// AppExtension/LibraryExtension types fails on AGP 9 ("Could not find method
+// buildFeatures()"), and afterEvaluate {} fails because the React Native root
+// plugin evaluates subprojects early.
 subprojects { sub ->
-    sub.plugins.withId('com.android.library') {
-        sub.android.buildFeatures.buildConfig = true
+    ['com.android.library', 'com.android.application'].each { pid ->
+        sub.plugins.withId(pid) {
+            sub.extensions.getByName('android').buildFeatures.buildConfig = true
+        }
     }
 }
