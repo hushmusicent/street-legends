@@ -401,12 +401,11 @@ export default function ShopTabScreen() {
         ))}
       </ScrollView>
 
-      <GodPotions playerId={playerId} />
-
       <RewardedAdButton playerId={playerId} />
 
       {filter === 'bonus' ? (
         <ScrollView style={styles.itemsScroll} contentContainerStyle={styles.scrollContent}>
+          <GodPotions playerId={playerId} />
           <BonusBundles playerId={playerId} />
         </ScrollView>
       ) : filter === 'house' ? (

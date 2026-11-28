@@ -28,10 +28,11 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "android.permission.ACTIVITY_RECOGNITION",
-        "com.android.vending.BILLING"
+        "com.android.vending.BILLING",
+        "com.google.android.gms.permission.AD_ID"
       ],
       "package": "com.emergent.streetempiretest.xfvyzd",
-      "versionCode": 163
+      "versionCode": 202
     },
     "web": {
       "bundler": "metro",
