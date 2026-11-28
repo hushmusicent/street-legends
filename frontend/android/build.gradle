@@ -25,11 +25,8 @@ apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
 
 // BUILDCONFIG-FIX-V5
-// Turn on BuildConfig for Android app + library modules. Use each module's own
-// `android` extension (AGP 9 types both have buildFeatures). Casting to the old
-// AppExtension/LibraryExtension types fails on AGP 9 ("Could not find method
-// buildFeatures()"), and afterEvaluate {} fails because the React Native root
-// plugin evaluates subprojects early.
+// Enable BuildConfig on Android app + library modules via each module's own
+// `android` extension (AGP 9 safe; no legacy AppExtension cast, no afterEvaluate).
 subprojects { sub ->
     ['com.android.library', 'com.android.application'].each { pid ->
         sub.plugins.withId(pid) {
